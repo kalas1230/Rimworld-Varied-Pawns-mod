@@ -18,17 +18,13 @@ namespace PawnVarianceMod
                 Mathf.RoundToInt(settings.traitCountMin),
                 Mathf.RoundToInt(settings.traitCountMax));
 
-            HashSet<TraitDef> forced = CaptureForcedTraits(pawn);
+            Dictionary<TraitDef, int> forced = CaptureForcedTraits(pawn);
             HashSet<TraitDef> disallowed = CaptureDisallowedTraits(pawn);
 
             pawn.story.traits.allTraits.Clear();
-            // Forced traits are granted at degree 0 regardless of what degree their source
-            // (kind-def/gene requirement) may have specified — capturing per-source degree would
-            // require expanding CaptureForcedTraits' return type, which Task 9's GrowthUpPatch
-            // already depends on as HashSet<TraitDef>. Accepted, not fixed, in this round: this
-            // only affects forced traits, never the weighted-sampled ones (see FillRemainingSlots).
-            foreach (TraitDef def in forced)
-                pawn.story.traits.GainTrait(new Trait(def, 0, true));
+            // KeyValuePair<TKey,TValue> deconstruction isn't available in net472's BCL — iterate explicitly.
+            foreach (KeyValuePair<TraitDef, int> kvp in forced)
+                pawn.story.traits.GainTrait(new Trait(kvp.Key, kvp.Value, true));
 
             if (pawn.story.traits.allTraits.Count >= targetCount)
                 return; // Accepted limitation: forced set alone can meet/exceed target — see Trait variance step 3.
@@ -77,19 +73,38 @@ namespace PawnVarianceMod
             }
         }
 
-        public static HashSet<TraitDef> CaptureForcedTraits(Pawn pawn)
+        // Returns TraitDef -> degree, not just a set of TraitDefs: both real forced-trait sources
+        // (PawnKindDef.forcedTraits: List<TraitRequirement>, GeneDef.forcedTraits:
+        // List<GeneticTraitData>) specify a degree for the trait they force. Verified against
+        // decompiled Assembly-CSharp.dll (Task 11 in-game verification) — granting a forced trait
+        // with a hardcoded degree 0 instead of its real specified degree produces an invalid Trait
+        // instance for any multi-degree trait without a degree-0 entry (e.g. PsychicSensitivity),
+        // which vanilla logs an error for on every stat/tick lookup involving that trait, not just
+        // once at generation.
+        public static Dictionary<TraitDef, int> CaptureForcedTraits(Pawn pawn)
         {
-            var forced = new HashSet<TraitDef>();
-            // PawnKindDef.forcedTraits: unverified field name, confirm at implementation time (Global Constraints).
+            var forced = new Dictionary<TraitDef, int>();
+
             if (pawn.kindDef?.forcedTraits != null)
-                foreach (var t in pawn.kindDef.forcedTraits) forced.Add(t.def);
+                foreach (var t in pawn.kindDef.forcedTraits)
+                    forced[t.def] = t.degree ?? FirstValidDegree(t.def); // TraitRequirement.degree is nullable — null means "any degree", so fall back to a real defined one
 
             if (ModsConfig.BiotechActive && pawn.genes != null)
                 foreach (var gene in pawn.genes.GenesListForReading)
                     if (gene.def.forcedTraits != null)
-                        foreach (var t in gene.def.forcedTraits) forced.Add(t.def);
+                        foreach (var t in gene.def.forcedTraits)
+                            forced[t.def] = t.degree; // GeneticTraitData.degree is non-nullable, always trust it directly
 
             return forced;
+        }
+
+        // Fallback for a forced-trait source that doesn't specify a degree: use the trait's own
+        // first genuinely-defined degree rather than an assumed 0, which may not exist for that
+        // trait (see CaptureForcedTraits).
+        private static int FirstValidDegree(TraitDef def)
+        {
+            var degrees = TraitDesirabilityCache.DegreesFor(def);
+            return degrees.Count > 0 ? degrees[0] : 0;
         }
 
         public static HashSet<TraitDef> CaptureDisallowedTraits(Pawn pawn)
