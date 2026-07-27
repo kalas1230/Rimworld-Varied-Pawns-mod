@@ -19,14 +19,25 @@ namespace PawnVarianceMod
             foreach (SkillRecord record in pawn.skills.skills)
                 record.passion = Passion.None;
 
-            var candidates = pawn.skills.skills.Where(r => !r.TotallyDisabled).ToList();
+            AddPassionsWithoutClearing(pawn, targetCount);
+        }
+
+        // Placement loop used both by generation-time Apply (after its unconditional clear, so the
+        // "already carrying a passion" exclusion below is a no-op there) and by GrowthUpPatch
+        // (without any clear, so the exclusion keeps pre-existing growth-moment passions untouched
+        // and skips them as placement candidates).
+        public static void AddPassionsWithoutClearing(Pawn pawn, int countToAdd)
+        {
+            var settings = PawnVarianceMod.Settings;
+
+            var candidates = pawn.skills.skills.Where(r => !r.TotallyDisabled && r.passion == Passion.None).ToList();
             if (candidates.Count == 0) return;
 
             float maxLevel = candidates.Max(r => r.Level);
             float temperature = Mathf.Lerp(Constants.MinTemperatureFloor, Constants.MaxTemperature, settings.passionNoise);
 
             var pool = new List<SkillRecord>(candidates);
-            for (int i = 0; i < targetCount && pool.Count > 0; i++)
+            for (int i = 0; i < countToAdd && pool.Count > 0; i++)
             {
                 var weights = pool.Select(r => (r, weight: Mathf.Exp((r.Level - maxLevel) / temperature))).ToList();
                 float total = weights.Sum(w => w.weight);

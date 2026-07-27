@@ -28,11 +28,22 @@ namespace PawnVarianceMod
             if (pawn.story.traits.allTraits.Count >= targetCount)
                 return; // Accepted limitation: forced set alone can meet/exceed target — see Trait variance step 3.
 
+            FillRemainingSlots(pawn, quality, targetCount, disallowed);
+        }
+
+        // Weighted-sampling fill used both by generation-time Apply (after clear+forced) and by
+        // GrowthUpPatch (after preserving pre-existing traits). Any trait already present on the
+        // pawn (including forced ones) is naturally skipped by WeightedPick's HasTrait check, so
+        // callers do not need to pre-filter their own "already present" set out of `eligible`.
+        public static void FillRemainingSlots(Pawn pawn, float quality, int targetCount, HashSet<TraitDef> disallowed)
+        {
+            var settings = PawnVarianceMod.Settings;
+
             float target = Mathf.Lerp(TraitDesirabilityCache.ObservedMinScore, TraitDesirabilityCache.ObservedMaxScore, quality);
             float spread = Mathf.Lerp(Constants.MinSpreadFloor, Constants.MaxSpread, settings.traitNoise);
 
             List<TraitDef> eligible = DefDatabase<TraitDef>.AllDefsListForReading
-                .Where(def => !disallowed.Contains(def) && !forced.Contains(def))
+                .Where(def => !disallowed.Contains(def))
                 .ToList();
 
             while (pawn.story.traits.allTraits.Count < targetCount && eligible.Count > 0)
