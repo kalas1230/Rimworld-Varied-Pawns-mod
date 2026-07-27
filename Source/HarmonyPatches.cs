@@ -30,7 +30,7 @@ namespace PawnVarianceMod
             catch (Exception ex)
             {
                 if (settings.verboseLogging) throw;
-                Log.ErrorOnce($"[PawnVarianceMod] Exception applying variance to {pawn.LabelShort}: {ex}", ex.StackTrace.GetHashCode());
+                Log.ErrorOnce($"[PawnVarianceMod] Exception applying variance to {pawn.LabelShort}: {ex}", (ex.GetType().FullName + ex.StackTrace).GetHashCode());
             }
         }
     }
