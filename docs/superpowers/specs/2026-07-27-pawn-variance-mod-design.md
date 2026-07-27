@@ -60,7 +60,7 @@ Store final per-skill levels for use by passion placement. No tier brackets exis
 1. Compute trait count as a smooth function of quality (e.g. `round(lerp(minCount, maxCount, quality) + smallRandomJitter)`), clamped to sane bounds.
 2. Clear vanilla-generated traits.
 3. Compute a quality-derived target desirability score: `target = lerp(observedMinScore, observedMaxScore, quality)`, where the observed bounds come from `TraitDesirabilityCache`'s startup scan of currently-loaded traits (see Settings Schema) — not a fixed constant.
-4. Repeatedly sample from all eligible loaded traits using continuous weighted sampling: `weight = exp(-(score - target)² / spread)`, where `spread` is widened by the trait noise slider (low noise = tightly clusters around `target`; high noise = nearly flat weighting, trait quality drifts independent of pawn quality). The cumulative weight array is recomputed whenever `target`'s underlying inputs (noise slider, loaded mod list) change — per-pawn sampling is a binary search against this cache, not a per-pawn recomputation.
+4. Repeatedly sample from all eligible loaded traits using continuous weighted sampling: `weight = exp(-(score - target)² / spread)`, where `spread = lerp(minSpreadFloor, maxSpread, traitNoiseSlider)` with `minSpreadFloor > 0` (never exactly 0 — see Trait/Passion noise-floor setting below; a zero spread would produce a NaN/degenerate weight array and collapse to a hard argmax cutoff, which would violate the "no hard cutoffs" pillar). Only the **mod-list-dependent** parts are cached: the sorted list of `(TraitDef, score)` pairs and `observedMinScore`/`observedMaxScore`, rebuilt when the loaded mod list changes. `target` and the resulting weight vector/cumulative sum are **per-pawn** (since `target` depends on that pawn's own `quality` roll) and are recomputed fresh for each pawn — this is a cheap O(number of loaded traits) pass, not something that can be precomputed once.
 5. Skip any candidate that conflicts with already-picked traits via vanilla's own conflict/exclusion checks. If eligible candidates run out before the rolled count is filled, stop early with a `Log.Message` (expected with small trait pools, not an error).
 
 This weighting is deliberately probabilistic, not a hard cutoff — a high-quality pawn can still roll a mediocre or bad trait, just less often than a low-quality pawn would, and the trait noise slider lets users directly control how often that happens.
@@ -68,25 +68,25 @@ This weighting is deliberately probabilistic, not a hard cutoff — a high-quali
 ### Passion variance (if enabled)
 1. Compute passion count as a smooth function of quality, same pattern as trait count.
 2. Build a weighted list of the pawn's skills using each skill's final absolute level (from the skill applier if enabled, vanilla level otherwise — chosen specifically so passion placement never needs a fallback branch for the skill-toggle-off case).
-3. The passion noise slider controls the "temperature" of this weighting: low noise = strongly peaked toward the pawn's actual best skills; high noise = weighting trends toward flat/uniform regardless of skill level.
+3. The passion noise slider controls the "temperature" of this weighting: `temperature = lerp(minTemperatureFloor, maxTemperature, passionNoiseSlider)` with `minTemperatureFloor > 0` (same non-zero-floor rationale as trait `spread` above — a zero temperature would collapse to a hard "always pick the single best skill" cutoff).
 4. Sample without replacement for placement; assign Minor/Major passion using vanilla's own ratio logic.
 
 ## Settings Schema
 
 Persisted via `PawnVarianceSettings.ExposeData()` in mod config (never in save files):
 
-- **Average pawn quality** slider (0-1, default 0.5): the mean of the shared Beta-distributed quality roll. This is the one global "linkage" knob — it's what makes skill/trait/passion loosely correlate per pawn, since all three appliers derive their baseline from the same rolled `quality` value.
+- **Average pawn quality** slider (0-1, default 0.5): the mean of the shared Beta-distributed quality roll. This controls the *population's average outcome*, not correlation strength — cross-system correlation comes from all three appliers consuming the same per-pawn `quality` roll (see Per-pawn flow), which happens regardless of where this slider is set. Correlation *strength* is instead controlled by the three noise sliders below (lower noise = tighter correlation to the shared roll).
 - **Skill noise** slider (0-1, default 0.35): scales the independent per-skill offset added on top of the quality-derived baseline shift. Nonzero by default so quality is a *bias*, never a deterministic outcome — this is what guarantees a high-quality pawn can still roll a mediocre skill.
-- **Trait noise** slider (0-1, default 0.35): widens/narrows the `spread` parameter in the trait weighted-sampling formula around the quality-derived target score. Same nonzero-by-default rationale.
-- **Passion noise** slider (0-1, default 0.35): controls the "peakedness" of passion-placement weighting around the pawn's final skill levels. Same nonzero-by-default rationale.
+- **Trait noise** slider (0-1, default 0.35): maps to the trait weighted-sampling `spread` via `lerp(minSpreadFloor, maxSpread, slider)`. `minSpreadFloor` and `maxSpread` are named constants with sane defaults (not separately user-exposed — see rationale below). Nonzero-floor by default so trait quality is never a deterministic function of `target`.
+- **Passion noise** slider (0-1, default 0.35): maps to the passion-weighting `temperature` via `lerp(minTemperatureFloor, maxTemperature, slider)`, same named-constant/nonzero-floor pattern as trait noise.
 - **Skill shift range** (min/max, default -4 to +8): what quality=0 and quality=1 map to as the skill baseline shift. User-configurable — this is the direct replacement for the old per-tier shift brackets, now expressed as the single global range the continuous curve spans.
-- **Trait count range** (min/max, default 1 to 6): what quality=0 and quality=1 map to as trait count.
-- **Passion count range** (min/max, default matching vanilla's typical 0-3): what quality=0 and quality=1 map to as passion count.
+- **Trait count range** (min/max, default 1 to 6): what quality=0 and quality=1 map to as trait count. The `smallRandomJitter` added on top (Core Algorithms) is a small fixed-magnitude named constant, not separately user-exposed — it only smooths the count roll's rounding, it isn't a tunable "feel" knob the way the noise sliders are.
+- **Passion count range** (min/max, default matching vanilla's typical 0-3): what quality=0 and quality=1 map to as passion count. Same jitter-constant note as trait count.
 - **Trait target score range**: *not* a user-editable setting — auto-derived at startup as the observed min/max desirability score across all currently-loaded `TraitDef`s (via `TraitDesirabilityCache`). This keeps quality=0/1 meaningfully calibrated to whatever trait mods are actually loaded, rather than a fixed constant that could be miscalibrated for an unusually mild or extreme modded trait pool. Directly serves the "works safely with any trait mod" goal.
-- The Beta distribution's population-spread parameter (how much pawns vary in underlying quality) is a **fixed internal constant, not user-exposed** — needed so the shared quality roll retains real per-pawn variance (without it, every pawn would share an identical baseline and the three noise sliders would be adding randomness to an already-identical signal, eliminating cross-system correlation entirely). Exposing it as a slider is a plausible future addition, deliberately deferred (YAGNI) since the settings above already cover the tuning power most users will reach for.
+- The Beta distribution's population-spread parameter (how much pawns vary in underlying quality), and the `minSpreadFloor`/`maxSpread`/`minTemperatureFloor`/`maxTemperature`/`smallRandomJitter` constants above, are **fixed internal constants, not user-exposed** — deliberately deferred (YAGNI) since the settings above already cover the tuning power most users will reach for; exposing any of them as additional sliders is a plausible future addition if requested.
 - `enableTraitVariance`, `enableSkillVariance`, `enablePassionVariance` — default on.
 - `applyToHostilePawns` — default on.
-- Tier display thresholds (quality value cutoffs for "reads as Incompetent/Standard/Specialist/Prodigy" in tooltips) — cosmetic only, never affect mechanics. Ship with sane defaults; not critical to expose as editable, since they're pure flavor text.
+- Tier display thresholds (quality value cutoffs for "reads as Incompetent/Standard/Specialist/Prodigy") — cosmetic only, never affect mechanics. **Rendered only as a live readout inside the Mod Settings window itself** (e.g. "Currently reads as: Specialist" next to the average-quality slider) — not via any new in-game tooltip or inspect-string patch, so this stays within the standard Mod Settings window and doesn't require the custom UI ruled out by Non-goals.
 
 ## Edge Cases
 
@@ -97,7 +97,9 @@ Persisted via `PawnVarianceSettings.ExposeData()` in mod config (never in save f
 5. Hostile-pawn check uses `pawn.Faction?.HostileTo(Faction.OfPlayer)`, null-guarded (faction-less pawns default to "apply").
 6. Mod list changes between saves (trait mod added/removed) → desirability cache and trait weight tables are rebuilt fresh at each startup from currently-loaded Defs; nothing stale persists.
 7. Harmony patch throws for any reason → caught, logged once, vanilla pawn stands untouched.
-8. Noise slider at 0 for a system → that system's output is a pure deterministic function of quality (no randomness beyond the shared roll) — valid and intentional, not an error case.
+8. Noise slider at 0 for a system → its `spread`/`temperature` sits at the nonzero floor constant, not exactly 0 (see Core Algorithms) — output is close to deterministic-by-quality but never a hard cutoff.
+9. A min/max range setting (skill shift, trait count, passion count) is hand-edited so min > max → swapped on load rather than silently inverting the quality→outcome relationship.
+10. Settings change detection: `PawnVarianceSettings` marks derived caches (Beta `α`/`β`, trait score bounds) dirty whenever `Write()` fires from the Mod Settings window (RimWorld's settings UI updates live, with no explicit "Apply" step) — caches are lazily rebuilt on next access after being marked dirty, not on a fixed schedule, so slider changes take effect without requiring a restart.
 
 ## Save-Game Safety
 
