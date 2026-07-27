@@ -10,6 +10,8 @@ namespace PawnVarianceMod
     public static class TraitDesirabilityCache
     {
         private static readonly Dictionary<(TraitDef, int), float> Scores = new Dictionary<(TraitDef, int), float>();
+        private static readonly Dictionary<TraitDef, List<int>> DegreesByTrait = new Dictionary<TraitDef, List<int>>();
+        private static readonly List<int> DegreeZeroOnly = new List<int> { 0 };
 
         public static float ObservedMinScore { get; private set; }
         public static float ObservedMaxScore { get; private set; }
@@ -24,13 +26,30 @@ namespace PawnVarianceMod
         public static void Rebuild()
         {
             Scores.Clear();
+            DegreesByTrait.Clear();
+
             foreach (TraitDef def in DefDatabase<TraitDef>.AllDefsListForReading)
             {
-                for (int degree = 0; degree < (def.degreeDatas?.Count ?? 1); degree++)
+                var degrees = new List<int>();
+                if (def.degreeDatas == null || def.degreeDatas.Count == 0)
                 {
-                    float score = ScoreTrait(def, degree);
-                    Scores[(def, degree)] = score;
+                    // Degree-less trait: a single implicit degree-0 state.
+                    Scores[(def, 0)] = ScoreTraitData(null);
+                    degrees.Add(0);
                 }
+                else
+                {
+                    foreach (TraitDegreeData data in def.degreeDatas)
+                    {
+                        // Keyed by the trait's REAL degree value (e.g. -2/-1/1/2), not its list
+                        // index — the list index and the degree value are unrelated for most
+                        // multi-degree vanilla traits, and downstream sampling/granting must use
+                        // the real value so `new Trait(def, degree, ...)` resolves correctly.
+                        Scores[(def, data.degree)] = ScoreTraitData(data);
+                        degrees.Add(data.degree);
+                    }
+                }
+                DegreesByTrait[def] = degrees;
             }
 
             if (Scores.Count == 0)
@@ -61,11 +80,18 @@ namespace PawnVarianceMod
             return Scores.TryGetValue((def, degree), out float score) ? score : 0f;
         }
 
-        private static float ScoreTrait(TraitDef def, int degree)
+        // All valid degree values for this trait (a single-entry [0] for degree-less traits).
+        // TraitVarianceApplier samples (def, degree) pairs together using this, rather than
+        // always defaulting to degree 0 — a hardcoded 0 doesn't exist for many multi-degree
+        // vanilla traits (e.g. Industriousness: -2/-1/1/2), which would otherwise cause vanilla
+        // trait-lookup errors and mis-scored sampling.
+        public static IReadOnlyList<int> DegreesFor(TraitDef def)
         {
-            TraitDegreeData data = def.degreeDatas != null && degree < def.degreeDatas.Count
-                ? def.degreeDatas[degree]
-                : null;
+            return DegreesByTrait.TryGetValue(def, out var degrees) ? degrees : DegreeZeroOnly;
+        }
+
+        private static float ScoreTraitData(TraitDegreeData data)
+        {
             if (data == null) return 0f;
 
             float skillCategory = 0f;

@@ -22,6 +22,11 @@ namespace PawnVarianceMod
             HashSet<TraitDef> disallowed = CaptureDisallowedTraits(pawn);
 
             pawn.story.traits.allTraits.Clear();
+            // Forced traits are granted at degree 0 regardless of what degree their source
+            // (kind-def/gene requirement) may have specified — capturing per-source degree would
+            // require expanding CaptureForcedTraits' return type, which Task 9's GrowthUpPatch
+            // already depends on as HashSet<TraitDef>. Accepted, not fixed, in this round: this
+            // only affects forced traits, never the weighted-sampled ones (see FillRemainingSlots).
             foreach (TraitDef def in forced)
                 pawn.story.traits.GainTrait(new Trait(def, 0, true));
 
@@ -38,6 +43,11 @@ namespace PawnVarianceMod
         // while loop's own exit condition (eligible.Count > 0) accurate without callers needing to
         // pass in their own "already present"/forced set. WeightedPick's internal HasTrait check
         // (retained from Task 6) is now redundant against this narrowed list but harmless.
+        //
+        // Candidates are (TraitDef, degree) pairs, not bare TraitDefs: a multi-degree trait (e.g.
+        // Industriousness at -2/-1/1/2) has each degree scored independently by
+        // TraitDesirabilityCache, so sampling must pick trait AND degree together rather than
+        // always granting a hardcoded degree 0, which doesn't exist for many such traits.
         public static void FillRemainingSlots(Pawn pawn, float quality, int targetCount, HashSet<TraitDef> disallowed)
         {
             var settings = PawnVarianceMod.Settings;
@@ -45,20 +55,25 @@ namespace PawnVarianceMod
             float target = Mathf.Lerp(TraitDesirabilityCache.ObservedMinScore, TraitDesirabilityCache.ObservedMaxScore, quality);
             float spread = Mathf.Lerp(Constants.MinSpreadFloor, Constants.MaxSpread, settings.traitNoise);
 
-            List<TraitDef> eligible = DefDatabase<TraitDef>.AllDefsListForReading
+            List<(TraitDef def, int degree)> eligible = DefDatabase<TraitDef>.AllDefsListForReading
                 .Where(def => !disallowed.Contains(def) && !pawn.story.traits.HasTrait(def))
+                .SelectMany(def => TraitDesirabilityCache.DegreesFor(def).Select(degree => (def, degree)))
                 .ToList();
 
             while (pawn.story.traits.allTraits.Count < targetCount && eligible.Count > 0)
             {
-                TraitDef picked = WeightedPick(eligible, target, spread, pawn);
+                var picked = WeightedPick(eligible, target, spread, pawn);
                 if (picked == null)
                 {
                     Log.Message($"[PawnVarianceMod] Ran out of eligible traits for {pawn.LabelShort}, stopping at {pawn.story.traits.allTraits.Count}/{targetCount}.");
                     break;
                 }
-                pawn.story.traits.GainTrait(new Trait(picked, 0, false));
-                eligible.Remove(picked);
+
+                var (def, degree) = picked.Value;
+                pawn.story.traits.GainTrait(new Trait(def, degree, false));
+                // A trait can only be held at one degree at a time — once a def is picked, remove
+                // EVERY remaining degree of that same def from the pool, not just the picked entry.
+                eligible.RemoveAll(c => c.def == def);
             }
         }
 
@@ -91,33 +106,34 @@ namespace PawnVarianceMod
             return disallowed;
         }
 
-        private static TraitDef WeightedPick(List<TraitDef> candidates, float target, float spread, Pawn pawn)
+        private static (TraitDef def, int degree)? WeightedPick(List<(TraitDef def, int degree)> candidates, float target, float spread, Pawn pawn)
         {
-            var weights = new List<(TraitDef def, float weight)>();
+            var weights = new List<(TraitDef def, int degree, float distSq)>();
             float minDistSq = float.MaxValue;
 
-            foreach (var def in candidates)
+            foreach (var (def, degree) in candidates)
             {
                 if (pawn.story.traits.HasTrait(def)) continue;
                 if (ConflictsWithExisting(def, pawn)) continue;
-                float score = TraitDesirabilityCache.ScoreOf(def, 0);
+                float score = TraitDesirabilityCache.ScoreOf(def, degree);
                 float distSq = (score - target) * (score - target);
                 if (distSq < minDistSq) minDistSq = distSq;
-                weights.Add((def, distSq));
+                weights.Add((def, degree, distSq));
             }
 
             if (weights.Count == 0) return null;
 
-            var finalWeights = weights.Select(w => (w.def, weight: Mathf.Exp(-(w.weight - minDistSq) / spread))).ToList();
+            var finalWeights = weights.Select(w => (w.def, w.degree, weight: Mathf.Exp(-(w.distSq - minDistSq) / spread))).ToList();
             float total = finalWeights.Sum(w => w.weight);
             float roll = (float)Rand.Value * total;
             float cumulative = 0f;
-            foreach (var (def, weight) in finalWeights)
+            foreach (var (def, degree, weight) in finalWeights)
             {
                 cumulative += weight;
-                if (roll <= cumulative) return def;
+                if (roll <= cumulative) return (def, degree);
             }
-            return finalWeights.Last().def;
+            var last = finalWeights.Last();
+            return (last.def, last.degree);
         }
 
         // TraitDef.conflictingTraits/exclusionTags: unverified field names, confirm at implementation time (Global Constraints).

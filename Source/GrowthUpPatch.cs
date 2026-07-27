@@ -15,11 +15,11 @@ namespace PawnVarianceMod
     {
         private static readonly HashSet<int> Processed = new HashSet<int>();
 
-        public static void Postfix(Pawn_AgeTracker __instance, Pawn ___pawn)
+        public static void Postfix(Pawn ___pawn)
         {
             var settings = PawnVarianceMod.Settings;
             if (!settings.applyVarianceOnGrowUp) return;
-            if (___pawn == null) return;
+            if (___pawn == null || ___pawn.RaceProps == null || !___pawn.RaceProps.Humanlike) return; // this hook fires for every pawn including animals; without this gate every maturing animal would NRE in the appliers below
             if (___pawn.DevelopmentalStage != DevelopmentalStage.Adult) return; // defensive re-check, see Growth-up step 0
             if (!settings.enableSkillVariance && !settings.enableTraitVariance && !settings.enablePassionVariance) return;
             if (!settings.applyToHostilePawns && ___pawn.Faction != null && ___pawn.Faction.HostileTo(Faction.OfPlayer)) return;
@@ -31,8 +31,11 @@ namespace PawnVarianceMod
             {
                 float quality = QualityRoller.RollQuality();
 
-                if (settings.enableSkillVariance) ApplySkillGrowthUp(___pawn, quality);
+                // Ordering matches the main postfix (HarmonyPatches.cs): trait, then skill, then
+                // passion — trait variance can disable work tags, which passion placement's
+                // TotallyDisabled exclusion depends on.
                 if (settings.enableTraitVariance) ApplyTraitGrowthUp(___pawn, quality);
+                if (settings.enableSkillVariance) ApplySkillGrowthUp(___pawn, quality);
                 if (settings.enablePassionVariance) ApplyPassionGrowthUp(___pawn, quality);
             }
             catch (Exception ex)
@@ -41,8 +44,16 @@ namespace PawnVarianceMod
             }
         }
 
-        // Skill: compute then immediately apply (step-scoped, not deferred across 2-4 — see
-        // Growth-up variance step 5's mitigation).
+        // Not Scribe-persisted by design (the idempotency guard is deliberately session-only —
+        // see Growth-up variance's Idempotency guard). Cleared whenever a game is loaded/started
+        // so a thingIDNumber collision between separate save files loaded in the same RimWorld
+        // session (IDs are assigned per-save, not globally unique) can't cause a false-positive
+        // "already processed" skip on an unrelated pawn in a newly loaded save.
+        internal static void ClearForNewGame()
+        {
+            Processed.Clear();
+        }
+
         private static void ApplySkillGrowthUp(Pawn pawn, float quality)
         {
             SkillVarianceApplier.Apply(pawn, quality); // identical logic to generation-time; additive, so safe on accumulated childhood levels
@@ -114,6 +125,18 @@ namespace PawnVarianceMod
             if (existingPassionCount >= targetCount) return;
 
             PassionVarianceApplier.AddPassionsWithoutClearing(pawn, targetCount - existingPassionCount);
+        }
+    }
+
+    // Target method unverified — confirm Game.LoadGame's exact signature against decompiled
+    // source (Global Constraints). Isolated as its own patch class (see PawnVarianceMod's
+    // per-class patch isolation) so a wrong target here can't take down the rest of the mod.
+    [HarmonyPatch(typeof(Game), nameof(Game.LoadGame))]
+    public static class Game_LoadGame_Postfix
+    {
+        public static void Postfix()
+        {
+            DevelopmentalStage_Postfix.ClearForNewGame();
         }
     }
 }
