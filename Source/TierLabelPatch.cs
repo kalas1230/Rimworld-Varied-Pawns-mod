@@ -3,9 +3,12 @@ using Verse;
 
 namespace PawnVarianceMod
 {
-    // Target method unverified — confirm the bio-description generator against decompiled
-    // source, and confirm it's distinct from the inspect-string method (Global Constraints).
-    [HarmonyPatch(typeof(Pawn), nameof(Pawn.GetDescription))]
+    // Verified against RimWorld 1.5/1.6's decompiled Assembly-CSharp.dll: Pawn.GetDescription()
+    // does not exist; the real bio-tab text is Pawn.DescriptionDetailed, a virtual property
+    // getter overridden directly on Pawn (not inherited unmodified from Thing). Confirmed
+    // distinct from the inspect-string method (Thing.GetInspectString(), which exists
+    // separately), satisfying the Global Constraints requirement.
+    [HarmonyPatch(typeof(Pawn), nameof(Pawn.DescriptionDetailed), MethodType.Getter)]
     public static class GetDescription_Postfix
     {
         public static void Postfix(Pawn __instance, ref string __result)

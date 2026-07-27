@@ -96,12 +96,14 @@ namespace PawnVarianceMod
         {
             var disallowed = new HashSet<TraitDef>();
             if (pawn.kindDef?.disallowedTraits != null)
-                foreach (var t in pawn.kindDef.disallowedTraits) disallowed.Add(t.def);
+                foreach (var t in pawn.kindDef.disallowedTraits) disallowed.Add(t); // PawnKindDef.disallowedTraits is List<TraitDef> directly, unlike forcedTraits' List<TraitRequirement>
 
-            if (ModsConfig.IdeologyActive && pawn.Ideo != null)
-                foreach (var precept in pawn.Ideo.PreceptsListForReading)
-                    if (precept.def.disallowedTraits != null)
-                        foreach (var def in precept.def.disallowedTraits) disallowed.Add(def);
+            // Deliberately no Ideology-sourced entries here: verified against decompiled source
+            // (Global Constraints) that Ideology has no hard "forbid this trait" mechanism in this
+            // RimWorld version — PreceptDef has no disallowedTraits field. The only trait-related
+            // Ideology concept is MemeDef.disagreeableTraits, a soft mood/certainty preference, not
+            // a hard exclusion; conflating the two would make this mod forbid traits vanilla itself
+            // only disapproves of, which is a real behavior change beyond what this spec intended.
 
             return disallowed;
         }

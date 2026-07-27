@@ -8,9 +8,16 @@ using Verse;
 
 namespace PawnVarianceMod
 {
-    // Target method unverified — confirm the Biotech Child->Adult transition hook against
-    // decompiled source before finalizing this attribute (Global Constraints).
-    [HarmonyPatch(typeof(Pawn_AgeTracker), nameof(Pawn_AgeTracker.DevelopmentalStage), MethodType.Setter)]
+    // Verified against RimWorld 1.5/1.6's decompiled Assembly-CSharp.dll: Pawn_AgeTracker has no
+    // DevelopmentalStage member at all (it's a read-only computed property on Pawn itself, not
+    // Pawn_AgeTracker, and has no setter to hook). The real target is
+    // Pawn_AgeTracker.PostResolveLifeStageChange() — public, parameterless, called on EVERY
+    // life-stage transition (Baby->Child, Child->Adult, etc.), not just Child->Adult. This is
+    // exactly the "generic developmental-stage-changed callback" scenario the spec's own
+    // defensive DevelopmentalStage != Adult check (below) was already written to handle — no
+    // other code change needed. Pawn_AgeTracker's private backing field is literally named
+    // "pawn", matching the existing ___pawn Harmony field-injection parameter.
+    [HarmonyPatch(typeof(Pawn_AgeTracker), nameof(Pawn_AgeTracker.PostResolveLifeStageChange))]
     public static class DevelopmentalStage_Postfix
     {
         private static readonly HashSet<int> Processed = new HashSet<int>();

@@ -34,7 +34,7 @@ namespace PawnVarianceMod
                 if (def.degreeDatas == null || def.degreeDatas.Count == 0)
                 {
                     // Degree-less trait: a single implicit degree-0 state.
-                    Scores[(def, 0)] = ScoreTraitData(null);
+                    Scores[(def, 0)] = ScoreTraitData(def, null);
                     degrees.Add(0);
                 }
                 else
@@ -45,7 +45,7 @@ namespace PawnVarianceMod
                         // index — the list index and the degree value are unrelated for most
                         // multi-degree vanilla traits, and downstream sampling/granting must use
                         // the real value so `new Trait(def, degree, ...)` resolves correctly.
-                        Scores[(def, data.degree)] = ScoreTraitData(data);
+                        Scores[(def, data.degree)] = ScoreTraitData(def, data);
                         degrees.Add(data.degree);
                     }
                 }
@@ -90,19 +90,25 @@ namespace PawnVarianceMod
             return DegreesByTrait.TryGetValue(def, out var degrees) ? degrees : DegreeZeroOnly;
         }
 
-        private static float ScoreTraitData(TraitDegreeData data)
+        // `def` is needed alongside `data` because `disabledWorkTags` lives on TraitDef itself in
+        // this RimWorld version, not on TraitDegreeData — verified against decompiled
+        // Assembly-CSharp.dll (Global Constraints). Consequence: the work-tag category is
+        // identical across every degree of a multi-degree trait (there is no per-degree
+        // work-tag-disable concept in vanilla), unlike the other three categories, which do vary
+        // by degree via `data`.
+        private static float ScoreTraitData(TraitDef def, TraitDegreeData data)
         {
-            if (data == null) return 0f;
-
             float skillCategory = 0f;
-            if (data.skillGains != null)
+            if (data?.skillGains != null)
             {
-                float sum = data.skillGains.Values.Sum();
+                // SkillGain is a {SkillDef skill, int amount} pair, not a dictionary — verified
+                // against decompiled source (Global Constraints).
+                float sum = data.skillGains.Sum(sg => sg.amount);
                 skillCategory = Mathf.Clamp(sum / Constants.SkillOffsetReferenceMagnitude, -1f, 1f);
             }
 
             float statCategory = 0f;
-            if (data.statOffsets != null || data.statFactors != null)
+            if (data != null && (data.statOffsets != null || data.statFactors != null))
             {
                 float sum = 0f;
                 if (data.statOffsets != null)
@@ -113,16 +119,16 @@ namespace PawnVarianceMod
             }
 
             float workTagCategory = 0f;
-            if (data.disabledWorkTags != WorkTags.None)
+            if (def.disabledWorkTags != WorkTags.None)
             {
                 int disabledCount = System.Enum.GetValues(typeof(WorkTags))
                     .Cast<WorkTags>()
-                    .Count(tag => tag != WorkTags.None && (data.disabledWorkTags & tag) != 0);
+                    .Count(tag => tag != WorkTags.None && (def.disabledWorkTags & tag) != 0);
                 workTagCategory = Mathf.Clamp(-disabledCount * Constants.WorkTagDisablePenalty, -1f, 1f);
             }
 
             float socialCategory = 0f;
-            if (data.socialFightChanceFactor != 1f)
+            if (data != null && data.socialFightChanceFactor != 1f)
             {
                 socialCategory += (data.socialFightChanceFactor - 1f);
             }
