@@ -53,6 +53,16 @@ namespace PawnVarianceMod
             return TierForQuality(EffectiveQualityFor(pawn));
         }
 
+        // Shared by every tier-tooltip patch site (character card, colonist bar) so the wording
+        // and color formatting can't drift between them.
+        public static string TierTooltipTextFor(Pawn pawn)
+        {
+            string tier = EffectiveTierFor(pawn);
+            string color = ColorFor(tier);
+            string tierText = color != null ? $"<color={color}>{tier}</color>" : tier;
+            return $"Quality tier: {tierText}";
+        }
+
         private static float SkillComponent(Pawn pawn)
         {
             var settings = PawnVarianceMod.Settings;
@@ -61,7 +71,13 @@ namespace PawnVarianceMod
 
             if (Mathf.Approximately(lower, upper)) return 0.5f; // degenerate-range guard, see Tier bio label
 
-            float avgLevel = pawn.skills.skills.Count > 0 ? (float)pawn.skills.skills.Average(r => r.Level) : 0f;
+            // Excludes TotallyDisabled skills (e.g. from an incapability trait/backstory), same
+            // reasoning PassionVarianceApplier already applies to its own candidate pool: a
+            // hard-locked-to-0 skill reflects the pawn's incapability, not their quality roll, and
+            // including it in the average could keep an otherwise-maxed, genuinely high-quality
+            // pawn from ever reading as Prodigy just because one unrelated skill is disabled.
+            var usableSkills = pawn.skills.skills.Where(r => !r.TotallyDisabled).ToList();
+            float avgLevel = usableSkills.Count > 0 ? (float)usableSkills.Average(r => r.Level) : 0f;
             return Mathf.Clamp01(Mathf.InverseLerp(lower, upper, avgLevel));
         }
 

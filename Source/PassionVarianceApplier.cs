@@ -61,8 +61,12 @@ namespace PawnVarianceMod
                     if (roll <= cumulative) { picked = r; break; }
                 }
 
-                // Minor/Major ratio logic: unverified vanilla internal, confirm at implementation time (Global Constraints).
-                Passion assigned = VanillaPassionRatio.RollMinorOrMajor();
+                // remainingSlots includes `picked` itself (not yet removed from `pool`), matching
+                // what RollMinorOrMajor needs: "how many skill-slots, including this one, remain
+                // to place the remaining pips."
+                int remainingNeed = pipsToAdd - pipsPlaced;
+                int remainingSlots = pool.Count;
+                Passion assigned = VanillaPassionRatio.RollMinorOrMajor(remainingNeed, remainingSlots);
                 picked.passion = assigned;
                 pipsPlaced += assigned == Passion.Major ? 2 : 1;
                 pool.Remove(picked);
@@ -75,13 +79,33 @@ namespace PawnVarianceMod
         }
     }
 
-    // Placeholder wrapper isolating the unverified vanilla-ratio dependency so it's a one-line
-    // swap once the real method is confirmed against decompiled source.
+    // Adaptive Major/Minor roll: Major probability scales with how many pips are still needed
+    // relative to how many skill-slots remain, so the configured pip target stays reachable
+    // instead of being capped by a fixed ratio. The original placeholder here was a FIXED 75%
+    // Minor / 25% Major split, independent of the target — this was a real, in-game-confirmed bug
+    // (Task 11 verification): across 12 skills, a fixed 75/25 split averages only ~1.25 pips per
+    // skill (12 * 1.25 = 15), so any configured target above roughly 15 pips was structurally
+    // unreachable no matter how the dice landed, since every skill is committed after exactly one
+    // roll and never revisited. Observed symptom: min/max set to 22-24 pips, actual results landed
+    // around 13-16, or ~16-20 with a wide min/max spread.
+    //
+    // pMajor = clamp01((remainingNeed - remainingSlots) / remainingSlots): when remainingNeed
+    // equals remainingSlots (need exactly 1 pip/slot on average to finish), pMajor = 0, forcing
+    // Minor. When remainingNeed equals 2*remainingSlots (need the maximum every remaining slot can
+    // give), pMajor = 1, forcing Major. In between, it scales linearly, preserving genuine
+    // randomness in the common case while guaranteeing the target is always reachable whenever it
+    // is mathematically achievable (<= 2 * available skill count).
+    //
+    // Genuine vanilla Minor/Major ratio logic is still unverified against decompiled source
+    // (Global Constraints) — this adaptive approach deliberately prioritizes actually honoring the
+    // user's configured target over guessing at an unknown vanilla probability.
     internal static class VanillaPassionRatio
     {
-        public static Passion RollMinorOrMajor()
+        public static Passion RollMinorOrMajor(int remainingNeed, int remainingSlots)
         {
-            return Rand.Value < 0.75f ? Passion.Minor : Passion.Major;
+            if (remainingSlots <= 0) return Passion.Minor; // defensive; caller should never invoke with no slots left
+            float pMajor = Mathf.Clamp01((remainingNeed - remainingSlots) / (float)remainingSlots);
+            return Rand.Value < pMajor ? Passion.Major : Passion.Minor;
         }
     }
 }

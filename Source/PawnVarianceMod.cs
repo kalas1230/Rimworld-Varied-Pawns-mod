@@ -26,6 +26,7 @@ namespace PawnVarianceMod
             PatchIndividually(harmony, typeof(Game_LoadGame_Postfix));
             PatchIndividually(harmony, typeof(Game_InitNewGame_Postfix));
             PatchIndividually(harmony, typeof(DrawCharacterCard_Postfix));
+            PatchIndividually(harmony, typeof(DrawColonist_Postfix));
         }
 
         private static void PatchIndividually(Harmony harmony, Type patchClass)
