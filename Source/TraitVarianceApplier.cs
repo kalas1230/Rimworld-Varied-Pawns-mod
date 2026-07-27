@@ -32,9 +32,12 @@ namespace PawnVarianceMod
         }
 
         // Weighted-sampling fill used both by generation-time Apply (after clear+forced) and by
-        // GrowthUpPatch (after preserving pre-existing traits). Any trait already present on the
-        // pawn (including forced ones) is naturally skipped by WeightedPick's HasTrait check, so
-        // callers do not need to pre-filter their own "already present" set out of `eligible`.
+        // GrowthUpPatch (after preserving pre-existing traits). Traits already present on the
+        // pawn (including forced ones) are excluded from `eligible` up front via HasTrait, so the
+        // pool shrinks to empty once no genuinely-new sampleable candidates remain — this keeps the
+        // while loop's own exit condition (eligible.Count > 0) accurate without callers needing to
+        // pass in their own "already present"/forced set. WeightedPick's internal HasTrait check
+        // (retained from Task 6) is now redundant against this narrowed list but harmless.
         public static void FillRemainingSlots(Pawn pawn, float quality, int targetCount, HashSet<TraitDef> disallowed)
         {
             var settings = PawnVarianceMod.Settings;
@@ -43,7 +46,7 @@ namespace PawnVarianceMod
             float spread = Mathf.Lerp(Constants.MinSpreadFloor, Constants.MaxSpread, settings.traitNoise);
 
             List<TraitDef> eligible = DefDatabase<TraitDef>.AllDefsListForReading
-                .Where(def => !disallowed.Contains(def))
+                .Where(def => !disallowed.Contains(def) && !pawn.story.traits.HasTrait(def))
                 .ToList();
 
             while (pawn.story.traits.allTraits.Count < targetCount && eligible.Count > 0)
