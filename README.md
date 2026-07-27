@@ -1,1 +1,1 @@
-# Rimworld-Pawn_variance_mod
+# Rimworld-Pawn-variance-mod
