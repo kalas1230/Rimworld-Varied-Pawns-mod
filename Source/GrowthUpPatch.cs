@@ -45,10 +45,11 @@ namespace PawnVarianceMod
         }
 
         // Not Scribe-persisted by design (the idempotency guard is deliberately session-only —
-        // see Growth-up variance's Idempotency guard). Cleared whenever a game is loaded/started
-        // so a thingIDNumber collision between separate save files loaded in the same RimWorld
-        // session (IDs are assigned per-save, not globally unique) can't cause a false-positive
-        // "already processed" skip on an unrelated pawn in a newly loaded save.
+        // see Growth-up variance's Idempotency guard). Cleared when a game is loaded (Game.LoadGame)
+        // or a new colony is started (Game.InitNewGame) so a thingIDNumber collision between
+        // separate save files loaded in the same RimWorld session (IDs are assigned per-save, not
+        // globally unique) can't cause a false-positive "already processed" skip on an unrelated
+        // pawn in a newly loaded save.
         internal static void ClearForNewGame()
         {
             Processed.Clear();
@@ -133,6 +134,22 @@ namespace PawnVarianceMod
     // per-class patch isolation) so a wrong target here can't take down the rest of the mod.
     [HarmonyPatch(typeof(Game), nameof(Game.LoadGame))]
     public static class Game_LoadGame_Postfix
+    {
+        public static void Postfix()
+        {
+            DevelopmentalStage_Postfix.ClearForNewGame();
+        }
+    }
+
+    // Target method unverified — confirm Game.InitNewGame's exact signature against decompiled
+    // source (Global Constraints). Isolated as its own patch class (see PawnVarianceMod's
+    // per-class patch isolation) so a wrong target here can't take down the rest of the mod.
+    // Covers the "start a new colony" path — Game.LoadGame (above) only covers loading an
+    // existing save; without this, the idempotency guard's collision risk (see
+    // DevelopmentalStage_Postfix.ClearForNewGame) is still reachable via "load save A, then
+    // start new colony B" in the same session.
+    [HarmonyPatch(typeof(Game), nameof(Game.InitNewGame))]
+    public static class Game_InitNewGame_Postfix
     {
         public static void Postfix()
         {

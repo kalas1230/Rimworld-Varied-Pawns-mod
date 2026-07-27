@@ -24,6 +24,7 @@ namespace PawnVarianceMod
             PatchIndividually(harmony, typeof(GeneratePawn_Postfix));
             PatchIndividually(harmony, typeof(DevelopmentalStage_Postfix));
             PatchIndividually(harmony, typeof(Game_LoadGame_Postfix));
+            PatchIndividually(harmony, typeof(Game_InitNewGame_Postfix));
             PatchIndividually(harmony, typeof(GetDescription_Postfix));
         }
 
