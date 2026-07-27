@@ -132,9 +132,9 @@ namespace PawnVarianceMod
             listing.CheckboxLabeled("Enable passion variance", ref enablePassionVariance);
             listing.Label($"Passion noise: {passionNoise:F2}");
             passionNoise = listing.Slider(passionNoise, 0f, 1f);
-            listing.Label($"Passion count range: {passionCountMin:F0} to {passionCountMax:F0}");
-            passionCountMin = listing.Slider(passionCountMin, 0f, 10f);
-            passionCountMax = listing.Slider(passionCountMax, 0f, 10f);
+            listing.Label($"Passion strength range (pips — Minor=1, Major=2): {passionCountMin:F0} to {passionCountMax:F0}");
+            passionCountMin = listing.Slider(passionCountMin, 0f, 24f);
+            passionCountMax = listing.Slider(passionCountMax, 0f, 24f);
 
             listing.Gap();
             listing.CheckboxLabeled("Apply to hostile-faction pawns", ref applyToHostilePawns);

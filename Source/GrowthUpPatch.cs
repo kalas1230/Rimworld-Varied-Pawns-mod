@@ -148,15 +148,18 @@ namespace PawnVarianceMod
         private static void ApplyPassionGrowthUp(Pawn pawn, float quality)
         {
             var settings = PawnVarianceMod.Settings;
-            int existingPassionCount = pawn.skills.skills.Count(r => r.passion != Passion.None);
-            int targetCount = Mathf.Clamp(
+            // Pips, not distinct skills — matches PassionVarianceApplier's pip-based semantic
+            // (Minor=1, Major=2), so existing growth-moment passions are weighed on the same scale
+            // as the quality-derived target.
+            int existingPips = pawn.skills.skills.Sum(r => r.passion == Passion.Major ? 2 : r.passion == Passion.Minor ? 1 : 0);
+            int targetPips = Mathf.Clamp(
                 Mathf.RoundToInt(Mathf.Lerp(settings.passionCountMin, settings.passionCountMax, quality)),
                 Mathf.RoundToInt(settings.passionCountMin),
                 Mathf.RoundToInt(settings.passionCountMax));
 
-            if (existingPassionCount >= targetCount) return;
+            if (existingPips >= targetPips) return;
 
-            PassionVarianceApplier.AddPassionsWithoutClearing(pawn, targetCount - existingPassionCount);
+            PassionVarianceApplier.AddPassionsWithoutClearing(pawn, targetPips - existingPips);
         }
     }
 
