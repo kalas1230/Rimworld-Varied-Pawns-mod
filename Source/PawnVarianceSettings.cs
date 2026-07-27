@@ -24,6 +24,19 @@ namespace PawnVarianceMod
 
         private bool betaCacheDirty = true;
         private float cachedAlpha, cachedBeta;
+        private Vector2 scrollPosition = Vector2.zero;
+
+        // Kept in sync with ExposeData's Scribe_Values.Look default literals and the field
+        // initializers above — ResetToDefaults() and ExposeData() must agree on what "default"
+        // means, so these constants are the single source of truth for both.
+        private const float DefaultAverageQuality = 0.5f;
+        private const float DefaultNoise = 0.35f;
+        private const float DefaultSkillShiftMin = -6f;
+        private const float DefaultSkillShiftMax = 6f;
+        private const float DefaultTraitCountMin = 1f;
+        private const float DefaultTraitCountMax = 6f;
+        private const float DefaultPassionCountMin = 0f;
+        private const float DefaultPassionCountMax = 3f;
 
         public override void ExposeData()
         {
@@ -87,8 +100,13 @@ namespace PawnVarianceMod
 
         public void DoWindowContents(Rect inRect)
         {
+            const float viewHeight = 900f; // generous fixed estimate; content is scrollable so overshoot is harmless
+            var outRect = inRect;
+            var viewRect = new Rect(0f, 0f, inRect.width - 24f, viewHeight);
+
+            Widgets.BeginScrollView(outRect, ref scrollPosition, viewRect);
             var listing = new Listing_Standard();
-            listing.Begin(inRect);
+            listing.Begin(viewRect);
 
             listing.Label($"Average pawn quality: {averageQuality:F2}");
             averageQuality = listing.Slider(averageQuality, 0f, 1f);
@@ -98,16 +116,25 @@ namespace PawnVarianceMod
             listing.CheckboxLabeled("Enable skill variance", ref enableSkillVariance);
             listing.Label($"Skill noise: {skillNoise:F2}");
             skillNoise = listing.Slider(skillNoise, 0f, 1f);
+            listing.Label($"Skill shift range: {skillShiftMin:F1} to {skillShiftMax:F1}");
+            skillShiftMin = listing.Slider(skillShiftMin, -20f, 20f);
+            skillShiftMax = listing.Slider(skillShiftMax, -20f, 20f);
 
             listing.Gap();
             listing.CheckboxLabeled("Enable trait variance", ref enableTraitVariance);
             listing.Label($"Trait noise: {traitNoise:F2}");
             traitNoise = listing.Slider(traitNoise, 0f, 1f);
+            listing.Label($"Trait count range: {traitCountMin:F0} to {traitCountMax:F0}");
+            traitCountMin = listing.Slider(traitCountMin, 0f, 15f);
+            traitCountMax = listing.Slider(traitCountMax, 0f, 15f);
 
             listing.Gap();
             listing.CheckboxLabeled("Enable passion variance", ref enablePassionVariance);
             listing.Label($"Passion noise: {passionNoise:F2}");
             passionNoise = listing.Slider(passionNoise, 0f, 1f);
+            listing.Label($"Passion count range: {passionCountMin:F0} to {passionCountMax:F0}");
+            passionCountMin = listing.Slider(passionCountMin, 0f, 10f);
+            passionCountMax = listing.Slider(passionCountMax, 0f, 10f);
 
             listing.Gap();
             listing.CheckboxLabeled("Apply to hostile-faction pawns", ref applyToHostilePawns);
@@ -115,7 +142,33 @@ namespace PawnVarianceMod
                 listing.CheckboxLabeled("Apply variance on grow-up (Biotech)", ref applyVarianceOnGrowUp);
             listing.CheckboxLabeled("Verbose logging (dev mode, rethrows exceptions)", ref verboseLogging);
 
+            listing.Gap();
+            if (listing.ButtonText("Reset to Defaults"))
+                ResetToDefaults();
+
             listing.End();
+            Widgets.EndScrollView();
+        }
+
+        private void ResetToDefaults()
+        {
+            averageQuality = DefaultAverageQuality;
+            skillNoise = DefaultNoise;
+            traitNoise = DefaultNoise;
+            passionNoise = DefaultNoise;
+            skillShiftMin = DefaultSkillShiftMin;
+            skillShiftMax = DefaultSkillShiftMax;
+            traitCountMin = DefaultTraitCountMin;
+            traitCountMax = DefaultTraitCountMax;
+            passionCountMin = DefaultPassionCountMin;
+            passionCountMax = DefaultPassionCountMax;
+            enableSkillVariance = true;
+            enableTraitVariance = true;
+            enablePassionVariance = true;
+            applyToHostilePawns = true;
+            applyVarianceOnGrowUp = true;
+            verboseLogging = false;
+            betaCacheDirty = true;
         }
     }
 }
