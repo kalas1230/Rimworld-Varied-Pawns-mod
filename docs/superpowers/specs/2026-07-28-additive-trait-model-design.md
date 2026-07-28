@@ -1,7 +1,7 @@
 # Additive Trait Model — Design
 
 Date: 2026-07-28
-Status: approved, not yet implemented
+Status: implemented, pending in-game verification
 Supersedes the trait-generation portion of `2026-07-27-pawn-variance-mod-design.md`.
 
 ## Problem
@@ -171,11 +171,16 @@ Key properties:
 
 ## Consequences for existing code
 
-The `Capture*` helpers stop being *restoration* code and become *classification* code —
-answering "is this trait protected?" instead of "how do I rebuild this trait?" This is a
-strictly smaller job and retires a bug class: because no `Trait` object is ever reconstructed,
-`FirstValidDegree` and its degree-guessing become unnecessary, so the `PsychicSensitivity`
-degree-0 crash cannot recur.
+At generation time the `Capture*` helpers stop being *restoration* code and become
+*classification* code — answering "is this trait protected?" instead of "how do I rebuild this
+trait?" This is a strictly smaller job, and because the generation path never reconstructs a
+`Trait` object, the `PsychicSensitivity` degree-0 crash cannot recur there.
+
+`FirstValidDegree`, `CaptureForcedTraits`, `CaptureDisallowedTraits`, and `FindForcingGene` are
+**retained, not deleted**. `GrowthUpPatch.ApplyTraitGrowthUp` still legitimately constructs
+`new Trait(def, degree, true)` when a gene added mid-childhood forces a trait the pawn does not
+yet have, so it still needs a real degree and the `sourceGene` link. Only the generation path
+stops reconstructing traits.
 
 `TraitDesirabilityCache` stays — `TierUtility` still uses it for the cosmetic quality-tier
 tooltip.
@@ -191,7 +196,7 @@ Fixed as a direct consequence of the pivot:
 | Setting | Change |
 |---|---|
 | `countProtectedTraits` | New bool, default `false`. Off: sliders mean "traits this mod rolls" (protected traits are extra). On: sliders mean "total traits on the pawn". |
-| `traitCountMin` | Slider floor drops from 1 to 0 so the zero-rolled-traits case is reachable. |
+| `traitCountMin` | No change needed. The slider is already `Slider(traitCountMin, 0f, 15f)` and `ClampAndSwapOnLoad` imposes no minimum, so 0 is already reachable; `DefaultTraitCountMin = 1f` is only the default value. Verified in `PawnVarianceSettings.cs`. |
 | Trait slider labels | Reworded to match whichever meaning the checkbox selects. |
 
 `ExposeData`, `ResetToDefaults`, and the defaults constants block must all be updated together
