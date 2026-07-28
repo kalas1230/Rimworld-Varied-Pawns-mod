@@ -35,6 +35,7 @@ namespace PawnVarianceMod
         {
             var settings = PawnVarianceMod.Settings;
             if (pawn == null || !pawn.RaceProps.Humanlike) return false;
+            if (!settings.showQualityTier) return false;
             if (!settings.enableSkillVariance && !settings.enableTraitVariance && !settings.enablePassionVariance) return false;
             if (!settings.applyToHostilePawns && pawn.Faction != null && pawn.Faction.HostileTo(Faction.OfPlayer)) return false;
             if (ModsConfig.BiotechActive && pawn.DevelopmentalStage != DevelopmentalStage.Adult) return false;

@@ -1,4 +1,3 @@
-using System;
 using System.Collections.Generic;
 using System.Linq;
 using RimWorld;
@@ -9,68 +8,80 @@ namespace PawnVarianceMod
 {
     public static class TraitVarianceApplier
     {
-        public static void Apply(Pawn pawn, float quality)
+        // Trait selection itself is delegated entirely to vanilla's own public
+        // PawnGenerator.GenerateTraitsFor — the real commonality-weighted picker, with every real
+        // vanilla rejection rule (backstory disallows, required work types/tags, gender/sexuality
+        // edge cases, hostile-spawn allowance, the mental-break stat gate, degree weighting, etc.)
+        // applied exactly as vanilla does it. This mod's only remaining job for traits is: (1) classify
+        // which traits are protected from removal, and (2) decide how many total traits the pawn should
+        // have, driven by quality/traitCountMin/Max. The trait list is reconciled in place — never
+        // cleared — so no trait state belonging to vanilla or another mod is ever destroyed and rebuilt.
+        // There is no
+        // longer a quality-driven "desirability" scoring step — vanilla's own picker has no concept
+        // of trait quality at all, so that axis of variance no longer exists for traits (traitNoise
+        // was removed accordingly; see settings).
+        public static void Apply(Pawn pawn, float quality, PawnGenerationRequest request)
         {
             var settings = PawnVarianceMod.Settings;
 
-            int targetCount = Mathf.Clamp(
+            var protection = TraitProtection.Build(pawn, request);
+            List<Trait> current = pawn.story.traits.allTraits;
+
+            int protectedCount = 0;
+            var removable = new List<Trait>();
+            foreach (Trait trait in current)
+            {
+                if (protection.IsProtected(trait)) protectedCount++;
+                else removable.Add(trait);
+            }
+
+            int rolledTarget = Mathf.Clamp(
                 Mathf.RoundToInt(Mathf.Lerp(settings.traitCountMin, settings.traitCountMax, quality) + JitterSample()),
                 Mathf.RoundToInt(settings.traitCountMin),
                 Mathf.RoundToInt(settings.traitCountMax));
 
-            Dictionary<TraitDef, int> forced = CaptureForcedTraits(pawn);
-            HashSet<TraitDef> disallowed = CaptureDisallowedTraits(pawn);
+            rolledTarget = Mathf.Min(rolledTarget, TraitAgeCap.MaxRolledTraitsFor(pawn));
 
-            pawn.story.traits.allTraits.Clear();
-            // KeyValuePair<TKey,TValue> deconstruction isn't available in net472's BCL — iterate explicitly.
-            foreach (KeyValuePair<TraitDef, int> kvp in forced)
-                pawn.story.traits.GainTrait(new Trait(kvp.Key, kvp.Value, true));
+            // Protected traits are a floor, never part of the budget: at a target of 0 an Yttakin still
+            // keeps its xenotype-forced Psychically Dull and ends with exactly one trait.
+            int desiredTotal = settings.countProtectedTraits
+                ? Mathf.Max(protectedCount, rolledTarget)
+                : protectedCount + rolledTarget;
 
-            if (pawn.story.traits.allTraits.Count >= targetCount)
-                return; // Accepted limitation: forced set alone can meet/exceed target — see Trait variance step 3.
+            int delta = desiredTotal - current.Count;
 
-            FillRemainingSlots(pawn, quality, targetCount, disallowed);
-        }
-
-        // Weighted-sampling fill used both by generation-time Apply (after clear+forced) and by
-        // GrowthUpPatch (after preserving pre-existing traits). Traits already present on the
-        // pawn (including forced ones) are excluded from `eligible` up front via HasTrait, so the
-        // pool shrinks to empty once no genuinely-new sampleable candidates remain — this keeps the
-        // while loop's own exit condition (eligible.Count > 0) accurate without callers needing to
-        // pass in their own "already present"/forced set. WeightedPick's internal HasTrait check
-        // (retained from Task 6) is now redundant against this narrowed list but harmless.
-        //
-        // Candidates are (TraitDef, degree) pairs, not bare TraitDefs: a multi-degree trait (e.g.
-        // Industriousness at -2/-1/1/2) has each degree scored independently by
-        // TraitDesirabilityCache, so sampling must pick trait AND degree together rather than
-        // always granting a hardcoded degree 0, which doesn't exist for many such traits.
-        public static void FillRemainingSlots(Pawn pawn, float quality, int targetCount, HashSet<TraitDef> disallowed)
-        {
-            var settings = PawnVarianceMod.Settings;
-
-            float target = Mathf.Lerp(TraitDesirabilityCache.ObservedMinScore, TraitDesirabilityCache.ObservedMaxScore, quality);
-            float spread = Mathf.Lerp(Constants.MinSpreadFloor, Constants.MaxSpread, settings.traitNoise);
-
-            List<(TraitDef def, int degree)> eligible = DefDatabase<TraitDef>.AllDefsListForReading
-                .Where(def => !disallowed.Contains(def) && !pawn.story.traits.HasTrait(def))
-                .SelectMany(def => TraitDesirabilityCache.DegreesFor(def).Select(degree => (def, degree)))
-                .ToList();
-
-            while (pawn.story.traits.allTraits.Count < targetCount && eligible.Count > 0)
+            if (delta > 0)
             {
-                var picked = WeightedPick(eligible, target, spread, pawn);
-                if (picked == null)
-                {
-                    Log.Message($"[PawnVarianceMod] Ran out of eligible traits for {pawn.LabelShort}, stopping at {pawn.story.traits.allTraits.Count}/{targetCount}.");
-                    break;
-                }
-
-                var (def, degree) = picked.Value;
-                pawn.story.traits.GainTrait(new Trait(def, degree, false));
-                // A trait can only be held at one degree at a time — once a def is picked, remove
-                // EVERY remaining degree of that same def from the pool, not just the picked entry.
-                eligible.RemoveAll(c => c.def == def);
+                // Vanilla's own commonality-weighted picker, with every real rejection rule applied.
+                // Threading the real request through gives it the kindDef disallowed-traits,
+                // required-work-tag and hostile-spawn checks it can only do with one.
+                List<Trait> generated = PawnGenerator.GenerateTraitsFor(pawn, delta, request, growthMomentTrait: false);
+                foreach (Trait trait in generated)
+                    pawn.story.traits.GainTrait(trait);
             }
+            else if (delta < 0)
+            {
+                // Remove through vanilla's real TraitSet.RemoveTrait rather than clearing the backing
+                // list. That runs vanilla's own ability cleanup and fires other mods' RemoveTrait
+                // patches — notably Vanilla Traits Expanded's, which drops the VTE_SlowWorkSpeed hediff
+                // it attached on GainTrait. Bypassing it (as allTraits.Clear() did) left that hediff
+                // orphaned, and it then removed itself from inside Pawn_HealthTracker.Notify_Spawned's
+                // foreach over hediffSet.hediffs, throwing "Collection was modified" and aborting the
+                // pawn's spawn. Uniform random choice: vanilla's picker has no concept of a "better"
+                // trait, so there is no quality axis to bias this by.
+                int toRemove = Mathf.Min(-delta, removable.Count);
+                for (int i = 0; i < toRemove; i++)
+                {
+                    Trait victim = removable.RandomElement();
+                    removable.Remove(victim);
+                    pawn.story.traits.RemoveTrait(victim);
+                }
+            }
+
+            // No sexuality-trait call here, deliberately. Vanilla's own roll already ran during
+            // generation and — because nothing is cleared any more — it survives untouched. Calling
+            // PawnGenerator.TryGenerateSexualityTraitFor again would give every straight pawn a second
+            // independent roll and skew the population's sexuality distribution away from vanilla's.
         }
 
         // Returns TraitDef -> degree, not just a set of TraitDefs: both real forced-trait sources
@@ -80,7 +91,9 @@ namespace PawnVarianceMod
         // with a hardcoded degree 0 instead of its real specified degree produces an invalid Trait
         // instance for any multi-degree trait without a degree-0 entry (e.g. PsychicSensitivity),
         // which vanilla logs an error for on every stat/tick lookup involving that trait, not just
-        // once at generation.
+        // once at generation. NB: vanilla's own GenerateTraits uses a plain `GetValueOrDefault()`
+        // (defaults to 0) for this same nullable case — we deliberately keep our smarter fallback
+        // since it's what fixed a real in-game error; not reverting to match vanilla exactly here.
         public static Dictionary<TraitDef, int> CaptureForcedTraits(Pawn pawn)
         {
             var forced = new Dictionary<TraitDef, int>();
@@ -98,15 +111,71 @@ namespace PawnVarianceMod
             return forced;
         }
 
+        // Third forced-trait source: the pawn's own selected BackstoryDefs (Childhood/Adulthood),
+        // each with its own optional forcedTraits list — separate from PawnKindDef.forcedTraits and
+        // gene forcedTraits (see the comment on Apply above). BackstoryTrait.degree is non-nullable
+        // (unlike TraitRequirement.degree on the kindDef path), so no FirstValidDegree fallback is
+        // needed here.
+        public static Dictionary<TraitDef, int> CaptureBackstoryForcedTraits(Pawn pawn)
+        {
+            var forced = new Dictionary<TraitDef, int>();
+
+            void CaptureFrom(BackstoryDef backstory)
+            {
+                if (backstory?.forcedTraits == null) return;
+                foreach (var t in backstory.forcedTraits)
+                    forced[t.def] = t.degree;
+            }
+
+            CaptureFrom(pawn.story.Childhood);
+            CaptureFrom(pawn.story.Adulthood);
+
+            return forced;
+        }
+
+        // Fourth forced-trait source: see the comment on Apply above. PawnGenerationRequest.
+        // ForcedTraits is a plain List<TraitDef> with no degree data, so unlike
+        // CaptureBackstoryForcedTraits there is genuinely no real degree to trust — this uses the
+        // same FirstValidDegree fallback as the kindDef nullable-degree case.
+        public static Dictionary<TraitDef, int> CaptureRequestForcedTraits(PawnGenerationRequest request)
+        {
+            var forced = new Dictionary<TraitDef, int>();
+            if (request.ForcedTraits != null)
+                foreach (var def in request.ForcedTraits)
+                    if (def != null)
+                        forced[def] = FirstValidDegree(def);
+            return forced;
+        }
+
+        // Which active gene (if any) forces this TraitDef — used by GrowthUpPatch so a newly-forced
+        // gene trait added mid-childhood gets the same real Trait.sourceGene link (and
+        // suppressConflicts: true grant) vanilla's own Pawn_GeneTracker.AddGene would have given it,
+        // instead of an orphaned plain Trait (see the sourceGene comment on Apply above).
+        public static Gene FindForcingGene(Pawn pawn, TraitDef def)
+        {
+            if (!ModsConfig.BiotechActive || pawn.genes == null) return null;
+            foreach (var gene in pawn.genes.GenesListForReading)
+                if (gene.def.forcedTraits != null)
+                    foreach (var t in gene.def.forcedTraits)
+                        if (t.def == def) return gene;
+            return null;
+        }
+
         // Fallback for a forced-trait source that doesn't specify a degree: use the trait's own
         // first genuinely-defined degree rather than an assumed 0, which may not exist for that
-        // trait (see CaptureForcedTraits).
+        // trait (see CaptureForcedTraits). TraitDesirabilityCache.DegreesFor is otherwise only used
+        // by TierUtility's quality-tier tooltip estimate now — still a legitimate shared use, not
+        // dead code.
         private static int FirstValidDegree(TraitDef def)
         {
             var degrees = TraitDesirabilityCache.DegreesFor(def);
             return degrees.Count > 0 ? degrees[0] : 0;
         }
 
+        // Still needed by GrowthUpPatch's forced-vs-disallowed warning check — vanilla's own
+        // GenerateTraitsFor already applies PawnKindDef.disallowedTraits itself when given a real
+        // PawnGenerationRequest (see Apply above), so this is no longer used to filter candidates,
+        // only to flag the edge case of a trait being simultaneously forced and disallowed.
         public static HashSet<TraitDef> CaptureDisallowedTraits(Pawn pawn)
         {
             var disallowed = new HashSet<TraitDef>();
@@ -121,49 +190,6 @@ namespace PawnVarianceMod
             // only disapproves of, which is a real behavior change beyond what this spec intended.
 
             return disallowed;
-        }
-
-        private static (TraitDef def, int degree)? WeightedPick(List<(TraitDef def, int degree)> candidates, float target, float spread, Pawn pawn)
-        {
-            var weights = new List<(TraitDef def, int degree, float distSq)>();
-            float minDistSq = float.MaxValue;
-
-            foreach (var (def, degree) in candidates)
-            {
-                if (pawn.story.traits.HasTrait(def)) continue;
-                if (ConflictsWithExisting(def, pawn)) continue;
-                float score = TraitDesirabilityCache.ScoreOf(def, degree);
-                float distSq = (score - target) * (score - target);
-                if (distSq < minDistSq) minDistSq = distSq;
-                weights.Add((def, degree, distSq));
-            }
-
-            if (weights.Count == 0) return null;
-
-            var finalWeights = weights.Select(w => (w.def, w.degree, weight: Mathf.Exp(-(w.distSq - minDistSq) / spread))).ToList();
-            float total = finalWeights.Sum(w => w.weight);
-            float roll = (float)Rand.Value * total;
-            float cumulative = 0f;
-            foreach (var (def, degree, weight) in finalWeights)
-            {
-                cumulative += weight;
-                if (roll <= cumulative) return (def, degree);
-            }
-            var last = finalWeights.Last();
-            return (last.def, last.degree);
-        }
-
-        // TraitDef.conflictingTraits/exclusionTags: unverified field names, confirm at implementation time (Global Constraints).
-        private static bool ConflictsWithExisting(TraitDef def, Pawn pawn)
-        {
-            foreach (Trait existing in pawn.story.traits.allTraits)
-            {
-                if (def.conflictingTraits != null && def.conflictingTraits.Contains(existing.def)) return true;
-                if (existing.def.conflictingTraits != null && existing.def.conflictingTraits.Contains(def)) return true;
-                if (def.exclusionTags != null && existing.def.exclusionTags != null &&
-                    def.exclusionTags.Intersect(existing.def.exclusionTags).Any()) return true;
-            }
-            return false;
         }
 
         private static float JitterSample()

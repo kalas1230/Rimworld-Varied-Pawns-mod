@@ -104,7 +104,7 @@ namespace PawnVarianceMod
                 if (pawn.story.traits.HasTrait(def)) continue;
 
                 bool disallowedToo = disallowed.Contains(def);
-                var conflicting = pawn.story.traits.allTraits.FirstOrDefault(t => ConflictsWith(def, t.def));
+                var conflicting = pawn.story.traits.allTraits.FirstOrDefault(t => def.ConflictsWith(t.def));
 
                 if (conflicting != null)
                 {
@@ -120,46 +120,58 @@ namespace PawnVarianceMod
                 if (disallowedToo)
                     Log.Error($"[PawnVarianceMod] {def.defName} is simultaneously forced and disallowed for {pawn.LabelShort}; forced wins.");
 
-                pawn.story.traits.GainTrait(new Trait(def, degree, true));
+                // See TraitVarianceApplier.Apply's sourceGene comment: a newly-forced gene trait
+                // needs sourceGene set and suppressConflicts:true to match vanilla's real
+                // Pawn_GeneTracker.AddGene grant, or it's permanently orphaned from gene-removal
+                // tracking. kindDef-forced traits have no such mechanism, so they stay as plain grants.
+                Gene forcingGene = TraitVarianceApplier.FindForcingGene(pawn, def);
+                var newTrait = new Trait(def, degree, true);
+                if (forcingGene != null) newTrait.sourceGene = forcingGene;
+                pawn.story.traits.GainTrait(newTrait, suppressConflicts: forcingGene != null);
                 alreadyAdded.Add(def);
             }
 
             int currentCount = pawn.story.traits.allTraits.Count;
-            int targetCount = Mathf.Clamp(
+
+            // Same target semantics as generation-time Apply, so a pawn's trait count means the same
+            // thing however it was produced. No PawnGenerationRequest exists this late (the pawn
+            // already exists, mid-game), so request-forced traits can't be classified here — that's
+            // fine, they were applied at generation and this path only ever adds.
+            var protection = TraitProtection.Build(pawn, null);
+            int protectedCount = pawn.story.traits.allTraits.Count(t => protection.IsProtected(t));
+
+            int rolledTarget = Mathf.Clamp(
                 Mathf.RoundToInt(Mathf.Lerp(settings.traitCountMin, settings.traitCountMax, quality)),
                 Mathf.RoundToInt(settings.traitCountMin),
                 Mathf.RoundToInt(settings.traitCountMax));
 
-            if (currentCount >= targetCount) return; // accepted limitation, see Growth-up variance closing paragraph
+            rolledTarget = Mathf.Min(rolledTarget, TraitAgeCap.MaxRolledTraitsFor(pawn));
 
-            // Fill remaining slots via the same weighted-sampling procedure as generation time,
-            // excluding disallowed and respecting conflicts against traits already present.
-            TraitVarianceApplier.FillRemainingSlots(pawn, quality, targetCount, disallowed);
-        }
+            int targetCount = settings.countProtectedTraits
+                ? Mathf.Max(protectedCount, rolledTarget)
+                : protectedCount + rolledTarget;
 
-        private static bool ConflictsWith(TraitDef a, TraitDef b)
-        {
-            if (a.conflictingTraits != null && a.conflictingTraits.Contains(b)) return true;
-            if (b.conflictingTraits != null && b.conflictingTraits.Contains(a)) return true;
-            if (a.exclusionTags != null && b.exclusionTags != null && a.exclusionTags.Intersect(b.exclusionTags).Any()) return true;
-            return false;
+            // Add-only by design: never remove on grow-up, even if the pawn is already above target.
+            if (currentCount >= targetCount) return;
+
+            // Fill remaining slots via vanilla's own real trait picker — no PawnGenerationRequest is
+            // available this late (pawn already exists, mid-game), so req is null: this still gets
+            // vanilla's commonality weighting, conflict checks, backstory disallows, and mental-break
+            // gate, just without the kindDef-specific checks that need a request (disallowedTraits,
+            // requiredWorkTags, hostile-spawn allowance) — `disallowed` above already covers the
+            // kindDef.disallowedTraits gap for the forced-trait path; the general fill has no
+            // equivalent substitute here, an accepted gap versus generation-time.
+            List<Trait> generated = PawnGenerator.GenerateTraitsFor(pawn, targetCount - currentCount, null, growthMomentTrait: true);
+            foreach (Trait trait in generated)
+                pawn.story.traits.GainTrait(trait);
         }
 
         private static void ApplyPassionGrowthUp(Pawn pawn, float quality)
         {
-            var settings = PawnVarianceMod.Settings;
-            // Pips, not distinct skills — matches PassionVarianceApplier's pip-based semantic
-            // (Minor=1, Major=2), so existing growth-moment passions are weighed on the same scale
-            // as the quality-derived target.
+            // Pips, not distinct skills — matches AssignPassions' budget semantic (Minor=1, Major=2),
+            // so existing growth-moment passions are weighed on the same scale as the rolled budget.
             int existingPips = pawn.skills.skills.Sum(r => r.passion == Passion.Major ? 2 : r.passion == Passion.Minor ? 1 : 0);
-            int targetPips = Mathf.Clamp(
-                Mathf.RoundToInt(Mathf.Lerp(settings.passionCountMin, settings.passionCountMax, quality)),
-                Mathf.RoundToInt(settings.passionCountMin),
-                Mathf.RoundToInt(settings.passionCountMax));
-
-            if (existingPips >= targetPips) return;
-
-            PassionVarianceApplier.AddPassionsWithoutClearing(pawn, targetPips - existingPips);
+            PassionVarianceApplier.AssignPassions(pawn, quality, existingPips);
         }
     }
 

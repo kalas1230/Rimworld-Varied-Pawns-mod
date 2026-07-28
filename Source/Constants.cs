@@ -9,11 +9,16 @@ namespace PawnVarianceMod
         // Noise-floor / max constants (Settings Schema)
         public const float MinMagnitudeFloor = 0.5f;
         public const float MaxMagnitude = 6f;
-        public const float MinSpreadFloor = 0.05f;
-        public const float MaxSpread = 2f;
-        public const float MinTemperatureFloor = 0.5f;
-        public const float MaxTemperature = 8f;
         public const float SmallRandomJitter = 0.5f;
+
+        // Passion budget spread (Core Algorithms > Passion variance): mirrors vanilla
+        // PawnGenerator.GenerateSkills' own passion-budget roll — `5f + clamp(Rand.Gaussian(), -4f,
+        // 4f)` — but with the Gaussian's width factor and clamp window driven by passionNoise instead
+        // of vanilla's hardcoded 1 and 4, so the setting controls "how much the total passion budget
+        // varies" around the quality-derived mean rather than being fixed like vanilla's flat roll.
+        public const float PassionBudgetSpreadMin = 0.25f;
+        public const float PassionBudgetSpreadMax = 4f;
+        public const float PassionBudgetClampFactor = 4f; // matches vanilla's own spread:clamp ratio (widthFactor 1 : clamp 4)
 
         // Trait desirability scoring (Core Algorithms > Trait desirability scoring)
         public const float SkillOffsetReferenceMagnitude = 6f;      // category 1
