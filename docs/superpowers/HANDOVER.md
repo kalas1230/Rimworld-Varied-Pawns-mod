@@ -30,14 +30,15 @@ rules, gene passion-mod erasure, gene-forced-trait `sourceGene` loss, backstory-
 request-forced traits, sexuality traits, name generation, and patch-ordering safety. Treat this
 area as a clean slate rather than assuming more bugs are waiting.
 
-## Current status: everything implemented, heavily playtested, NOT committed
+## Current status: everything implemented, playtested, committed and pushed
 
 `dotnet build` clean (0 warnings/errors), deployed to the user's Mods folder, and validated
 across four in-game logs totalling **778 traced pawns** with zero exceptions, zero ordering
 violations and zero crashes.
 
-**Nothing in the working tree is committed.** See "Uncommitted state" below. The user has been
-asked three times and has not yet said to commit — do not commit without an explicit ask.
+Working tree is clean and `main` is pushed to `origin`. **Standing rule: this repo's code is
+committed only when the user explicitly asks** — do not commit unprompted just because work is
+finished.
 
 ## This session's work
 
@@ -218,31 +219,32 @@ session was verified against real decompiled source, not guessed.
 - The two vanilla divergences in §6 stay as they are.
 - Combat Extended duplicate-`packageId` error in the logs is pre-existing and unrelated — ignore.
 
-## Uncommitted state in the working tree
+## Commit history and git identity
+
+All work is committed. The session's five commits, most recent last:
 
 ```
- M Source/Constants.cs
- M Source/GrowthUpPatch.cs
- M Source/HarmonyPatches.cs
- M Source/PassionVarianceApplier.cs
- M Source/PawnVarianceSettings.cs
- M Source/SkillVarianceApplier.cs
- M Source/TierUtility.cs
- M Source/TraitVarianceApplier.cs
- M docs/superpowers/specs/2026-07-27-pawn-variance-mod-design.md
-?? .gitignore
-?? Source/TraitAgeCap.cs
-?? Source/TraitProtection.cs
-?? Source/VarianceProfile.cs
-?? docs/superpowers/HANDOVER.md
-?? docs/superpowers/plans/2026-07-27-pawn-variance-mod-implementation.md
+9d86840 chore: add .gitignore
+d1dd4b9 fix: reconcile traits in place instead of clearing and rebuilding
+b9bdc0f feat: variance profiles and a restructured settings page
+c0df509 fix: passion queue ordering, gene passion-mod stacking, and a budget floor
+77a7946 docs: rewrite handover against current state
 ```
 
-(`temp/` and `zzz-Do-Not-Commit/` are ignored — via `.gitignore` and `.git/info/exclude`
-respectively — so the playtest logs and decompiles never show up here.)
+Note the intermediate commits do **not** individually build: `PawnVarianceSettings.cs` carries
+changes from two workstreams (the additive model's `countProtectedTraits` and the profile
+system) and splitting one file's changes across commits was judged riskier than the benefit.
+The final state builds clean.
 
-This covers the additive trait model **and** the profile system, UI restructure and passion
-fixes. Ask before committing.
+All 34 commits were rewritten to a single identity — `kalas1230 <gokalpxd@gmail.com>`, author
+and committer — via `git filter-branch`, so every hash from the initial commit onward differs
+from what any older clone or notes may reference. `user.name`/`user.email` are set
+**`--local`** so other projects on this machine keep their own identity. Backup refs
+(`refs/original/`, the `pre-email-rewrite-backup` tag) have been deleted and the old
+`gokalp.albayrak@ug.bilkent.edu.tr` identity no longer appears anywhere in the object database.
+
+`temp/` and `zzz-Do-Not-Commit/` are ignored — via `.gitignore` and `.git/info/exclude`
+respectively — so playtest logs and decompiles never enter the repo.
 
 ## How to resume
 
