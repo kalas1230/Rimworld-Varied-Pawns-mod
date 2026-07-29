@@ -3,7 +3,6 @@ using System.Collections.Generic;
 using System.Linq;
 using HarmonyLib;
 using RimWorld;
-using UnityEngine;
 using Verse;
 
 namespace PawnVarianceMod
@@ -41,7 +40,7 @@ namespace PawnVarianceMod
         public static void Postfix(Pawn ___pawn)
         {
             var settings = PawnVarianceMod.Settings;
-            if (!settings.applyVarianceOnGrowUp) return;
+            if (!settings.applyVarianceToChildren) return;
             if (___pawn == null || ___pawn.RaceProps == null || !___pawn.RaceProps.Humanlike) return; // this hook fires for every pawn including animals; without this gate every maturing animal would NRE in the appliers below
 
             DevelopmentalStage currentStage = ___pawn.DevelopmentalStage;
@@ -56,21 +55,32 @@ namespace PawnVarianceMod
             if (!settings.enableSkillVariance && !settings.enableTraitVariance && !settings.enablePassionVariance) return;
             if (!settings.applyToHostilePawns && ___pawn.Faction != null && ___pawn.Faction.HostileTo(Faction.OfPlayer)) return;
 
-            try
+            // The age-13 growth moment grants a trait and one or more passions, and it resolves
+            // AFTER this point: BirthdayBiological sends its letter on the tick before
+            // PostResolveLifeStageChange fires, and the player clicks it whenever they like. Applying
+            // now would stack our full budget on top of that grant. So if a letter is outstanding,
+            // wait for it — GrowthMomentMakeChoices_Postfix or the sweep will finish the job.
+            //
+            // No unresolved letter means one of three things, and all are safe to apply immediately:
+            // either the pawn took vanilla's silent auto-apply path (non-player faction, not
+            // notification-worthy, or a quest lodger — the grant already landed inline last tick), or
+            // the growth tier offered nothing at all, or the player already resolved the letter
+            // (via GrowthMomentMakeChoices_Postfix) in the window between BirthdayBiological sending
+            // it and this hook firing.
+            var pending = GrowUpPendingComponent.Instance;
+            if (pending == null)
             {
-                float quality = QualityRoller.RollQuality();
+                Log.Warning($"[PawnVarianceMod] GrowUpPendingComponent.Instance was null while processing {___pawn.LabelShort}'s life-stage change; cannot check for an outstanding growth-moment letter, so proceeding as if none exists.");
+            }
+            else if (GrowUpPendingComponent.HasUnresolvedGrowthLetter(___pawn))
+            {
+                pending.Register(___pawn);
+                if (settings.verboseLogging)
+                    Log.Message($"[PawnVarianceMod] {___pawn.LabelShortCap} became adult with a growth-moment letter outstanding — deferring variance until it resolves.");
+                return;
+            }
 
-                // Ordering matches the main postfix (HarmonyPatches.cs): trait, then skill, then
-                // passion — trait variance can disable work tags, which passion placement's
-                // TotallyDisabled exclusion depends on.
-                if (settings.enableTraitVariance) ApplyTraitGrowthUp(___pawn, quality);
-                if (settings.enableSkillVariance) ApplySkillGrowthUp(___pawn, quality);
-                if (settings.enablePassionVariance) ApplyPassionGrowthUp(___pawn, quality);
-            }
-            catch (Exception ex)
-            {
-                Log.Error($"[PawnVarianceMod] Exception applying growth-up variance to {___pawn.LabelShort}: {ex}");
-            }
+            GrowUpVariance.Apply(___pawn, "no unresolved letter");
         }
 
         // Not Scribe-persisted by design (deliberately session-only, consistent with the original
@@ -82,96 +92,6 @@ namespace PawnVarianceMod
         internal static void ClearForNewGame()
         {
             LastKnownStage.Clear();
-        }
-
-        private static void ApplySkillGrowthUp(Pawn pawn, float quality)
-        {
-            SkillVarianceApplier.Apply(pawn, quality); // identical logic to generation-time; additive, so safe on accumulated childhood levels
-        }
-
-        private static void ApplyTraitGrowthUp(Pawn pawn, float quality)
-        {
-            var settings = PawnVarianceMod.Settings;
-            Dictionary<TraitDef, int> forced = TraitVarianceApplier.CaptureForcedTraits(pawn);
-            HashSet<TraitDef> disallowed = TraitVarianceApplier.CaptureDisallowedTraits(pawn);
-
-            var alreadyAdded = new HashSet<TraitDef>(pawn.story.traits.allTraits.Select(t => t.def).Where(forced.ContainsKey));
-
-            foreach (KeyValuePair<TraitDef, int> kvp in forced)
-            {
-                TraitDef def = kvp.Key;
-                int degree = kvp.Value;
-                if (pawn.story.traits.HasTrait(def)) continue;
-
-                bool disallowedToo = disallowed.Contains(def);
-                var conflicting = pawn.story.traits.allTraits.FirstOrDefault(t => def.ConflictsWith(t.def));
-
-                if (conflicting != null)
-                {
-                    if (forced.ContainsKey(conflicting.def) || alreadyAdded.Contains(conflicting.def))
-                    {
-                        Log.Error($"[PawnVarianceMod] Forced-vs-forced trait conflict on {pawn.LabelShort}: {def.defName} conflicts with already-present forced trait {conflicting.def.defName}; skipping {def.defName}.");
-                        continue;
-                    }
-                    pawn.story.traits.RemoveTrait(conflicting, true);
-                    Log.Message($"[PawnVarianceMod] Removed growth-moment trait {conflicting.def.defName} on {pawn.LabelShort} to make room for newly-forced {def.defName}.");
-                }
-
-                if (disallowedToo)
-                    Log.Error($"[PawnVarianceMod] {def.defName} is simultaneously forced and disallowed for {pawn.LabelShort}; forced wins.");
-
-                // See TraitVarianceApplier.Apply's sourceGene comment: a newly-forced gene trait
-                // needs sourceGene set and suppressConflicts:true to match vanilla's real
-                // Pawn_GeneTracker.AddGene grant, or it's permanently orphaned from gene-removal
-                // tracking. kindDef-forced traits have no such mechanism, so they stay as plain grants.
-                Gene forcingGene = TraitVarianceApplier.FindForcingGene(pawn, def);
-                var newTrait = new Trait(def, degree, true);
-                if (forcingGene != null) newTrait.sourceGene = forcingGene;
-                pawn.story.traits.GainTrait(newTrait, suppressConflicts: forcingGene != null);
-                alreadyAdded.Add(def);
-            }
-
-            int currentCount = pawn.story.traits.allTraits.Count;
-
-            // Same target semantics as generation-time Apply, so a pawn's trait count means the same
-            // thing however it was produced. No PawnGenerationRequest exists this late (the pawn
-            // already exists, mid-game), so request-forced traits can't be classified here — that's
-            // fine, they were applied at generation and this path only ever adds.
-            var protection = TraitProtection.Build(pawn, null);
-            int protectedCount = pawn.story.traits.allTraits.Count(t => protection.IsProtected(t));
-
-            int rolledTarget = Mathf.Clamp(
-                Mathf.RoundToInt(Mathf.Lerp(settings.traitCountMin, settings.traitCountMax, quality)),
-                Mathf.RoundToInt(settings.traitCountMin),
-                Mathf.RoundToInt(settings.traitCountMax));
-
-            rolledTarget = Mathf.Min(rolledTarget, TraitAgeCap.MaxRolledTraitsFor(pawn));
-
-            int targetCount = settings.countProtectedTraits
-                ? Mathf.Max(protectedCount, rolledTarget)
-                : protectedCount + rolledTarget;
-
-            // Add-only by design: never remove on grow-up, even if the pawn is already above target.
-            if (currentCount >= targetCount) return;
-
-            // Fill remaining slots via vanilla's own real trait picker — no PawnGenerationRequest is
-            // available this late (pawn already exists, mid-game), so req is null: this still gets
-            // vanilla's commonality weighting, conflict checks, backstory disallows, and mental-break
-            // gate, just without the kindDef-specific checks that need a request (disallowedTraits,
-            // requiredWorkTags, hostile-spawn allowance) — `disallowed` above already covers the
-            // kindDef.disallowedTraits gap for the forced-trait path; the general fill has no
-            // equivalent substitute here, an accepted gap versus generation-time.
-            List<Trait> generated = PawnGenerator.GenerateTraitsFor(pawn, targetCount - currentCount, null, growthMomentTrait: true);
-            foreach (Trait trait in generated)
-                pawn.story.traits.GainTrait(trait);
-        }
-
-        private static void ApplyPassionGrowthUp(Pawn pawn, float quality)
-        {
-            // Pips, not distinct skills — matches AssignPassions' budget semantic (Minor=1, Major=2),
-            // so existing growth-moment passions are weighed on the same scale as the rolled budget.
-            int existingPips = pawn.skills.skills.Sum(r => r.passion == Passion.Major ? 2 : r.passion == Passion.Minor ? 1 : 0);
-            PassionVarianceApplier.AssignPassions(pawn, quality, existingPips);
         }
     }
 
@@ -200,6 +120,56 @@ namespace PawnVarianceMod
         public static void Postfix()
         {
             DevelopmentalStage_Postfix.ClearForNewGame();
+        }
+    }
+
+    // The single point at which a growth moment's choices are actually applied: MakeChoices
+    // increments the chosen passions, calls GainTrait plus TraitUtility.ApplySkillGainFromTrait, and
+    // at exactly age 13 also runs PawnGenerator.TryGenerateSexualityTraitFor. Running our pass in a
+    // postfix here means we observe the real grant instead of predicting it.
+    //
+    // Verified uncontested: a scan of all 512 installed mod assemblies found zero references to
+    // ChoiceLetter_GrowthMoment or MakeChoices, so there is no patch-ordering conflict to manage.
+    // Isolated as its own patch class per this mod's per-class patch isolation.
+    [HarmonyPatch(typeof(ChoiceLetter_GrowthMoment), nameof(ChoiceLetter_GrowthMoment.MakeChoices))]
+    public static class GrowthMomentMakeChoices_Postfix
+    {
+        public static void Postfix(ChoiceLetter_GrowthMoment __instance)
+        {
+            Pawn pawn = __instance.pawn;
+            if (pawn == null) return;
+
+            var pending = GrowUpPendingComponent.Instance;
+            if (pending == null) return;
+            if (!pending.Deregister(pawn, out int ticksPending)) return; // not one of ours — a growth moment at age 7 or 10
+            // The letter can be re-opened from the History tab after the pawn was destroyed
+            // (ChoiceLetter_GrowthMoment.ArchiveView keeps a destroyed pawn's letter visible), and its
+            // OK button still calls MakeChoices even though MakeChoices itself grants nothing for a
+            // dead/destroyed pawn. Deregister already ran above so the pending entry is consumed
+            // either way; bail before building the log line or touching the pawn further.
+            if (pawn.Dead || pawn.DestroyedOrNull()) return;
+
+            // This postfix runs inside vanilla's UI dialog-close path, so an escaping exception would
+            // break the dialog. Guard against corrupted saves (e.g., null SkillDef in chosenPassions).
+            try
+            {
+                if (PawnVarianceMod.Settings.verboseLogging)
+                {
+                    string grantedTrait = __instance.chosenTrait != null && __instance.chosenTrait != ChoiceLetter_GrowthMoment.NoTrait
+                        ? TraitTrace.Describe(__instance.chosenTrait)
+                        : "none";
+                    string grantedPassions = __instance.chosenPassions.NullOrEmpty()
+                        ? "none"
+                        : string.Join(", ", __instance.chosenPassions.Select(s => s.defName));
+                    Log.Message($"[PawnVarianceMod] Growth moment resolved for {pawn.LabelShortCap} after {ticksPending} ticks: trait {grantedTrait}, passion increments {grantedPassions}");
+                }
+
+                GrowUpVariance.Apply(pawn, $"letter resolved after {ticksPending} ticks pending");
+            }
+            catch (Exception ex)
+            {
+                Log.Error($"[PawnVarianceMod] Exception resolving growth moment for {pawn.LabelShort}: {ex}");
+            }
         }
     }
 }

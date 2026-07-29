@@ -27,6 +27,9 @@ namespace PawnVarianceMod
             var protection = TraitProtection.Build(pawn, request);
             List<Trait> current = pawn.story.traits.allTraits;
 
+            var trace = TraitTrace.Begin(pawn, quality, "generation");
+            TraitTrace.AppendTraits(trace, "incoming", new List<Trait>(current), protection);
+
             int protectedCount = 0;
             var removable = new List<Trait>();
             foreach (Trait trait in current)
@@ -35,12 +38,16 @@ namespace PawnVarianceMod
                 else removable.Add(trait);
             }
 
+            float targetMean = Mathf.Lerp(settings.traitCountMin, settings.traitCountMax, quality);
+            float jitter = JitterSample();
             int rolledTarget = Mathf.Clamp(
-                Mathf.RoundToInt(Mathf.Lerp(settings.traitCountMin, settings.traitCountMax, quality) + JitterSample()),
+                Mathf.RoundToInt(targetMean + jitter),
                 Mathf.RoundToInt(settings.traitCountMin),
                 Mathf.RoundToInt(settings.traitCountMax));
 
-            rolledTarget = Mathf.Min(rolledTarget, TraitAgeCap.MaxRolledTraitsFor(pawn));
+            int ageCap = TraitAgeCap.MaxRolledTraitsFor(pawn);
+            int uncappedTarget = rolledTarget;
+            rolledTarget = Mathf.Min(rolledTarget, ageCap);
 
             // Protected traits are a floor, never part of the budget: at a target of 0 an Yttakin still
             // keeps its xenotype-forced Psychically Dull and ends with exactly one trait.
@@ -50,6 +57,15 @@ namespace PawnVarianceMod
 
             int delta = desiredTotal - current.Count;
 
+            if (trace != null)
+            {
+                trace.AppendLine($"  target: lerp({settings.traitCountMin:F0}..{settings.traitCountMax:F0}, q) = {targetMean:F2} + jitter {jitter:+0.00;-0.00} -> rolled {uncappedTarget}"
+                    + $", age cap {TraitTrace.DescribeAgeCap(ageCap)}"
+                    + (rolledTarget != uncappedTarget ? $" -> CAPPED to {rolledTarget}" : string.Empty));
+                trace.AppendLine($"  countProtectedTraits {(settings.countProtectedTraits ? "ON (target is total traits)" : "off (rolled added on top of protected)")}"
+                    + $": protected {protectedCount}, rolled {rolledTarget} -> desired total {desiredTotal} vs current {current.Count} = delta {delta:+0;-0;0}");
+            }
+
             if (delta > 0)
             {
                 // Vanilla's own commonality-weighted picker, with every real rejection rule applied.
@@ -58,6 +74,11 @@ namespace PawnVarianceMod
                 List<Trait> generated = PawnGenerator.GenerateTraitsFor(pawn, delta, request, growthMomentTrait: false);
                 foreach (Trait trait in generated)
                     pawn.story.traits.GainTrait(trait);
+
+                // Vanilla's picker returns fewer than asked when it runs out of non-conflicting
+                // candidates, so log what it actually produced rather than what we requested.
+                trace?.AppendLine($"  ADDED {generated.Count} of {delta} requested via vanilla GenerateTraitsFor: "
+                    + (generated.Count == 0 ? "(picker returned none)" : string.Join(", ", generated.Select(TraitTrace.Describe))));
             }
             else if (delta < 0)
             {
@@ -70,18 +91,34 @@ namespace PawnVarianceMod
                 // pawn's spawn. Uniform random choice: vanilla's picker has no concept of a "better"
                 // trait, so there is no quality axis to bias this by.
                 int toRemove = Mathf.Min(-delta, removable.Count);
+
+                // toRemove < -delta means protection held the line: the pawn stays above target
+                // because everything left is unremovable. That is correct behaviour, not a failure,
+                // but it is the single most likely explanation for "why does this pawn have too many
+                // traits", so name it explicitly.
+                if (trace != null && toRemove < -delta)
+                    trace.AppendLine($"  wanted to remove {-delta} but only {removable.Count} removable — {(-delta) - toRemove} over target, all remaining traits are protected");
+
                 for (int i = 0; i < toRemove; i++)
                 {
                     Trait victim = removable.RandomElement();
                     removable.Remove(victim);
                     pawn.story.traits.RemoveTrait(victim);
+                    trace?.AppendLine($"  REMOVED {TraitTrace.Describe(victim)} (uniform random among removable)");
                 }
+            }
+            else if (trace != null)
+            {
+                trace.AppendLine("  no change needed");
             }
 
             // No sexuality-trait call here, deliberately. Vanilla's own roll already ran during
             // generation and — because nothing is cleared any more — it survives untouched. Calling
             // PawnGenerator.TryGenerateSexualityTraitFor again would give every straight pawn a second
             // independent roll and skew the population's sexuality distribution away from vanilla's.
+
+            TraitTrace.AppendTraits(trace, "final", new List<Trait>(pawn.story.traits.allTraits), protection);
+            TraitTrace.Flush(trace);
         }
 
         // Returns TraitDef -> degree, not just a set of TraitDefs: both real forced-trait sources

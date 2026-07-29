@@ -33,7 +33,7 @@ namespace PawnVarianceMod
         // Housekeeping preferences: deliberately outside the profile system, so switching profiles
         // never silently re-enables logging or changes whether raiders get variance.
         public bool applyToHostilePawns = true;
-        public bool applyVarianceOnGrowUp = true;
+        public bool applyVarianceToChildren = true;
         public bool verboseLogging = false;
         public bool showQualityTier = true;
 
@@ -68,7 +68,7 @@ namespace PawnVarianceMod
 
             Scribe_Values.Look(ref activeProfile, "activeProfile", VarianceProfileId.Custom);
             Scribe_Values.Look(ref applyToHostilePawns, "applyToHostilePawns", true);
-            Scribe_Values.Look(ref applyVarianceOnGrowUp, "applyVarianceOnGrowUp", true);
+            Scribe_Values.Look(ref applyVarianceToChildren, "applyVarianceToChildren", true);
             Scribe_Values.Look(ref verboseLogging, "verboseLogging", false);
             Scribe_Values.Look(ref showQualityTier, "showQualityTier", true);
 
@@ -318,11 +318,14 @@ namespace PawnVarianceMod
             listing.CheckboxLabeled("Show quality tier hover tooltip", ref showQualityTier);
             listing.CheckboxLabeled("Apply to hostile-faction pawns", ref applyToHostilePawns);
             if (ModsConfig.BiotechActive)
-                listing.CheckboxLabeled("Apply variance on grow-up (Biotech)", ref applyVarianceOnGrowUp);
+                listing.CheckboxLabeled(
+                    "Apply variance to children growing up",
+                    ref applyVarianceToChildren,
+                    "When a child turns 13 they become an adult and get their last growth moment — a trait and one or more passions of your choosing. With this on, the mod waits for that choice, then tops the pawn up to your trait and passion ranges, counting what the growth moment already gave. With it off, children grow up exactly as in vanilla and this mod never touches them.");
             listing.CheckboxLabeled(
                 "Verbose logging (dev mode)",
                 ref verboseLogging,
-                "Rethrows exceptions instead of swallowing them, and logs a per-pawn breakdown of how passions were assigned. Leave off for normal play.");
+                "Rethrows exceptions instead of swallowing them, and logs a per-pawn breakdown of how traits and passions were assigned. Leave off for normal play.");
 
             listing.Gap(SectionGap);
             if (listing.ButtonText("Reset All Settings"))
@@ -334,7 +337,7 @@ namespace PawnVarianceMod
             customValues = VarianceProfiles.NewCustomDefaults();
             activeProfile = VarianceProfileId.Custom;
             applyToHostilePawns = true;
-            applyVarianceOnGrowUp = true;
+            applyVarianceToChildren = true;
             verboseLogging = false;
             showQualityTier = true;
             ApplyActiveProfile();

@@ -24,12 +24,14 @@ namespace PawnVarianceMod
             foreach (SkillRecord record in pawn.skills.skills)
                 record.passion = Passion.None;
 
-            AssignPassions(pawn, quality, alreadyCommittedPips: 0);
+            AssignPassions(pawn, quality, alreadyCommittedPips: 0f);
         }
 
-        // alreadyCommittedPips lets GrowthUpPatch top up a pawn's existing growth-moment passions
+        // alreadyCommittedPips lets GrowUpVariance top up a pawn's existing growth-moment passions
         // toward the same quality-derived budget, rather than rolling a whole second budget on top.
-        public static void AssignPassions(Pawn pawn, float quality, int alreadyCommittedPips)
+        // Float, not int, because the spend loop below prices a Major at 1.5 — so a caller counting
+        // existing passions has to be able to express 1.5 too, or Majors get over-charged.
+        public static void AssignPassions(Pawn pawn, float quality, float alreadyCommittedPips)
         {
             var settings = PawnVarianceMod.Settings;
             var trace = settings.verboseLogging ? new System.Text.StringBuilder() : null;
@@ -49,7 +51,7 @@ namespace PawnVarianceMod
             // exactly this). Skipped when pips are already committed: the growth-up path only tops
             // up a pawn who by definition already has passions, so no guarantee is at stake.
             float rolledBudget = budget;
-            bool flooredBudget = budget < 1f && settings.passionCountMin > 0f && alreadyCommittedPips == 0;
+            bool flooredBudget = budget < 1f && settings.passionCountMin > 0f && alreadyCommittedPips <= 0f;
             if (flooredBudget) budget = 1f;
 
             int minorPassions = 0;
@@ -95,7 +97,7 @@ namespace PawnVarianceMod
             if (trace != null)
             {
                 trace.AppendLine($"[PawnVarianceMod] Passion assignment for {pawn.LabelShortCap} (quality {quality:F2})");
-                trace.AppendLine($"  budget mean {budgetMean:F2}, spread {spread:F2}, committed pips {alreadyCommittedPips}, rolled {rolledBudget:F2}"
+                trace.AppendLine($"  budget mean {budgetMean:F2}, spread {spread:F2}, committed pips {alreadyCommittedPips:F2} (Minor 1, Major 1.5), rolled {rolledBudget:F2}"
                     + (flooredBudget ? $" -> FLOORED to 1.00 (minimum is {settings.passionCountMin:F0}, not 0)" : string.Empty)
                     + $" -> {majorPassions} Major + {minorPassions} Minor");
                 foreach (SkillRecord r in pawn.skills.skills)
@@ -103,7 +105,11 @@ namespace PawnVarianceMod
                     string state = r.TotallyDisabled ? "DISABLED"
                         : IsConflicting(r.def) ? "EXCLUDED (trait/gene conflict)"
                         : "eligible";
-                    trace.AppendLine($"  {r.def.defName,-14} raw {r.GetLevel(includeAptitudes: false),2}  shown {r.Level,2}  {state}");
+                    // The incoming passion, printed before anything below touches it. Without this the
+                    // trace cannot prove the grow-up top-up actually preserved a child's existing
+                    // growth-moment passions — `committed pips N` gives the total but never says which
+                    // skills held them, so a lost or downgraded passion would be invisible here.
+                    trace.AppendLine($"  {r.def.defName,-14} raw {r.GetLevel(includeAptitudes: false),2}  shown {r.Level,2}  had {r.passion,-5}  {state}");
                 }
             }
 
@@ -163,6 +169,12 @@ namespace PawnVarianceMod
 
                 trace?.AppendLine($"  by level: {record.def.defName} (raw {record.GetLevel(includeAptitudes: false)}) -> {record.passion}");
             }
+
+            // Ran out of skills before running out of budget — the loop above just ends, so without
+            // this the trace looks identical to a budget that came out exactly even. Reachable at high
+            // passionCountMax: a 24-pip budget buys 16 Majors but there are only 12 skills.
+            if (trace != null && (majorPassions > 0 || minorPassions > 0))
+                trace.AppendLine($"  ran out of eligible skills with {majorPassions} Major + {minorPassions} Minor unspent (budget exceeds what {pawn.skills.skills.Count} skills can hold)");
 
             // Vanilla's Biotech gene passion bonus (GeneDef.passionMod, PassionModType.AddOneLevel —
             // real content: the AptitudeRemarkable_* genes, e.g. referenced in real XenotypeDefs) is
