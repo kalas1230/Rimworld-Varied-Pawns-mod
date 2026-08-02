@@ -197,14 +197,10 @@ namespace PawnVarianceMod
         }
 
         // Fallback for a forced-trait source that doesn't specify a degree: use the trait's own
-        // first genuinely-defined degree rather than an assumed 0, which may not exist for that
-        // trait (see CaptureForcedTraits). TraitDesirabilityCache.DegreesFor is otherwise only used
-        // by TierUtility's quality-tier tooltip estimate now — still a legitimate shared use, not
-        // dead code.
+        // first genuinely-defined degree rather than an assumed 0, which may not exist for that trait.
         private static int FirstValidDegree(TraitDef def)
         {
-            var degrees = TraitDesirabilityCache.DegreesFor(def);
-            return degrees.Count > 0 ? degrees[0] : 0;
+            return (def.degreeDatas != null && def.degreeDatas.Count > 0) ? def.degreeDatas[0].degree : 0;
         }
 
         // Still needed by GrowthUpPatch's forced-vs-disallowed warning check — vanilla's own

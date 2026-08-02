@@ -21,7 +21,7 @@ namespace PawnVarianceMod
         // Housekeeping preferences: deliberately outside the profile system, so switching profiles
         // never silently re-enables logging or changes whether raiders get variance.
         public bool applyToHostilePawns = true;
-        public bool applyVarianceToChildren = true;
+        public bool applyVarianceToChildren = false;
         public bool verboseLogging = false;
 
         public List<CustomProfile> customProfiles = new List<CustomProfile>();
@@ -269,7 +269,7 @@ namespace PawnVarianceMod
             Scribe_Values.Look(ref activeProfileId, "activeProfileId", VarianceProfiles.FaithfulId);
             Scribe_Values.Look(ref hostileProfileId, "hostileProfileId", VarianceProfiles.DistinctId);
             Scribe_Values.Look(ref applyToHostilePawns, "applyToHostilePawns", true);
-            Scribe_Values.Look(ref applyVarianceToChildren, "applyVarianceToChildren", true);
+            Scribe_Values.Look(ref applyVarianceToChildren, "applyVarianceToChildren", false);
             Scribe_Values.Look(ref verboseLogging, "verboseLogging", false);
 
             Scribe_Values.Look(ref enableOverrides, "enableOverrides", true);
@@ -374,6 +374,39 @@ namespace PawnVarianceMod
             Hostile.profileLabel = LabelFor(hostileProfileId);
         }
 
+        // Adopts every setting from a settings object loaded elsewhere (see SettingsTransfer).
+        // Only the public state is copied: the private flattened staging lists are rebuilt from the
+        // dictionaries by ExposeData's Saving branch, so copying them would only risk carrying
+        // stale keys across.
+        public void CopyFrom(PawnVarianceSettings other)
+        {
+            if (other == null) return;
+
+            applyToHostilePawns = other.applyToHostilePawns;
+            applyVarianceToChildren = other.applyVarianceToChildren;
+            verboseLogging = other.verboseLogging;
+
+            customProfiles = other.customProfiles ?? new List<CustomProfile>();
+            activeProfileId = other.activeProfileId;
+            hostileProfileId = other.hostileProfileId;
+
+            enableOverrides = other.enableOverrides;
+            factionOverridesTakePrecedence = other.factionOverridesTakePrecedence;
+            // Travels with the payload on purpose: a config whose overrides were deliberately
+            // emptied carries `true` and must stay empty rather than being repopulated.
+            hasInitializedDefaultOverrides = other.hasInitializedDefaultOverrides;
+
+            factionOverrides = other.factionOverrides ?? new Dictionary<string, string>();
+            xenotypeOverrides = other.xenotypeOverrides ?? new Dictionary<string, string>();
+            factionPriorities = other.factionPriorities ?? new Dictionary<string, OverridePriority>();
+            xenotypePriorities = other.xenotypePriorities ?? new Dictionary<string, OverridePriority>();
+
+            if (string.IsNullOrEmpty(activeProfileId)) activeProfileId = VarianceProfiles.FaithfulId;
+            if (string.IsNullOrEmpty(hostileProfileId)) hostileProfileId = VarianceProfiles.DistinctId;
+
+            MarkDirtyOnWrite();
+        }
+
         public void MarkDirtyOnWrite()
         {
             if (customProfiles != null)
@@ -423,7 +456,7 @@ namespace PawnVarianceMod
 
         private void DrawGeneralTab(Rect outRect)
         {
-            const float viewHeight = 600f;
+            const float viewHeight = 760f;
             var viewRect = new Rect(0f, 0f, outRect.width - 24f, viewHeight);
 
             Widgets.BeginScrollView(outRect, ref generalScrollPos, viewRect);
@@ -963,9 +996,61 @@ namespace PawnVarianceMod
                 ref verboseLogging,
                 "Rethrows exceptions instead of swallowing them, and logs a per-pawn breakdown of how traits and passions were assigned. Leave off for normal play.");
 
+            DrawShareSettingsSection(listing);
+
             listing.Gap(SectionGap);
             if (listing.ButtonText("Reset All Settings"))
                 ResetToDefaults();
+        }
+
+        private void DrawShareSettingsSection(Listing_Standard listing)
+        {
+            Section(listing, "Share Settings");
+            Caption(listing, "Copies your whole configuration to the clipboard as text: every custom profile, both override lists with their priorities, and the options above. Paste it anywhere to share it, or import someone else's.");
+
+            Rect row = listing.GetRect(30f);
+            float halfW = (row.width - 8f) / 2f;
+            Rect exportRect = new Rect(row.x, row.y, halfW, row.height);
+            Rect importRect = new Rect(row.x + halfW + 8f, row.y, halfW, row.height);
+
+            if (Widgets.ButtonText(exportRect, "Export to Clipboard"))
+            {
+                string payload = SettingsTransfer.Export(this);
+                if (payload != null)
+                {
+                    SettingsTransfer.CopyToClipboard(payload);
+                    Messages.Message("Varied Pawns settings copied to the clipboard.",
+                        MessageTypeDefOf.TaskCompletion, false);
+                }
+                else
+                {
+                    Messages.Message("Could not export settings. See the log for details.",
+                        MessageTypeDefOf.RejectInput, false);
+                }
+            }
+
+            if (Widgets.ButtonText(importRect, "Import from Clipboard"))
+            {
+                // Replaces everything, so it asks first. There is no merge mode by design.
+                Find.WindowStack.Add(Dialog_MessageBox.CreateConfirmation(
+                    "Importing replaces ALL of your Varied Pawns settings: every custom profile, both override lists, and the general options.\n\nThis cannot be undone. Continue?",
+                    ImportFromClipboard,
+                    destructive: true));
+            }
+        }
+
+        private void ImportFromClipboard()
+        {
+            string error;
+            if (SettingsTransfer.Import(this, SettingsTransfer.ReadClipboard(), out error))
+            {
+                Write();
+                Messages.Message("Varied Pawns settings imported.", MessageTypeDefOf.TaskCompletion, false);
+            }
+            else
+            {
+                Messages.Message(error, MessageTypeDefOf.RejectInput, false);
+            }
         }
 
         private void ResetToDefaults()
@@ -977,7 +1062,7 @@ namespace PawnVarianceMod
             activeProfileId = VarianceProfiles.FaithfulId;
             hostileProfileId = VarianceProfiles.DistinctId;
             applyToHostilePawns = true;
-            applyVarianceToChildren = true;
+            applyVarianceToChildren = false;
             verboseLogging = false;
             enableOverrides = true;
             hasInitializedDefaultOverrides = false;

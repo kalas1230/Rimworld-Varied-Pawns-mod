@@ -2,7 +2,7 @@
 
 Date: 2026-08-02
 Repo: `C:\Users\gokal\Desktop\Rimworld-mod\Rimworld-Pawn-variance-mod`
-Branch: **`feat/growth-moment-ordering`**
+Branch: **`main`** (level with `origin/main`; the old `feat/growth-moment-ordering` branch is gone)
 
 ---
 
@@ -12,7 +12,8 @@ Branch: **`feat/growth-moment-ordering`**
 2. **DONE (100% PASS)**: **In-Game Verification of 5-Bucket Priority Bucket System**: Verified via GABS live trace logs (`Sanguophage` [`Highest`] overrides `Empire` [`Normal`] to produce `Sovereign`).
 3. **DONE (100% PASS)**: **Test without Biotech enabled**: Verified clean fallback when `ModsConfig.BiotechActive = false` across all 9 Biotech entry points.
 4. **DONE (100% PASS)**: **In-Game UI Verification of Override Delete All & Restore Buttons**: Verified via live GABS UI clicks that `Delete All` clears maps to 0 and `Restore Defaults` repopulates all 10 defaults.
-5. **Final TODO**: **User reviews all implemented code, architecture refactors, statistical profile curves, and empirical test outputs himself**.
+5. **DONE (100% PASS)**: **Settings Import / Export** — clipboard export/import of custom profiles, override maps, and General toggles. Verified end to end via GABS: round trip restored the settings file **byte-for-byte**, and a deliberate garbage paste was rejected cleanly. One real defect was found and fixed during the pass (`ScribeLoader.InitLoading` red-errors before rethrowing). Details in *TODO / Future Roadmap*.
+6. **Final TODO**: **User reviews all implemented code, architecture refactors, statistical profile curves, and empirical test outputs himself**.
 
 ### Summary of Recent Fixes & Verified Features
 
@@ -283,6 +284,13 @@ nothing removed`. None of the never-appear strings occurred.
   `customValues.0....` → "Could not resolve field '0'". To flip a per-profile setting, drive the real
   UI: `open_mod_settings` → `get_ui_layout` → `click_ui_target` → Close. Element ids change every time
   the dialog reopens, so re-read the layout each round.
+- **Target ids are `ui-element:<captureId>:<surfaceIndex>:<n>`, and `captureId` increments on every
+  `get_ui_layout` call** — so ids from an earlier capture are always stale, not just after the
+  dialog reopens. Surface 3 is the mod settings window; surface 4 is a `Dialog_MessageBox` on top of
+  it. Tab headers are actionable `kind=button` entries with empty labels, identified by their rect
+  `x` (0 / 190 / 380), while the visible tab *text* is a separate non-actionable `kind=label` —
+  clicking the label fails with "is not actionable". A successful tab switch reports
+  `"UI state did not change"` because the window stack is unchanged; that message is not a failure.
 - **GABS blocks all calls when RimWorld logs an error**, including our own expected ones. Clear with
   `games_get_attention` → `games_ack_attention` and retry. Expect this on every new game until the
   `OfPlayer` bug is fixed.
@@ -324,6 +332,95 @@ All prefixed `[PawnVarianceMod]`. Full table with meanings is in the growth-mome
 
 ## TODO / Future Roadmap
 
+- **Settings Import / Export — DONE 2026-08-02, verified in game (100% PASS).** Moves a whole
+  tuning — custom profiles, faction/xenotype override maps with their priorities, and the General
+  toggles — out of the game and back in as a clipboard string. Scoped small on purpose; see *What
+  we deliberately skipped*.
+
+  **What was built:**
+  - `Source/SettingsTransfer.cs` — `Export`, `Import`, and thin clipboard helpers.
+  - `PawnVarianceSettings.CopyFrom(other)` — adopts public state from a settings object loaded
+    elsewhere.
+  - `DrawShareSettingsSection` — a "Share Settings" section in the **General** tab with
+    `Export to Clipboard` / `Import from Clipboard`. Import is behind a destructive
+    `Dialog_MessageBox.CreateConfirmation` and persists with `Write()` on success.
+  - `DrawGeneralTab` view height 600f → 760f to fit it.
+
+  **The load-bearing design decision — import goes through `Scribe_Deep`, not `ExposeData`.**
+  The override dictionaries are stored flattened into parallel key/value lists and are **only**
+  rebuilt inside `ExposeData`'s `PostLoadInit` branch (`PawnVarianceSettings.cs:302`). Scribe only
+  reaches that branch for objects registered by `ScribeExtractor.SaveableFromNode`, which calls
+  `initer.RegisterForPostLoadInit(exposable)` — **verified by decompiling `Verse.ScribeExtractor`,
+  not assumed.** Calling `settings.ExposeData()` directly would load the lists and never rebuild
+  the maps, so overrides would import as empty. Both directions therefore use
+  `Scribe_Deep.Look(ref settings, "ModSettings")` under a `PawnVarianceConfig` root, which is the
+  same mechanism `LoadedModManager.ReadModSettings` uses — the payload is, deliberately, the
+  settings file.
+
+  **Safety nets, as actually shipped:**
+  - **`finally { Scribe.ForceStop(); }` on both directions.** The non-negotiable one, and not about
+    protecting the settings: `Scribe` is a **global stateful singleton**, so a throw part-way
+    through `InitLoading` would leave `Scribe.mode` stuck in `LoadingVars` and the next thing to
+    touch it is the player's autosave. Decompiled `Scribe`/`ScribeSaver`/`ScribeLoader.ForceStop`
+    to confirm it is **silent and idempotent** — it logs nothing when already inactive, which
+    matters because a stray `Log.Error` blocks every subsequent GABS call.
+  - **Rollback is structural, no snapshot field needed.** The payload loads into a *throwaway*
+    `PawnVarianceSettings`; the live object is only touched via `CopyFrom` after the load has fully
+    succeeded. A malformed paste cannot half-write the live settings. This also sidesteps the
+    stale-staging-list problem below entirely, since the throwaway object starts clean.
+  - **Unknown defNames were already safe** — `DrawFactionOverridesSection:538` and
+    `DrawXenotypeOverridesSection:636` already use `GetNamedSilentFail` with a raw-key fallback
+    label, and an unmatched dictionary entry is inert (it simply never matches a pawn). **No change
+    was needed here**; the earlier estimate that this would be the expensive part was wrong.
+  - Cheap pre-checks before Scribe is touched at all: empty clipboard, and a payload that does not
+    contain `<PawnVarianceConfig`.
+  - `hasInitializedDefaultOverrides` travels with the payload, so a config whose overrides were
+    deliberately emptied imports as empty instead of being repopulated with defaults.
+
+  **Known behaviour, decided not a bug:** the `PostLoadInit` block re-seeds `custom_1` when
+  `customProfiles` is empty, and that runs on import too — a profile-less payload comes back with
+  one empty custom profile. Identical to what a hand-edited settings file does today.
+
+  **What we deliberately skipped (user decision, do not add back without asking):** scoped export
+  (profiles-only / overrides-only), merge-on-import and its custom-profile id-collision handling,
+  and any version-migration logic. A `configVersion` int **is** written into the payload so a
+  future version can recognise today's format; nothing branches on it yet.
+
+  **The defect the in-game pass caught — `ScribeLoader.InitLoading` red-errors before it rethrows.**
+  Decompiled and confirmed: its `catch` does
+  `Log.Error("Exception while init loading file: " + filePath + ...)`, then `ForceStop()`, then
+  `throw`. Our `catch` receives the exception but **cannot unwrite that error** — structurally the
+  same trap as `Faction.OfPlayer` logging inside the getter. Observed live: pasting garbage produced
+  a red error *and blocked the GABS bridge* until `games_ack_attention`. **Fix:** `Import` now parses
+  the payload with `XmlDocument.LoadXml` and checks `DocumentElement.Name` **before** Scribe is
+  touched at all, so `InitLoading` only ever receives XML that has already parsed once. Retested
+  after the fix: a single `warning` line, zero `error` lines, no attention block.
+  (Silver lining from the same decompile: `InitLoading` calls `ForceStop()` itself on failure, so
+  Scribe was never actually wedged — our `finally` is belt-and-braces, correctly.)
+
+  **In-game verification, 2026-08-02 (100% PASS):**
+  - **Round trip** — exported the live tuning (`activeProfileId = preset_wildcard`, 10 faction
+    overrides, 10 xenotype overrides, both priority maps, 1 custom profile), then `Delete All` on
+    both override lists through the real UI (confirmed by `No faction overrides configured.` /
+    `No xenotype overrides configured.`), then imported from clipboard. The settings file was
+    rewritten at the exact millisecond of the Confirm click and came out **byte-for-byte identical**
+    to the pre-test backup — which proves both that `CopyFrom` restored everything and that
+    `Write()` persisted it.
+  - **Export payload shape** — root `<PawnVarianceConfig>`, `<configVersion>1</configVersion>`,
+    `<ModSettings>` beneath it, 2630 chars. Scribe omits default-valued fields exactly as it does
+    for the real settings file (`hostileProfileId` absent when it equals the default).
+  - **Garbage paste** — rejected with the user-facing message, settings left untouched (file mtime
+    unchanged), one `warning` and no `error` in the log.
+
+  **Why it was worth doing at all.** An hour of slider work could not leave the machine except
+  by hand-copying `~\AppData\LocalLow\...\Config\Mod_PawnVarianceMod_PawnVarianceMod.xml`. Modpack
+  authors are the strongest case. Secondary but real: **it fixes our own test loop** —
+  `update_mod_settings` cannot reach the profile slots (see *Bridge operating notes*), so every
+  per-profile change today is an `open_mod_settings` → `get_ui_layout` → `click_ui_target` ladder
+  with ids that change each time the dialog reopens. Import-from-string collapses that to one call.
+  Counter-argument, recorded so it is not rediscovered: the settings XML is already a copyable file,
+  so export is partly a re-implementation of Ctrl+C. The answer is discoverability — an in-game
+  button is found, `LocalLow` is not.
 - ~~**Per-Faction / Xenotype Profile Overrides**~~: **DONE 2026-08-01** — Implemented tabbed UI with `[x] Enable Faction & Xenotype Overrides`, priority cascade (`Xenotype > Faction > Hostile > Active`), and full dynamic custom profile management.
 
 ## Two known divergences from vanilla, deliberately kept (user decision)
@@ -347,10 +444,9 @@ Do not "fix" these without asking:
   untouched (2026-07-30).
 - Growth-moment ordering: **observe, don't predict.**
 - Grow-up stays **add-only** for traits and passions. Never remove a trait from a live pawn.
-- Children still get **no variance at generation time** — they get an adult-sized trait/passion pass
-  at 13, and skills only if the new opt-in is ticked.
-- Child skill shift: **off by default**, own clamped range, negatives allowed, WARNING-first tooltip
-  (2026-07-31).
+- Children & Growth Moments default policy: **DO NOT TOUCH BY DEFAULT.** `applyVarianceToChildren` is **OFF by default** so growth moments and kids remain untouched out-of-the-box unless explicitly enabled by the user.
+- Children still get **no variance at generation time** — they get an adult-sized trait/passion pass at 13 only if enabled, and skills only if the opt-in is ticked.
+- Child skill shift: **off by default**, own clamped range, negatives allowed, WARNING-first tooltip (2026-07-31).
 - Profile retune: measure before proposing numbers. Three retunes now (Gifted `skillShiftMax` 12→8,
   Desperate `skillShiftMin` −10→−8, and 2026-07-31's selection-bias pass) have all come from measured
   samples, and the first two each corrected a real misjudgement. **Do not guess these numbers.**
@@ -467,14 +563,32 @@ real decompiled source, not guessed.
 **Standing rule: this repo's code is committed only when the user explicitly asks.** Do not commit
 unprompted just because work is finished.
 
+Refreshed against real `git status` on **2026-08-02**. The `feat/growth-moment-ordering` branch this
+file used to name is gone; **work is on `main`**, which is level with `origin/main` (no ahead/behind).
+
 ```
-d075108 feat: defer grow-up variance until the growth moment resolves   <- branch HEAD
-2365896 docs: correct handover status after committing and pushing      <- main
+a6480b2 feat: 5-bucket override priorities, dynamic custom profiles, centered distribution graph & override restore tools   <- main = origin/main
+d075108 feat: defer grow-up variance until the growth moment resolves
+2365896 docs: correct handover status after committing and pushing
 ```
 
-Uncommitted (2026-07-31): `GrowUpVariance.cs`, `GrowthUpPatch.cs`, `HarmonyPatches.cs`,
-`PassionVarianceApplier.cs`, `PawnVarianceSettings.cs`, `QualityRoller.cs`, `SkillVarianceApplier.cs`,
-`TierUtility.cs`, `TraitTrace.cs`, `TraitVarianceApplier.cs`, `VarianceProfile.cs`, and this file.
+Uncommitted working tree (2026-08-02):
+
+| State | Path | Belongs to |
+|---|---|---|
+| `??` | `Source/SettingsTransfer.cs` | Import/export feature |
+| `M` | `Source/PawnVarianceSettings.cs` | Import/export feature (`CopyFrom`, `DrawShareSettingsSection`, view height) |
+| `M` | `HANDOVER.md` | this file |
+| `M` | `Source/Constants.cs` | the legacy/dead-cache refactor |
+| `M` | `Source/TraitVarianceApplier.cs` | the legacy/dead-cache refactor |
+| `M` | `Source/VarianceProfile.cs` | the legacy/dead-cache refactor |
+| `D` | `Source/TraitDesirabilityCache.cs` | the legacy/dead-cache refactor |
+| `??` | `docs/superpowers/plans/2026-08-02-refactor-legacy-code-and-dead-caches.md` | the legacy/dead-cache refactor |
+
+**The bottom five are a separate, in-flight piece of work** — the dead-cache refactor tracked by that
+plan file, not part of import/export. They were already in the tree when the import/export session
+started. Noted here so a future commit does not sweep two unrelated changes into one message; they
+want splitting. The tree as a whole builds clean (`0 Errors, 0 Warnings`) with the cache file deleted.
 
 The RimBridgeServer install of 2026-07-31 added **no tracked files** — the mod went into the RimWorld
 Mods folder, GABS into `~\tools`, and its two reference files into ignored `zzz-Do-Not-Commit/`.
@@ -522,6 +636,16 @@ Mods folder, GABS into `~\tools`, and its two reference files into ignored `zzz-
   - **Empirical Live UI Verification (100% PASS)**: Verified live via GABS UI target clicks (`ui-element:3:3:95`, `ui-element:4:3:39`, `ui-element:5:3:170`, `ui-element:6:3:114`) that `Delete All` drops entry count from 10 to 0, and `Restore Defaults` restores all 10 defaults with target profiles and priorities.
 - **Centered Faithful Quality Graph Normalization (`Source/PawnVarianceSettings.cs`)**:
   - Implemented `MapToCenteredX` piecewise normalization mapping in `DrawQualityDistributionCurve`. Centers the baseline `Faithful` profile (average quality 0.50) **dead in the middle** ($X = 0.50$) of the graph, smoothly scaling lower profiles (< 0.50) and higher profiles (> 0.50) relative to Faithful.
+- **Children & Growth Moments Default Policy**:
+  - Confirmed and updated project rules so that the default behavior is **DO NOT TOUCH KIDS / GROWTH MOMENTS** (`applyVarianceToChildren = false` and `applyChildSkillShift = false`). The mod leaves all children and growth moments completely untouched out-of-the-box unless explicitly enabled by the user.
+- **Settings Import / Export (`Source/SettingsTransfer.cs` — new file)**:
+  - Clipboard export/import of the whole configuration: custom profiles, both override maps with their priorities, and the General toggles. New "Share Settings" section in the **General** tab (`Export to Clipboard` / `Import from Clipboard`), `DrawGeneralTab` view height `600f → 760f`, plus `PawnVarianceSettings.CopyFrom(other)`.
+  - **Both directions reuse `Scribe_Deep.Look(ref settings, "ModSettings")`, not a hand-rolled format or a direct `ExposeData()` call.** The override dictionaries are stored flattened into parallel lists and are only rebuilt in `ExposeData`'s `PostLoadInit` branch, which Scribe reaches **only** for objects registered by `ScribeExtractor.SaveableFromNode` → `initer.RegisterForPostLoadInit`. Verified by decompiling `Verse.ScribeExtractor`. A direct `ExposeData()` call would have shipped with overrides silently importing as empty.
+  - **Rollback is structural**: the payload loads into a throwaway `PawnVarianceSettings` and the live object is only touched via `CopyFrom` after a fully successful load, so a bad paste cannot half-write anything. No snapshot field needed.
+  - **Unknown defNames needed no work** — `DrawFactionOverridesSection` / `DrawXenotypeOverridesSection` already use `GetNamedSilentFail` with a raw-key fallback label, and an unmatched dictionary entry is inert.
+  - **Defect found in game and fixed**: `ScribeLoader.InitLoading` writes its own red `Log.Error` before rethrowing, so a malformed paste red-errored and blocked the GABS bridge. `Import` now validates with `XmlDocument.LoadXml` + a `DocumentElement.Name` check **before Scribe is touched**. Same decompile also showed `InitLoading` calls `ForceStop()` itself, so Scribe was never actually wedged — our `finally` is belt-and-braces, not the sole guard.
+  - **Empirical In-Game Verification via GABS (100% PASS)**: exported the live tuning, cleared both override lists through the real UI, imported it back — settings file restored **byte-for-byte** and rewritten at the exact millisecond of the Confirm click. Deliberate garbage paste rejected with one `warning`, zero `error` lines, and settings left untouched.
+  - **Deliberately skipped** (do not add back without asking): scoped export, merge-on-import and custom-profile id-collision handling, and version-migration logic. A `configVersion` int is written into the payload but nothing branches on it.
 
 ---
 
@@ -531,7 +655,8 @@ Mods folder, GABS into `~\tools`, and its two reference files into ignored `zzz-
 > **CRITICAL RULE FOR FUTURE AGENTS / DEVELOPERS**:
 > 1. **Statistical Envelope ($\pm 25\%$ to $\pm 35\%$)**: All preset profile single-pawn scores (Best of 1) MUST remain within $\pm 25\%$ to $\pm 35\%$ of `Faithful` (`0.328`).
 > 2. **Monotonic Best-of-N Scaling**: Lower-tier profiles (e.g. `Desperate`, `Scavenger`) MUST NEVER outscale higher profiles (e.g. `Faithful`, `Specialist`, `Elite`, `Sovereign`) at ANY batch size ($N = 1, 5, 25, 50$). Even a Best-of-50 `Desperate` pawn must remain below `Faithful`.
-> 3. **MANDATORY CONSULTATION**: **DO NOT MODIFY OR TOUCH** these percentage bounds, statistical scaling rules, or profile parameters without explicitly raising a question to the project creator / user and obtaining explicit approval first!
+> 3. **DO NOT TOUCH KIDS BY DEFAULT**: The default setting for children and growth moments MUST be **OFF** (`applyVarianceToChildren = false` and `applyChildSkillShift = false`). Growth moments must be left untouched out-of-the-box.
+> 4. **MANDATORY CONSULTATION**: **DO NOT MODIFY OR TOUCH** these percentage bounds, statistical scaling rules, children/growth moment defaults, or profile parameters without explicitly raising a question to the project creator / user and obtaining explicit approval first!
 
 ---
 
