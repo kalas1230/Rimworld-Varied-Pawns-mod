@@ -6,11 +6,29 @@ namespace PawnVarianceMod
 {
     public static class SkillVarianceApplier
     {
-        public static void Apply(Pawn pawn, float quality)
+        public static void Apply(Pawn pawn, float quality, VarianceProfileValues v)
         {
-            var settings = PawnVarianceMod.Settings;
-            float baseline = Mathf.Lerp(settings.skillShiftMin, settings.skillShiftMax, quality);
-            float magnitude = Mathf.Lerp(Constants.MinMagnitudeFloor, Constants.MaxMagnitude, settings.skillNoise);
+            Shift(pawn, quality, v, v.skillShiftMin, v.skillShiftMax, clampToRange: false);
+        }
+
+        // The age-13 growth moment. Its own range, and — unlike generation — the range is a hard
+        // per-skill bound rather than a band the noise term is added on top of. At generation the
+        // range describes where the pawn's baseline sits and noise spreads their skills around it,
+        // which is fine because there is nothing to lose: vanilla has just rolled those levels. At
+        // 13 the levels are twelve years of play, so a range whose minimum reads 0 has to actually
+        // mean "never subtracts" — and it would not, unclamped: on Distinct the noise term alone
+        // spans +-2.4, which is where the observed "Construction 5 -> 3 on a birthday" came from
+        // (its baseline was only -0.3). Clamping keeps per-skill variety inside a bound the slider
+        // honestly describes.
+        public static void ApplyGrowUp(Pawn pawn, float quality, VarianceProfileValues v)
+        {
+            Shift(pawn, quality, v, v.childSkillShiftMin, v.childSkillShiftMax, clampToRange: true);
+        }
+
+        private static void Shift(Pawn pawn, float quality, VarianceProfileValues v, float shiftMin, float shiftMax, bool clampToRange)
+        {
+            float baseline = Mathf.Lerp(shiftMin, shiftMax, quality);
+            float magnitude = Mathf.Lerp(Constants.MinMagnitudeFloor, Constants.MaxMagnitude, v.skillNoise);
 
             foreach (SkillRecord record in pawn.skills.skills)
             {
@@ -24,8 +42,9 @@ namespace PawnVarianceMod
                 // clamped to a maxed 20. Vanilla itself never round-trips through this property for
                 // exactly this reason. Aptitude is applied by the getter on top of whatever we store,
                 // so shifting the raw learned level preserves the gene bonus correctly.
-                float noise = (TriangularSample() * 2f - 1f) * magnitude;
-                int newLevel = Mathf.RoundToInt(record.levelInt + baseline + noise);
+                float shift = baseline + (TriangularSample() * 2f - 1f) * magnitude;
+                if (clampToRange) shift = Mathf.Clamp(shift, shiftMin, shiftMax);
+                int newLevel = Mathf.RoundToInt(record.levelInt + shift);
                 record.Level = Mathf.Clamp(newLevel, 0, 20);
             }
         }

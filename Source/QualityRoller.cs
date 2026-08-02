@@ -6,9 +6,11 @@ namespace PawnVarianceMod
 {
     public static class QualityRoller
     {
-        public static float RollQuality()
+        // Takes the values explicitly rather than reading the active profile: hostile pawns roll
+        // against their own profile's averageQuality, so there is no single "current" shape.
+        public static float RollQuality(VarianceProfileValues values)
         {
-            PawnVarianceMod.Settings.GetBetaAlphaBeta(out float alpha, out float beta);
+            values.GetBetaAlphaBeta(out float alpha, out float beta);
             float x = SampleGamma(alpha);
             float y = SampleGamma(beta);
 

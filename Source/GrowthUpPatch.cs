@@ -15,7 +15,7 @@ namespace PawnVarianceMod
     // exactly the "generic developmental-stage-changed callback" scenario the spec's own
     // defensive DevelopmentalStage != Adult check (below) was already written to handle — no
     // other code change needed. Pawn_AgeTracker's private backing field is literally named
-    // "pawn", matching the existing ___pawn Harmony field-injection parameter.
+    // "pawn", matching the existing ___pawn Harmony field-injection parameter.7
     [HarmonyPatch(typeof(Pawn_AgeTracker), nameof(Pawn_AgeTracker.PostResolveLifeStageChange))]
     public static class DevelopmentalStage_Postfix
     {
@@ -52,8 +52,13 @@ namespace PawnVarianceMod
             // Reaching here means we ourselves observed this exact pawn as NotAdult on a prior
             // firing and now see Adult — a genuine, once-per-pawn-per-session transition.
 
-            if (!settings.enableSkillVariance && !settings.enableTraitVariance && !settings.enablePassionVariance) return;
-            if (!settings.applyToHostilePawns && ___pawn.Faction != null && ___pawn.Faction.HostileTo(Faction.OfPlayer)) return;
+            if (!settings.applyToHostilePawns && ___pawn.Faction != null && ___pawn.Faction.HostileTo(Faction.OfPlayerSilentFail)) return;
+            // Per-pawn profile: a hostile faction's child is judged by the hostile profile's enable
+            // toggles, not the player's. Re-resolved in GrowUpVariance.Apply rather than passed
+            // along, because the pawn can sit pending for days and its faction can turn hostile in
+            // the meantime.
+            VarianceProfileValues v = settings.ValuesFor(___pawn);
+            if (!v.enableSkillVariance && !v.enableTraitVariance && !v.enablePassionVariance) return;
 
             // The age-13 growth moment grants a trait and one or more passions, and it resolves
             // AFTER this point: BirthdayBiological sends its letter on the tick before

@@ -20,14 +20,12 @@ namespace PawnVarianceMod
         // longer a quality-driven "desirability" scoring step — vanilla's own picker has no concept
         // of trait quality at all, so that axis of variance no longer exists for traits (traitNoise
         // was removed accordingly; see settings).
-        public static void Apply(Pawn pawn, float quality, PawnGenerationRequest request)
+        public static void Apply(Pawn pawn, float quality, PawnGenerationRequest request, VarianceProfileValues v)
         {
-            var settings = PawnVarianceMod.Settings;
-
             var protection = TraitProtection.Build(pawn, request);
             List<Trait> current = pawn.story.traits.allTraits;
 
-            var trace = TraitTrace.Begin(pawn, quality, "generation");
+            var trace = TraitTrace.Begin(pawn, quality, "generation", v);
             TraitTrace.AppendTraits(trace, "incoming", new List<Trait>(current), protection);
 
             int protectedCount = 0;
@@ -38,12 +36,12 @@ namespace PawnVarianceMod
                 else removable.Add(trait);
             }
 
-            float targetMean = Mathf.Lerp(settings.traitCountMin, settings.traitCountMax, quality);
+            float targetMean = Mathf.Lerp(v.traitCountMin, v.traitCountMax, quality);
             float jitter = JitterSample();
             int rolledTarget = Mathf.Clamp(
                 Mathf.RoundToInt(targetMean + jitter),
-                Mathf.RoundToInt(settings.traitCountMin),
-                Mathf.RoundToInt(settings.traitCountMax));
+                Mathf.RoundToInt(v.traitCountMin),
+                Mathf.RoundToInt(v.traitCountMax));
 
             int ageCap = TraitAgeCap.MaxRolledTraitsFor(pawn);
             int uncappedTarget = rolledTarget;
@@ -51,7 +49,7 @@ namespace PawnVarianceMod
 
             // Protected traits are a floor, never part of the budget: at a target of 0 an Yttakin still
             // keeps its xenotype-forced Psychically Dull and ends with exactly one trait.
-            int desiredTotal = settings.countProtectedTraits
+            int desiredTotal = v.countProtectedTraits
                 ? Mathf.Max(protectedCount, rolledTarget)
                 : protectedCount + rolledTarget;
 
@@ -59,10 +57,10 @@ namespace PawnVarianceMod
 
             if (trace != null)
             {
-                trace.AppendLine($"  target: lerp({settings.traitCountMin:F0}..{settings.traitCountMax:F0}, q) = {targetMean:F2} + jitter {jitter:+0.00;-0.00} -> rolled {uncappedTarget}"
+                trace.AppendLine($"  target: lerp({v.traitCountMin:F0}..{v.traitCountMax:F0}, q) = {targetMean:F2} + jitter {jitter:+0.00;-0.00} -> rolled {uncappedTarget}"
                     + $", age cap {TraitTrace.DescribeAgeCap(ageCap)}"
                     + (rolledTarget != uncappedTarget ? $" -> CAPPED to {rolledTarget}" : string.Empty));
-                trace.AppendLine($"  countProtectedTraits {(settings.countProtectedTraits ? "ON (target is total traits)" : "off (rolled added on top of protected)")}"
+                trace.AppendLine($"  countProtectedTraits {(v.countProtectedTraits ? "ON (target is total traits)" : "off (rolled added on top of protected)")}"
                     + $": protected {protectedCount}, rolled {rolledTarget} -> desired total {desiredTotal} vs current {current.Count} = delta {delta:+0;-0;0}");
             }
 

@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 <ModMetaData>
   <packageId>kalas.pawnvariance</packageId>
-  <name>Pawn Variance</name>
+  <name>Varied Pawns</name>
   <author>kalas</author>
   <supportedVersions>
     <li>1.5</li>

@@ -38,7 +38,7 @@ namespace PawnVarianceMod
                         Log.Message($"[PawnVarianceMod] Suppressed grow-up variance for {pawn.LabelShort} ({triggerPath}): applyVarianceToChildren is off.");
                     return;
                 }
-                if (!settings.applyToHostilePawns && pawn.Faction != null && pawn.Faction.HostileTo(Faction.OfPlayer))
+                if (!settings.applyToHostilePawns && pawn.Faction != null && pawn.Faction.HostileTo(Faction.OfPlayerSilentFail))
                 {
                     if (settings.verboseLogging)
                         Log.Message($"[PawnVarianceMod] Suppressed grow-up variance for {pawn.LabelShort} ({triggerPath}): hostile pawn and applyToHostilePawns is off.");
@@ -51,14 +51,18 @@ namespace PawnVarianceMod
                     return;
                 }
 
-                float quality = QualityRoller.RollQuality();
+                // Same per-pawn profile resolution as generation: a hostile faction's child growing
+                // up is generated from the hostile profile, not the player's.
+                VarianceProfileValues v = settings.ValuesFor(pawn);
+
+                float quality = QualityRoller.RollQuality(v);
 
                 // Ordering matches the main postfix (HarmonyPatches.cs): trait, then skill, then
                 // passion — trait variance can disable work tags, which passion placement's
                 // TotallyDisabled exclusion depends on.
-                if (settings.enableTraitVariance) ApplyTraitGrowthUp(pawn, quality, triggerPath);
-                if (settings.enableSkillVariance) ApplySkillGrowthUp(pawn, quality);
-                if (settings.enablePassionVariance) ApplyPassionGrowthUp(pawn, quality);
+                if (v.enableTraitVariance) ApplyTraitGrowthUp(pawn, quality, triggerPath, v);
+                if (v.enableSkillVariance) ApplySkillGrowthUp(pawn, quality, v);
+                if (v.enablePassionVariance) ApplyPassionGrowthUp(pawn, quality, v);
             }
             catch (Exception ex)
             {
@@ -66,12 +70,29 @@ namespace PawnVarianceMod
             }
         }
 
-        private static void ApplySkillGrowthUp(Pawn pawn, float quality)
+        // Off by default, and deliberately so. The trait and passion passes at 13 only ever top a
+        // pawn up — neither can remove a trait or downgrade a passion — because vanilla genuinely
+        // generates traits and passions at the growth moment and this mod's job is to vary that
+        // roll. Skills are the exception: vanilla's only skill change at a growth moment is the
+        // chosen trait's additive skillGains, so there is no vanilla skill randomness here to
+        // vary, and a child's levels are a play record rather than a roll. Shifting them is a real
+        // divergence from vanilla, hence the opt-in and its own clamped range.
+        private static void ApplySkillGrowthUp(Pawn pawn, float quality, VarianceProfileValues v)
         {
-            SkillVarianceApplier.Apply(pawn, quality); // identical logic to generation-time; additive, so safe on accumulated childhood levels
+            var settings = PawnVarianceMod.Settings;
+            if (!v.applyChildSkillShift)
+            {
+                // Logged rather than silent: every other decision on this path leaves a trace, and
+                // an unexplained absence of the skill step is exactly what reads as a bug in a log.
+                if (settings.verboseLogging)
+                    Log.Message($"[PawnVarianceMod] Skill shift skipped for {pawn.LabelShortCap} at grow-up: 'Also shift skills at 13' is off (traits and passions still apply).");
+                return;
+            }
+
+            SkillVarianceApplier.ApplyGrowUp(pawn, quality, v);
         }
 
-        private static void ApplyPassionGrowthUp(Pawn pawn, float quality)
+        private static void ApplyPassionGrowthUp(Pawn pawn, float quality, VarianceProfileValues v)
         {
             // Pips, not distinct skills, so existing growth-moment passions are weighed on the same
             // scale as the rolled budget. The prices must match what AssignPassions' spend loop
@@ -80,16 +101,16 @@ namespace PawnVarianceMod
             // grown-up children under the passion slider, which is the mirror image of the
             // growth-moment stacking bug this whole path exists to fix.
             float existingPips = pawn.skills.skills.Sum(r => r.passion == Passion.Major ? 1.5f : r.passion == Passion.Minor ? 1f : 0f);
-            PassionVarianceApplier.AssignPassions(pawn, quality, existingPips);
+            PassionVarianceApplier.AssignPassions(pawn, quality, existingPips, v);
         }
 
-        private static void ApplyTraitGrowthUp(Pawn pawn, float quality, string triggerPath)
+        private static void ApplyTraitGrowthUp(Pawn pawn, float quality, string triggerPath, VarianceProfileValues v)
         {
             var settings = PawnVarianceMod.Settings;
             Dictionary<TraitDef, int> forced = TraitVarianceApplier.CaptureForcedTraits(pawn);
             HashSet<TraitDef> disallowed = TraitVarianceApplier.CaptureDisallowedTraits(pawn);
 
-            var trace = TraitTrace.Begin(pawn, quality, $"grow-up: {triggerPath}");
+            var trace = TraitTrace.Begin(pawn, quality, $"grow-up: {triggerPath}", v);
             // Built before the forced-trait pass below mutates anything, but reported against the same
             // TraitProtection instance the target maths uses further down, so "incoming" and "final"
             // are judged by identical rules.
@@ -143,17 +164,17 @@ namespace PawnVarianceMod
             TraitTrace.AppendTraits(trace, "incoming", incoming, protection);
             int protectedCount = pawn.story.traits.allTraits.Count(t => protection.IsProtected(t));
 
-            float targetMean = Mathf.Lerp(settings.traitCountMin, settings.traitCountMax, quality);
+            float targetMean = Mathf.Lerp(v.traitCountMin, v.traitCountMax, quality);
             int rolledTarget = Mathf.Clamp(
                 Mathf.RoundToInt(targetMean),
-                Mathf.RoundToInt(settings.traitCountMin),
-                Mathf.RoundToInt(settings.traitCountMax));
+                Mathf.RoundToInt(v.traitCountMin),
+                Mathf.RoundToInt(v.traitCountMax));
 
             int ageCap = TraitAgeCap.MaxRolledTraitsFor(pawn);
             int uncappedTarget = rolledTarget;
             rolledTarget = Mathf.Min(rolledTarget, ageCap);
 
-            int targetCount = settings.countProtectedTraits
+            int targetCount = v.countProtectedTraits
                 ? Mathf.Max(protectedCount, rolledTarget)
                 : protectedCount + rolledTarget;
 
@@ -161,10 +182,10 @@ namespace PawnVarianceMod
             {
                 // No jitter on this path, unlike generation-time Apply — noted so a side-by-side
                 // comparison of the two traces doesn't read the missing term as a lost line.
-                trace.AppendLine($"  target: lerp({settings.traitCountMin:F0}..{settings.traitCountMax:F0}, q) = {targetMean:F2} (no jitter on this path) -> rolled {uncappedTarget}"
+                trace.AppendLine($"  target: lerp({v.traitCountMin:F0}..{v.traitCountMax:F0}, q) = {targetMean:F2} (no jitter on this path) -> rolled {uncappedTarget}"
                     + $", age cap {TraitTrace.DescribeAgeCap(ageCap)}"
                     + (rolledTarget != uncappedTarget ? $" -> CAPPED to {rolledTarget}" : string.Empty));
-                trace.AppendLine($"  countProtectedTraits {(settings.countProtectedTraits ? "ON (target is total traits)" : "off (rolled added on top of protected)")}"
+                trace.AppendLine($"  countProtectedTraits {(v.countProtectedTraits ? "ON (target is total traits)" : "off (rolled added on top of protected)")}"
                     + $": protected {protectedCount}, rolled {rolledTarget} -> target {targetCount} vs current {currentCount}");
             }
 

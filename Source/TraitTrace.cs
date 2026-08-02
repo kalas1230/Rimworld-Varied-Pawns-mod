@@ -19,12 +19,12 @@ namespace PawnVarianceMod
     {
         // Returns null when verbose logging is off. Every other method here no-ops on a null trace,
         // so call sites need no further gating.
-        internal static StringBuilder Begin(Pawn pawn, float quality, string mode)
+        internal static StringBuilder Begin(Pawn pawn, float quality, string mode, VarianceProfileValues v)
         {
             if (!PawnVarianceMod.Settings.verboseLogging) return null;
 
             var trace = new StringBuilder();
-            trace.AppendLine($"[PawnVarianceMod] Trait assignment ({mode}) for {pawn.LabelShortCap} (quality {quality:F2})");
+            trace.AppendLine($"[PawnVarianceMod] Trait assignment ({mode}) for {pawn.LabelShortCap} (quality {quality:F2}, profile {v.profileLabel})");
             trace.AppendLine($"  kind {pawn.kindDef?.defName ?? "none"}, age {pawn.ageTracker?.AgeBiologicalYears ?? -1}, stage {pawn.DevelopmentalStage}"
                 + $", childhood {pawn.story?.Childhood?.defName ?? "none"}, adulthood {pawn.story?.Adulthood?.defName ?? "none"}");
             return trace;

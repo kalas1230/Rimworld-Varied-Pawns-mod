@@ -25,8 +25,6 @@ namespace PawnVarianceMod
             PatchIndividually(harmony, typeof(DevelopmentalStage_Postfix));
             PatchIndividually(harmony, typeof(Game_LoadGame_Postfix));
             PatchIndividually(harmony, typeof(Game_InitNewGame_Postfix));
-            PatchIndividually(harmony, typeof(DrawCharacterCard_Postfix));
-            PatchIndividually(harmony, typeof(DrawColonist_Postfix));
             PatchIndividually(harmony, typeof(GrowthMomentMakeChoices_Postfix));
         }
 
@@ -42,7 +40,7 @@ namespace PawnVarianceMod
             }
         }
 
-        public override string SettingsCategory() => "Pawn Variance";
+        public override string SettingsCategory() => "Varied Pawns";
 
         public override void DoSettingsWindowContents(Rect inRect)
         {

@@ -19,25 +19,25 @@ namespace PawnVarianceMod
     // probability of Major (vanilla: flat Rand.Bool = 50%, here: passionMajorBias).
     public static class PassionVarianceApplier
     {
-        public static void Apply(Pawn pawn, float quality)
+        public static void Apply(Pawn pawn, float quality, VarianceProfileValues v)
         {
             foreach (SkillRecord record in pawn.skills.skills)
                 record.passion = Passion.None;
 
-            AssignPassions(pawn, quality, alreadyCommittedPips: 0f);
+            AssignPassions(pawn, quality, alreadyCommittedPips: 0f, v: v);
         }
 
         // alreadyCommittedPips lets GrowUpVariance top up a pawn's existing growth-moment passions
         // toward the same quality-derived budget, rather than rolling a whole second budget on top.
         // Float, not int, because the spend loop below prices a Major at 1.5 — so a caller counting
         // existing passions has to be able to express 1.5 too, or Majors get over-charged.
-        public static void AssignPassions(Pawn pawn, float quality, float alreadyCommittedPips)
+        public static void AssignPassions(Pawn pawn, float quality, float alreadyCommittedPips, VarianceProfileValues v)
         {
             var settings = PawnVarianceMod.Settings;
             var trace = settings.verboseLogging ? new System.Text.StringBuilder() : null;
 
-            float budgetMean = Mathf.Lerp(settings.passionCountMin, settings.passionCountMax, quality);
-            float spread = Mathf.Lerp(Constants.PassionBudgetSpreadMin, Constants.PassionBudgetSpreadMax, settings.passionNoise);
+            float budgetMean = Mathf.Lerp(v.passionCountMin, v.passionCountMax, quality);
+            float spread = Mathf.Lerp(Constants.PassionBudgetSpreadMin, Constants.PassionBudgetSpreadMax, v.passionNoise);
             float clampWindow = spread * Constants.PassionBudgetClampFactor;
             float budget = budgetMean + Mathf.Clamp(Rand.Gaussian(0f, spread), -clampWindow, clampWindow) - alreadyCommittedPips;
 
@@ -51,14 +51,14 @@ namespace PawnVarianceMod
             // exactly this). Skipped when pips are already committed: the growth-up path only tops
             // up a pawn who by definition already has passions, so no guarantee is at stake.
             float rolledBudget = budget;
-            bool flooredBudget = budget < 1f && settings.passionCountMin > 0f && alreadyCommittedPips <= 0f;
+            bool flooredBudget = budget < 1f && v.passionCountMin > 0f && alreadyCommittedPips <= 0f;
             if (flooredBudget) budget = 1f;
 
             int minorPassions = 0;
             int majorPassions = 0;
             while (budget >= 1f)
             {
-                if (budget >= 1.5f && Rand.Chance(settings.passionMajorBias))
+                if (budget >= 1.5f && Rand.Chance(v.passionMajorBias))
                 {
                     majorPassions++;
                     budget -= 1.5f;
@@ -96,9 +96,9 @@ namespace PawnVarianceMod
 
             if (trace != null)
             {
-                trace.AppendLine($"[PawnVarianceMod] Passion assignment for {pawn.LabelShortCap} (quality {quality:F2})");
+                trace.AppendLine($"[PawnVarianceMod] Passion assignment for {pawn.LabelShortCap} (quality {quality:F2}, profile {v.profileLabel})");
                 trace.AppendLine($"  budget mean {budgetMean:F2}, spread {spread:F2}, committed pips {alreadyCommittedPips:F2} (Minor 1, Major 1.5), rolled {rolledBudget:F2}"
-                    + (flooredBudget ? $" -> FLOORED to 1.00 (minimum is {settings.passionCountMin:F0}, not 0)" : string.Empty)
+                    + (flooredBudget ? $" -> FLOORED to 1.00 (minimum is {v.passionCountMin:F0}, not 0)" : string.Empty)
                     + $" -> {majorPassions} Major + {minorPassions} Minor");
                 foreach (SkillRecord r in pawn.skills.skills)
                 {
