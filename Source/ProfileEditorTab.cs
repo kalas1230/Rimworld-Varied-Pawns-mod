@@ -67,7 +67,7 @@ namespace PawnVarianceMod
             listing.Gap(4f);
         }
 
-        private const float HeaderHeight = 118f;
+        private const float HeaderHeight = 140f;
         private const float HeaderGutter = 8f;
         private const float CurveHeight = 54f;
 
@@ -162,8 +162,26 @@ namespace PawnVarianceMod
             GUI.color = Color.white;
             GUI.enabled = outerEnabled;
 
+            // Row 2: authored prose for presets, generated fingerprint for customs.
+            // Constant height, and never empty in either state, so the header cannot
+            // shift when switching profiles.
+            Rect descRow = new Rect(rect.x, pickerRow.yMax + 4f, rect.width, 20f);
+            var preset = VarianceProfiles.GetPresetById(activeProfileId);
+            string descText = preset != null ? preset.description : ProfileFingerprint(v);
+
+            Text.Font = GameFont.Tiny;
+            GUI.color = new Color(1f, 1f, 1f, 0.65f);
+            // All nine shipped descriptions fit whole at this width (longest is 122
+            // chars, ~630-730px at Tiny against ~840px). Truncate is a safety net for
+            // long localizations and unusually long fingerprints only.
+            Widgets.Label(descRow, descText.Truncate(descRow.width));
+            GUI.color = Color.white;
+            Text.Font = GameFont.Small;
+
+            TooltipHandler.TipRegion(descRow, descText);
+
             // Row 3: quality slider + tier/power readout.
-            Rect qualityRow = new Rect(rect.x, pickerRow.yMax + 4f, rect.width, 28f);
+            Rect qualityRow = new Rect(rect.x, descRow.yMax + 2f, rect.width, 28f);
             Rect qLabel = qualityRow.LeftPart(0.26f);
             Rect qSlider = new Rect(qualityRow.x + rect.width * 0.27f, qualityRow.y + 3f, rect.width * 0.40f, 22f);
             Rect qReadout = qualityRow.RightPart(0.30f);
@@ -191,6 +209,17 @@ namespace PawnVarianceMod
             // Row 4: the distribution curve, full width, never greyed.
             Rect curveRect = new Rect(rect.x, qualityRow.yMax + 4f, rect.width, CurveHeight);
             DrawQualityDistributionCurve(curveRect, v);
+        }
+
+        // One-line summary of a custom profile's values. Never returns empty.
+        private static string ProfileFingerprint(VarianceProfileValues v)
+        {
+            return string.Format(
+                "Traits {0:F0}–{1:F0}  ·  Passions {2:F1}–{3:F1}  ·  Skill shift {4:F1} to {5:F1}  ·  Quality {6:F2}",
+                v.traitCountMin, v.traitCountMax,
+                v.passionCountMin, v.passionCountMax,
+                v.skillShiftMin, v.skillShiftMax,
+                v.averageQuality);
         }
 
         private void DrawGenerationSettings(Listing_Standard listing)
