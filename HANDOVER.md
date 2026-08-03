@@ -63,7 +63,46 @@ Branch: **`main`**
 - **Button Colors**: Applied soft green (`new Color(0.4f, 0.85f, 0.4f)`) to `+ Add Override`, amber (`new Color(0.9f, 0.75f, 0.3f)`) to `Restore Defaults`, and soft red (`new Color(1f, 0.4f, 0.4f)`) to `Delete All`.
 - **Confirmation Dialogs**: Added explicit confirmation prompts (`Dialog_MessageBox.CreateConfirmation`) before performing `Delete All` (destructive) or `Restore Defaults` (non-destructive reset) actions for both Faction and Xenotype overrides.
 
+## 4. Profile Editor Tab Layout Redesign — ⚠️ BUILT, NOT YET VISUALLY VERIFIED (2026-08-03)
 
+Branch: `feature/profile-editor-layout`. **Not merged.**
+Spec: [`docs/superpowers/specs/2026-08-03-profile-editor-layout-design.md`](file:///C:/Users/gokal/Desktop/Rimworld-mod/Rimworld-Pawn-variance-mod/docs/superpowers/specs/2026-08-03-profile-editor-layout-design.md)
+Plan: [`docs/superpowers/plans/2026-08-03-profile-editor-layout.md`](file:///C:/Users/gokal/Desktop/Rimworld-mod/Rimworld-Pawn-variance-mod/docs/superpowers/plans/2026-08-03-profile-editor-layout.md)
+
+> [!WARNING]
+> **Every layout figure below is arithmetic, not observation.** This repo has no
+> test harness for IMGUI code, so all seven tasks were verified by clean build and
+> static review only — RimWorld was never launched. The header sums to exactly
+> `140f` on paper and the body should land near 500px, but **no pixel of this has
+> been seen**. Do not treat it as working until the owner's in-game pass is done.
+> The pass checklist is §9 of the plan.
+
+- **Pinned 140px header** (`DrawProfileEditorHeader`), does not scroll: profile picker +
+  5-button action strip (`+ New`, `Duplicate`, `Rename`, `Reset`, `Delete`) / one-line
+  description / quality slider with `{tier} ({power})` readout / full-width distribution
+  curve. Rows: 28 + 4 + 20 + 2 + 28 + 4 + 54 = 140.
+- **The curve is never greyed**, even on read-only presets. It is a readout, not a control;
+  greying it would break comparing presets by cycling the picker. Only the quality *slider*
+  is disabled. Do not "fix" this.
+- **`+ New` and `Duplicate` stay enabled on presets.** A new user lands on `Faithful`, which
+  is read-only — these two buttons are the only way off it. Greying them creates a dead end.
+- **Body compacted** from ~1600-2000px toward ~500px: four `Widgets.FloatRange` controls
+  replace eight paired sliders, enable checkboxes moved into section headers, fixed-string
+  captions became tooltips. Value-derived captions were deliberately kept visible.
+- **`Widgets.IntRange` is FORBIDDEN on the four min/max pairs.** `passionCountMin`/`Max`
+  hold fractional calibrated values (`1.4`, `2.5`, `6.2`, …); `IntRange` truncates them and
+  would silently recalibrate a Rule 5 governed value. Use `FloatRange`, no `roundTo`.
+- **Passion counts now display to one decimal** (`:F0` → `:F1`). Display only — `6.2` was
+  always `6.2`, it merely rendered as `"6"`. Signed off by the project owner 2026-08-03.
+- **Row 2 saves and restores three pieces of global draw state** — `Text.Font`, `GUI.color`,
+  `Text.WordWrap`. `WordWrap = false` is what structurally guarantees the fixed 20px row
+  stays one line and cannot overlap the quality slider. Keep all three restores.
+- Profile Editor drawing moved to [`Source/ProfileEditorTab.cs`](file:///C:/Users/gokal/Desktop/Rimworld-mod/Rimworld-Pawn-variance-mod/Source/ProfileEditorTab.cs)
+  (`partial class PawnVarianceSettings`). New [`Source/Dialog_RenameProfile.cs`](file:///C:/Users/gokal/Desktop/Rimworld-mod/Rimworld-Pawn-variance-mod/Source/Dialog_RenameProfile.cs).
+- **Schema unchanged.** `git diff main` over the branch shows zero `Scribe_` lines added or
+  removed. The only `VarianceProfile.cs` change is `IRenameable` on `CustomProfile` (6 lines);
+  no numeric field, preset value, constructor, `Clone`, or `ExposeData` body was touched.
+- Open Minor findings carried to final review are listed in `.superpowers/sdd/progress.md`.
 
 ---
 
