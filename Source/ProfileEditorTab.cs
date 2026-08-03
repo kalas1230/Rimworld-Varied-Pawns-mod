@@ -67,12 +67,25 @@ namespace PawnVarianceMod
             listing.Gap(4f);
         }
 
+        private const float HeaderHeight = 86f;
+        private const float HeaderGutter = 8f;
+        private const float CurveHeight = 54f;
+
         private void DrawProfileEditorTab(Rect outRect)
         {
-            float viewHeight = Math.Max(profileEditorViewHeight, 1000f);
-            var viewRect = new Rect(0f, 0f, outRect.width - 24f, viewHeight);
+            Rect headerRect = new Rect(outRect.x, outRect.y, outRect.width, HeaderHeight);
+            DrawProfileEditorHeader(headerRect);
 
-            Widgets.BeginScrollView(outRect, ref profileEditorScrollPos, viewRect);
+            Rect bodyRect = new Rect(
+                outRect.x,
+                headerRect.yMax + HeaderGutter,
+                outRect.width,
+                outRect.height - HeaderHeight - HeaderGutter);
+
+            float viewHeight = Math.Max(profileEditorViewHeight, bodyRect.height);
+            var viewRect = new Rect(0f, 0f, bodyRect.width - 24f, viewHeight);
+
+            Widgets.BeginScrollView(bodyRect, ref profileEditorScrollPos, viewRect);
             var listing = new Listing_Standard();
             listing.Begin(viewRect);
 
@@ -86,6 +99,41 @@ namespace PawnVarianceMod
             profileEditorViewHeight = listing.CurHeight + 40f;
             listing.End();
             Widgets.EndScrollView();
+        }
+
+        private void DrawProfileEditorHeader(Rect rect)
+        {
+            var v = Active;
+            bool outerEnabled = GUI.enabled;
+
+            // Row 3: quality slider + tier/power readout.
+            Rect qualityRow = new Rect(rect.x, rect.y, rect.width, 28f);
+            Rect qLabel = qualityRow.LeftPart(0.26f);
+            Rect qSlider = new Rect(qualityRow.x + rect.width * 0.27f, qualityRow.y + 3f, rect.width * 0.40f, 22f);
+            Rect qReadout = qualityRow.RightPart(0.30f);
+
+            Widgets.Label(qLabel, EditingCustom
+                ? $"Average pawn quality:  {v.averageQuality:F2}"
+                : $"Average pawn quality:  {v.averageQuality:F2}  (read-only)");
+
+            GUI.enabled = outerEnabled && EditingCustom;
+            v.averageQuality = Widgets.HorizontalSlider(qSlider, v.averageQuality, 0f, 1f);
+            GUI.enabled = outerEnabled;
+
+            TooltipHandler.TipRegion(qualityRow,
+                "Drives every roll below. Higher quality shifts a pawn toward the top of each range you set.");
+
+            // The readout is output, not input -- always full opacity, even on a
+            // read-only preset, so presets stay comparable by cycling the picker.
+            float meanComposite = CalculateCompositeScore(v.averageQuality, v);
+            Widgets.Label(qReadout, $"→  {TierForQuality(meanComposite)} ({meanComposite:F2})");
+            TooltipHandler.TipRegion(qReadout,
+                "Overall Power: the composite score every profile is calibrated against. "
+                + "Faithful's baseline is 0.31.");
+
+            // Row 4: the distribution curve, full width, never greyed.
+            Rect curveRect = new Rect(rect.x, qualityRow.yMax + 4f, rect.width, CurveHeight);
+            DrawQualityDistributionCurve(curveRect, v);
         }
 
         private void DrawProfileSelector(Listing_Standard listing)
@@ -163,12 +211,6 @@ namespace PawnVarianceMod
         private void DrawGenerationSettings(Listing_Standard listing)
         {
             var v = Active;
-
-            Section(listing, "Overall quality");
-            v.averageQuality = LabeledSlider(listing, $"Average pawn quality:  {v.averageQuality:F2}", v.averageQuality, 0f, 1f);
-            float meanComposite = CalculateCompositeScore(v.averageQuality, v);
-            Caption(listing, $"An average pawn currently reads as: {TierForQuality(meanComposite)} (Overall Power: {meanComposite:F2})");
-            DrawQualityDistributionCurve(listing, v);
 
             SectionHeader(listing, "Skills", ref v.enableSkillVariance,
                 "When off, this profile leaves vanilla skill levels untouched.");
@@ -251,11 +293,8 @@ namespace PawnVarianceMod
             }
         }
 
-        private static void DrawQualityDistributionCurve(Listing_Standard listing, VarianceProfileValues v)
+        private static void DrawQualityDistributionCurve(Rect rect, VarianceProfileValues v)
         {
-            listing.Gap(4f);
-            Rect rect = listing.GetRect(54f);
-
             // Dark container background
             Widgets.DrawBoxSolid(rect, new Color(0.08f, 0.09f, 0.11f, 0.85f));
             Widgets.DrawBox(rect, 1);
@@ -308,8 +347,6 @@ namespace PawnVarianceMod
             float meanComposite = MapToCenteredX(meanRawComposite);
             float meanX = rect.x + meanComposite * rect.width;
             Widgets.DrawLine(new Vector2(meanX, rect.y), new Vector2(meanX, rect.yMax), Color.yellow, 1.5f);
-
-            listing.Gap(ControlGap);
         }
 
         private static void DrawTierBand(Rect rect, float startFrac, float endFrac, Color color)
