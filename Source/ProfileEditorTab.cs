@@ -120,7 +120,8 @@ namespace PawnVarianceMod
             v.averageQuality = Widgets.HorizontalSlider(qSlider, v.averageQuality, 0f, 1f);
             GUI.enabled = outerEnabled;
 
-            TooltipHandler.TipRegion(qualityRow,
+            Rect qLabelAndSlider = qualityRow.LeftPart(0.67f);
+            TooltipHandler.TipRegion(qLabelAndSlider,
                 "Drives every roll below. Higher quality shifts a pawn toward the top of each range you set.");
 
             // The readout is output, not input -- always full opacity, even on a
