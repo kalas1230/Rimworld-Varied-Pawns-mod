@@ -45,6 +45,28 @@ namespace PawnVarianceMod
             listing.Gap(ControlGap);
         }
 
+        private static void SectionHeader(
+            Listing_Standard listing, string title, ref bool enabled, string tooltip = null)
+        {
+            listing.Gap(SectionGap);
+            listing.GapLine(0f);
+
+            Rect row = listing.GetRect(30f);
+            Rect titleRect = row.LeftPart(0.70f);
+            Rect boxRect = row.RightPart(0.28f);
+
+            Text.Font = GameFont.Medium;
+            Widgets.Label(titleRect, title);
+            Text.Font = GameFont.Small;
+
+            Widgets.CheckboxLabeled(boxRect, "Enable", ref enabled);
+
+            if (!tooltip.NullOrEmpty())
+                TooltipHandler.TipRegion(row, tooltip);
+
+            listing.Gap(4f);
+        }
+
         private void DrawProfileEditorTab(Rect outRect)
         {
             float viewHeight = Math.Max(profileEditorViewHeight, 1000f);
@@ -143,16 +165,18 @@ namespace PawnVarianceMod
             var v = Active;
 
             Section(listing, "Overall quality");
-            Caption(listing, "Drives every roll below. Higher quality shifts a pawn toward the top of each range you set.");
             v.averageQuality = LabeledSlider(listing, $"Average pawn quality:  {v.averageQuality:F2}", v.averageQuality, 0f, 1f);
             float meanComposite = CalculateCompositeScore(v.averageQuality, v);
             Caption(listing, $"An average pawn currently reads as: {TierForQuality(meanComposite)} (Overall Power: {meanComposite:F2})");
             DrawQualityDistributionCurve(listing, v);
 
-            Section(listing, "Skills");
-            listing.CheckboxLabeled("Enable skill variance", ref v.enableSkillVariance);
+            SectionHeader(listing, "Skills", ref v.enableSkillVariance,
+                "When off, this profile leaves vanilla skill levels untouched.");
+            Rect noiseRow = listing.GetRect(28f);
+            Widgets.Label(noiseRow.LeftPart(0.42f), $"Skill noise:  {v.skillNoise:F2}");
+            v.skillNoise = Widgets.HorizontalSlider(noiseRow.RightPart(0.56f), v.skillNoise, 0f, 1f);
+            TooltipHandler.TipRegion(noiseRow, "How widely a single pawn's own skills spread apart from each other.");
             listing.Gap(ControlGap);
-            v.skillNoise = LabeledSlider(listing, $"Skill noise (spread between a pawn's own skills):  {v.skillNoise:F2}", v.skillNoise, 0f, 1f);
             LabeledFloatRange(listing, "Skill shift", SkillShiftRangeId,
                 ref v.skillShiftMin, ref v.skillShiftMax, -20f, 20f, ToStringStyle.FloatOne,
                 "Applied on top of the vanilla roll. The low handle is the shift for the lowest-quality pawn, the high handle for the highest-quality pawn.");
@@ -160,8 +184,8 @@ namespace PawnVarianceMod
             if (ModsConfig.BiotechActive)
                 DrawChildSkillShift(listing, v);
 
-            Section(listing, "Traits");
-            listing.CheckboxLabeled("Enable trait variance", ref v.enableTraitVariance);
+            SectionHeader(listing, "Traits", ref v.enableTraitVariance,
+                "When off, this profile leaves vanilla trait generation untouched.");
             listing.CheckboxLabeled(
                 "Count xenotype/forced traits toward the trait count",
                 ref v.countProtectedTraits,
@@ -173,12 +197,20 @@ namespace PawnVarianceMod
                     ? "Total traits on the pawn, including xenotype and forced traits."
                     : "Traits this mod rolls. Xenotype, gene, backstory and scenario traits are added on top.");
 
-            Section(listing, "Passions");
-            listing.CheckboxLabeled("Enable passion variance", ref v.enablePassionVariance);
-            listing.Gap(ControlGap);
-            v.passionNoise = LabeledSlider(listing, $"Passion noise (how much the total budget varies):  {v.passionNoise:F2}", v.passionNoise, 0f, 1f);
-            v.passionMajorBias = LabeledSlider(listing, $"Major passion bias:  {v.passionMajorBias:F2}", v.passionMajorBias, 0f, 1f);
-            Caption(listing, "How often the budget is spent on a Major passion instead of a Minor one. Majors always go to the pawn's best skills first.");
+            SectionHeader(listing, "Passions", ref v.enablePassionVariance,
+                "When off, this profile leaves vanilla passion assignment untouched.");
+            Rect passionRow = listing.GetRect(28f);
+            Rect leftHalf = passionRow.LeftPart(0.48f);
+            Rect rightHalf = passionRow.RightPart(0.48f);
+
+            Widgets.Label(leftHalf.LeftPart(0.52f), $"Passion noise:  {v.passionNoise:F2}");
+            v.passionNoise = Widgets.HorizontalSlider(leftHalf.RightPart(0.46f), v.passionNoise, 0f, 1f);
+            TooltipHandler.TipRegion(leftHalf, "How much the total passion budget varies between pawns.");
+
+            Widgets.Label(rightHalf.LeftPart(0.52f), $"Major bias:  {v.passionMajorBias:F2}");
+            v.passionMajorBias = Widgets.HorizontalSlider(rightHalf.RightPart(0.46f), v.passionMajorBias, 0f, 1f);
+            TooltipHandler.TipRegion(rightHalf, "How often the budget is spent on a Major passion instead of a Minor one. Majors always go to the pawn's best skills first.");
+
             listing.Gap(ControlGap);
             LabeledFloatRange(listing, "Passion budget", PassionCountRangeId,
                 ref v.passionCountMin, ref v.passionCountMax, 0f, 24f, ToStringStyle.FloatOne,
