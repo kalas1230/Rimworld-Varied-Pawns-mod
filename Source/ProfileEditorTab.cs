@@ -8,6 +8,43 @@ namespace PawnVarianceMod
 {
     public partial class PawnVarianceSettings
     {
+        // Stable, unique control ids. Widgets.FloatRange uses the caller-supplied id
+        // against its own static drag-tracking state, NOT GUIUtility.GetControlID
+        // auto-indexing -- so conditionally rendering the child-shift block cannot
+        // shift these or hijack an in-progress drag. Never reuse or auto-generate them.
+        private const int SkillShiftRangeId      = 1001;
+        private const int ChildSkillShiftRangeId = 1002;
+        private const int TraitCountRangeId      = 1003;
+        private const int PassionCountRangeId    = 1004;
+
+        private const float RangeRowHeight = 32f;
+        private const float RangeLabelFrac = 0.42f;
+
+        private static void LabeledFloatRange(
+            Listing_Standard listing, string label, int id,
+            ref float lo, ref float hi, float min, float max,
+            ToStringStyle style, string tooltip = null)
+        {
+            Rect row = listing.GetRect(RangeRowHeight);
+            Rect labelRect = row.LeftPart(RangeLabelFrac);
+            Rect rangeRect = row.RightPart(1f - RangeLabelFrac - 0.02f);
+
+            // Vertically centre the label against the range control.
+            labelRect.y += 4f;
+            Widgets.Label(labelRect, label);
+
+            // Marshal into a local: an r-value struct cannot be passed by ref.
+            var range = new FloatRange(lo, hi);
+            Widgets.FloatRange(rangeRect, id, ref range, min, max, null, style);
+            lo = range.min;
+            hi = range.max;
+
+            if (!tooltip.NullOrEmpty())
+                TooltipHandler.TipRegion(row, tooltip);
+
+            listing.Gap(ControlGap);
+        }
+
         private void DrawProfileEditorTab(Rect outRect)
         {
             float viewHeight = Math.Max(profileEditorViewHeight, 1000f);
@@ -116,9 +153,9 @@ namespace PawnVarianceMod
             listing.CheckboxLabeled("Enable skill variance", ref v.enableSkillVariance);
             listing.Gap(ControlGap);
             v.skillNoise = LabeledSlider(listing, $"Skill noise (spread between a pawn's own skills):  {v.skillNoise:F2}", v.skillNoise, 0f, 1f);
-            Caption(listing, $"Skill shift range (applied on top of vanilla roll):  {v.skillShiftMin:F1} to {v.skillShiftMax:F1}");
-            v.skillShiftMin = LabeledSlider(listing, $"Lowest-quality pawn shift:  {v.skillShiftMin:F1}", v.skillShiftMin, -20f, 20f);
-            v.skillShiftMax = LabeledSlider(listing, $"Highest-quality pawn shift:  {v.skillShiftMax:F1}", v.skillShiftMax, -20f, 20f);
+            LabeledFloatRange(listing, "Skill shift", SkillShiftRangeId,
+                ref v.skillShiftMin, ref v.skillShiftMax, -20f, 20f, ToStringStyle.FloatOne,
+                "Applied on top of the vanilla roll. The low handle is the shift for the lowest-quality pawn, the high handle for the highest-quality pawn.");
 
             if (ModsConfig.BiotechActive)
                 DrawChildSkillShift(listing, v);
@@ -130,11 +167,11 @@ namespace PawnVarianceMod
                 ref v.countProtectedTraits,
                 "When off, the range below counts only traits this mod rolls, and traits forced by a xenotype, gene, backstory or scenario are added on top. When on, the range counts every trait the pawn has. Forced traits are never removed either way.");
             listing.Gap(ControlGap);
-            Caption(listing, v.countProtectedTraits
-                ? $"Total traits on the pawn:  {v.traitCountMin:F0} to {v.traitCountMax:F0}"
-                : $"Traits this mod rolls, forced traits added on top:  {v.traitCountMin:F0} to {v.traitCountMax:F0}");
-            v.traitCountMin = LabeledSlider(listing, $"Lowest-quality pawn:  {v.traitCountMin:F0}", v.traitCountMin, 0f, 15f);
-            v.traitCountMax = LabeledSlider(listing, $"Highest-quality pawn:  {v.traitCountMax:F0}", v.traitCountMax, 0f, 15f);
+            LabeledFloatRange(listing, "Trait count", TraitCountRangeId,
+                ref v.traitCountMin, ref v.traitCountMax, 0f, 15f, ToStringStyle.Integer,
+                v.countProtectedTraits
+                    ? "Total traits on the pawn, including xenotype and forced traits."
+                    : "Traits this mod rolls. Xenotype, gene, backstory and scenario traits are added on top.");
 
             Section(listing, "Passions");
             listing.CheckboxLabeled("Enable passion variance", ref v.enablePassionVariance);
@@ -143,9 +180,9 @@ namespace PawnVarianceMod
             v.passionMajorBias = LabeledSlider(listing, $"Major passion bias:  {v.passionMajorBias:F2}", v.passionMajorBias, 0f, 1f);
             Caption(listing, "How often the budget is spent on a Major passion instead of a Minor one. Majors always go to the pawn's best skills first.");
             listing.Gap(ControlGap);
-            Caption(listing, $"Total passion budget (Minor = 1, Major = 2):  {v.passionCountMin:F0} to {v.passionCountMax:F0}");
-            v.passionCountMin = LabeledSlider(listing, $"Lowest-quality pawn:  {v.passionCountMin:F0}", v.passionCountMin, 0f, 24f);
-            v.passionCountMax = LabeledSlider(listing, $"Highest-quality pawn:  {v.passionCountMax:F0}", v.passionCountMax, 0f, 24f);
+            LabeledFloatRange(listing, "Passion budget", PassionCountRangeId,
+                ref v.passionCountMin, ref v.passionCountMax, 0f, 24f, ToStringStyle.FloatOne,
+                "Minor passion = 1, Major passion = 2. Presets use fractional budgets, so this reads to one decimal.");
             Caption(listing, v.passionCountMin > 0f
                 ? "Rolls vary around these target values, but every pawn receives at least one passion."
                 : "Minimum is 0, so pawns with no passions are possible.");
@@ -164,9 +201,9 @@ namespace PawnVarianceMod
             if (v.applyChildSkillShift)
             {
                 listing.Gap(ControlGap);
-                Caption(listing, $"Skill shift at age 13 growth moment (hard limit per skill):  {v.childSkillShiftMin:F1} to {v.childSkillShiftMax:F1}");
-                v.childSkillShiftMin = LabeledSlider(listing, $"Lowest-quality pawn shift:  {v.childSkillShiftMin:F1}", v.childSkillShiftMin, -20f, 20f);
-                v.childSkillShiftMax = LabeledSlider(listing, $"Highest-quality pawn shift:  {v.childSkillShiftMax:F1}", v.childSkillShiftMax, -20f, 20f);
+                LabeledFloatRange(listing, "Child shift at 13", ChildSkillShiftRangeId,
+                    ref v.childSkillShiftMin, ref v.childSkillShiftMax, -20f, 20f, ToStringStyle.FloatOne,
+                    "Hard limit per skill at the age-13 growth moment.");
                 Caption(listing, v.childSkillShiftMin >= 0f
                     ? "The minimum is at or above zero, so growing up can never cost a pawn skill levels."
                     : $"The minimum is below zero, so a low-quality pawn can lose up to {-v.childSkillShiftMin:F0} levels in a skill on their birthday.");
