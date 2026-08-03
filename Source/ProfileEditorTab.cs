@@ -173,7 +173,10 @@ namespace PawnVarianceMod
             SectionHeader(listing, "Skills", ref v.enableSkillVariance,
                 "When off, this profile leaves vanilla skill levels untouched.");
             Rect noiseRow = listing.GetRect(28f);
-            Widgets.Label(noiseRow.LeftPart(0.42f), $"Skill noise:  {v.skillNoise:F2}");
+            Rect noiseLabelRect = noiseRow.LeftPart(0.42f);
+            // Vertically centre the label against the range control.
+            noiseLabelRect.y += 4f;
+            Widgets.Label(noiseLabelRect, $"Skill noise:  {v.skillNoise:F2}");
             v.skillNoise = Widgets.HorizontalSlider(noiseRow.RightPart(0.56f), v.skillNoise, 0f, 1f);
             TooltipHandler.TipRegion(noiseRow, "How widely a single pawn's own skills spread apart from each other.");
             listing.Gap(ControlGap);
@@ -203,11 +206,17 @@ namespace PawnVarianceMod
             Rect leftHalf = passionRow.LeftPart(0.48f);
             Rect rightHalf = passionRow.RightPart(0.48f);
 
-            Widgets.Label(leftHalf.LeftPart(0.52f), $"Passion noise:  {v.passionNoise:F2}");
+            Rect passionNoiseLabelRect = leftHalf.LeftPart(0.52f);
+            // Vertically centre the label against the range control.
+            passionNoiseLabelRect.y += 4f;
+            Widgets.Label(passionNoiseLabelRect, $"Passion noise:  {v.passionNoise:F2}");
             v.passionNoise = Widgets.HorizontalSlider(leftHalf.RightPart(0.46f), v.passionNoise, 0f, 1f);
             TooltipHandler.TipRegion(leftHalf, "How much the total passion budget varies between pawns.");
 
-            Widgets.Label(rightHalf.LeftPart(0.52f), $"Major bias:  {v.passionMajorBias:F2}");
+            Rect majorBiasLabelRect = rightHalf.LeftPart(0.52f);
+            // Vertically centre the label against the range control.
+            majorBiasLabelRect.y += 4f;
+            Widgets.Label(majorBiasLabelRect, $"Major bias:  {v.passionMajorBias:F2}");
             v.passionMajorBias = Widgets.HorizontalSlider(rightHalf.RightPart(0.46f), v.passionMajorBias, 0f, 1f);
             TooltipHandler.TipRegion(rightHalf, "How often the budget is spent on a Major passion instead of a Minor one. Majors always go to the pawn's best skills first.");
 
