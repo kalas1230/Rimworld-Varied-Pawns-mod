@@ -1,14 +1,80 @@
 # Handover — Varied Pawns Mod
 
-Date: 2026-08-02
+Date: 2026-08-03
 Repo: `C:\Users\gokal\Desktop\Rimworld-mod\Rimworld-Pawn-variance-mod`
-Branch: **`main`**
+Branch: **`feature/profile-editor-layout`** (14 commits ahead of `main`, **unmerged**)
 
 ---
 
 # ⚠️ CURRENT PRIORITIES & IN-PROGRESS TASKS
 
-## 1. User File-by-File Code Review (IN PROGRESS)
+## 1. 🔴 IN-GAME VERIFICATION OF THE PROFILE EDITOR REDESIGN — **BLOCKING, NOT STARTED**
+
+> [!CAUTION]
+> **This is the gate on everything else.** The redesign in §5 is fully built, reviewed, and
+> builds clean at `0 Error(s), 0 Warning(s)` — but **RimWorld was never launched during
+> implementation**. There is no test harness for IMGUI code in this repo, so all seven tasks
+> were verified by compilation and static review only. Every layout number is arithmetic.
+> **No pixel of this UI has been observed.** Do not merge, and do not describe it as working,
+> until this checklist is done.
+
+Deploy first:
+
+```powershell
+tasklist /FI "IMAGENAME eq RimWorldWin64.exe"   # must show no running instance
+dotnet build Source/PawnVarianceMod.csproj
+Copy-Item Assemblies/PawnVarianceMod.dll, Assemblies/PawnVarianceMod.pdb "C:/Program Files (x86)/Steam/steamapps/common/RimWorld/Mods/PawnVarianceMod/Assemblies/" -Force
+```
+
+Then Mod Settings → Varied Pawns → Profile Editor, in priority order:
+
+- [ ] **1a. Fractional passion values survive** *(most important — guards Rule 5 data)*
+      Select `Elite`, click `Duplicate`, read the Passion budget row.
+      Expect **`2.5` to `6.2`**, NOT `2` to `6`. Drag the high handle: the label must track in
+      `0.1` steps. Reopen settings and confirm it is still fractional.
+      A truncated integer here means an `IntRange` or a cast crept in — stop and report.
+- [ ] **1b. Row 3 does not overflow on a preset** *(a real defect was found and fixed here
+      by static review; the fix itself is unverified)*
+      Select `Faithful`. The label reads `Average pawn quality:  0.50  (read-only)` and must
+      sit on **one line**, not wrap into the distribution curve below it.
+- [ ] **1c. All nine preset descriptions render whole**
+      Cycle every preset. No ellipsis, no clipping — especially `Distinct`, the 122-character
+      longest. Then select a custom profile: the same row must show a fingerprint, never blank,
+      and the header must not change height between the two.
+- [ ] **1d. The header actually stays pinned**
+      Scroll the body to the bottom — the picker, description, quality slider and curve must
+      stay put. Drag a `Trait count` handle at the bottom and confirm the curve is still visible
+      and updating.
+- [ ] **1e. `Faithful` reads `Standard (0.31)`** — if it shows `0.48`, the wrong value is being
+      formatted.
+- [ ] **1f. Enable-state matrix**
+      | Selected | `+ New` | `Duplicate` | `Rename` | `Reset` | `Delete` | Body |
+      |---|---|---|---|---|---|---|
+      | `Faithful` (preset) | live | live | greyed | greyed | greyed | greyed |
+      | custom, only 1 exists | live | live | live | live | **greyed** | live |
+      | custom, 2+ exist | live | live | live | live | live | live |
+
+      The first row matters most: a new user lands on `Faithful`, and if `+ New` / `Duplicate`
+      are greyed the tab is a dead end.
+- [ ] **1g. Worst-case height** — Biotech active, `Also shift skills when a child grows up`
+      **checked**. Predicted ~501px of body against a ~460px viewport, i.e. ~1.1 screens.
+      Record the real figure if it is far off.
+- [ ] **1h. Rename and the destructive guards** — rename a custom profile via the dialog;
+      confirm `Reset` shows an amber confirmation and `Delete` a red destructive one, and that
+      cancelling each changes nothing.
+- [ ] **1i. Import/export round trip** — set a fractional passion budget, export to clipboard,
+      delete the profile, re-import. Values must return fractional.
+- [ ] **1j. No drag hijack** — drag each of the four range controls in turn, toggling
+      `applyChildSkillShift` between drags. Dragging one must never move another.
+- [ ] **1k. No clipping at your UI scale** — the five action buttons, and the passion-row
+      labels (which get only ~25% of the row width each).
+
+**If everything passes:** the branch is ready to merge and §5's warning banner should be
+replaced with a normal completion note.
+**If something fails:** report which item, and the open Minor findings in
+`.superpowers/sdd/progress.md` may already name the cause.
+
+## 2. User File-by-File Code Review (IN PROGRESS)
 - [x] [`Source/VarianceProfile.cs`](file:///C:/Users/gokal/Desktop/Rimworld-mod/Rimworld-Pawn-variance-mod/Source/VarianceProfile.cs) — **DONE (REVIEWED)** (Legacy enum/comment cleanup, `IExposable` parameterless `ExposeData()`, `distributionParamsDirty` cache, `MakeValues()`, `?`/`??` operators).
 - [ ] [`Source/PawnVarianceSettings.cs`](file:///C:/Users/gokal/Desktop/Rimworld-mod/Rimworld-Pawn-variance-mod/Source/PawnVarianceSettings.cs) — **NEXT UP**
 - [ ] [`Source/SettingsTransfer.cs`](file:///C:/Users/gokal/Desktop/Rimworld-mod/Rimworld-Pawn-variance-mod/Source/SettingsTransfer.cs) — **NEXT UP**
@@ -23,7 +89,7 @@ Branch: **`main`**
 - [ ] [`Source/PawnVarianceMod.cs`](file:///C:/Users/gokal/Desktop/Rimworld-mod/Rimworld-Pawn-variance-mod/Source/PawnVarianceMod.cs)
 - [ ] [`Source/Constants.cs`](file:///C:/Users/gokal/Desktop/Rimworld-mod/Rimworld-Pawn-variance-mod/Source/Constants.cs)
 
-## 2. ~~Dynamic Data-Driven Trait Desirability Engine~~ — ✅ CLOSED, RESOLVED DIFFERENTLY (2026-08-03)
+## 3. ~~Dynamic Data-Driven Trait Desirability Engine~~ — ✅ CLOSED, RESOLVED DIFFERENTLY (2026-08-03)
 
 > [!IMPORTANT]
 > **⛔ DO NOT BUILD THE ENGINE DESCRIBED BELOW. The underlying problem is already fixed.**
@@ -59,13 +125,13 @@ Branch: **`main`**
   3. **Weighted Probabilistic Selection**: Use calculated desirability scores to shift trait selection weights during pawn generation (`TraitVarianceApplier`). High quality ($Q > 0.60$) shifts weight toward positive/synergistic traits; low quality ($Q < 0.40$) shifts weight toward flawed traits; neutral quality ($Q = 0.50$) uses vanilla distribution. Keeps character flaws possible for story generator texture while eliminating the high-quality penalty.
   4. **NO UI SETTINGS / TOGGLES**: Built directly into the algorithm—no settings page toggles or user options required.
 
-## 3. Overrides Tab Safety UX Improvement — ✅ COMPLETED (2026-08-03)
+## 4. Overrides Tab Safety UX Improvement — ✅ COMPLETED (2026-08-03)
 - **Button Colors**: Applied soft green (`new Color(0.4f, 0.85f, 0.4f)`) to `+ Add Override`, amber (`new Color(0.9f, 0.75f, 0.3f)`) to `Restore Defaults`, and soft red (`new Color(1f, 0.4f, 0.4f)`) to `Delete All`.
 - **Confirmation Dialogs**: Added explicit confirmation prompts (`Dialog_MessageBox.CreateConfirmation`) before performing `Delete All` (destructive) or `Restore Defaults` (non-destructive reset) actions for both Faction and Xenotype overrides.
 
-## 4. Profile Editor Tab Layout Redesign — ⚠️ BUILT, NOT YET VISUALLY VERIFIED (2026-08-03)
+## 5. Profile Editor Tab Layout Redesign — ⚠️ BUILT, NOT YET VISUALLY VERIFIED (2026-08-03)
 
-Branch: `feature/profile-editor-layout`. **Not merged.**
+Branch: `feature/profile-editor-layout`. **Not merged. Gated on §1's checklist.**
 Spec: [`docs/superpowers/specs/2026-08-03-profile-editor-layout-design.md`](file:///C:/Users/gokal/Desktop/Rimworld-mod/Rimworld-Pawn-variance-mod/docs/superpowers/specs/2026-08-03-profile-editor-layout-design.md)
 Plan: [`docs/superpowers/plans/2026-08-03-profile-editor-layout.md`](file:///C:/Users/gokal/Desktop/Rimworld-mod/Rimworld-Pawn-variance-mod/docs/superpowers/plans/2026-08-03-profile-editor-layout.md)
 
@@ -75,7 +141,7 @@ Plan: [`docs/superpowers/plans/2026-08-03-profile-editor-layout.md`](file:///C:/
 > static review only — RimWorld was never launched. The header sums to exactly
 > `140f` on paper and the body should land near 500px, but **no pixel of this has
 > been seen**. Do not treat it as working until the owner's in-game pass is done.
-> The pass checklist is §9 of the plan.
+> **The checklist is §1 at the top of this document** (also spec §9 / plan Task 7).
 
 - **Pinned 140px header** (`DrawProfileEditorHeader`), does not scroll: profile picker +
   5-button action strip (`+ New`, `Duplicate`, `Rename`, `Reset`, `Delete`) / one-line
