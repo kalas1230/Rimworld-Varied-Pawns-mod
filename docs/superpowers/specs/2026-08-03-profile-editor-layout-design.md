@@ -45,7 +45,7 @@ mouse-wheel conflict.
 ┌─ PINNED, 140px, does not scroll ───────────────────────────────────────┐
 │ [ Faithful  ▼ ]      [+ New] [Duplicate] [Rename] [Reset] [Delete]     │
 │ Closest to unmodded RimWorld. The reference all envelope…    (hover ⓘ) │
-│ Average pawn quality  ────────●────────  0.50   →  Standard (0.48)     │
+│ Average pawn quality  ────────●────────  0.50   →  Standard (0.31)     │
 │ ▁▂▄▆█▆▄▂▁  full-width distribution curve, always full opacity          │
 ├─ SCROLLS, 460px viewport ──────────────────────────────────────────────┤
 │ Skills                                                          [x]    │
@@ -68,7 +68,7 @@ mouse-wheel conflict.
 |---|---|---|
 | 1 | 28 | Profile picker `ButtonText` (~240px, opens the existing `ProfileMenu` FloatMenu) + action strip: `+ New`, `Duplicate`, `Rename`, `Reset`, `Delete` |
 | 2 | 20 | One-line description / fingerprint (§3.2) |
-| 3 | 28 | `Average pawn quality` label + inline slider + `→ {tier} ({score})` readout, all on one row |
+| 3 | 28 | `Average pawn quality` label + inline slider + `→ {tier} ({power})` readout, all on one row |
 | 4 | 54 | `DrawQualityDistributionCurve` at full 840px width, unchanged |
 | — | ~10 | gaps |
 
@@ -78,14 +78,37 @@ constant and cannot drift.
 Row 3 replaces a `LabeledSlider` (56px) with an inline row (28px). The curve keeps its full width,
 which was the decisive objection to the rail.
 
+**The Row 3 readout keeps both halves.** It renders `{tier} (Overall Power: {score:F2})` — the tier
+from `TierForQuality` (`PawnVarianceSettings.cs:1120-1126`: `Incompetent` / `Standard` /
+`Specialist` / `Prodigy`) and the raw composite from `CalculateCompositeScore`. `Faithful` reads
+**`Standard (0.31)`** — its measured baseline is `0.3068`. The bare number looks like developer
+noise next to the tier name, but it is the unit the entire calibration regime is expressed in:
+HANDOVER requires every preset to stay within ±35% of `Faithful` at N=1/5/25/50, measured on
+exactly this value. Removing it would mean tuning a governed parameter with no readout. Kept.
+
 ### 3.2 The description slot
 
-One constant-height 20px row, never empty, content depends on selection:
+One constant-height 20px row, **never empty in either state**, content depends on selection:
 
-- **Preset selected** — the authored `preset.description`, rendered with `Text.WordWrap = false` so
-  it clips rather than reflows. Full text on hover via `TooltipHandler.TipRegion`.
+- **Preset selected** — the authored `preset.description`, shown in full.
 - **Custom profile selected** — an auto-generated one-line **fingerprint** derived from the live
   values, e.g. `Traits 2–4 · Passions 2.5–6.2 · Skill shift −1.0 to +3.8 · Quality 0.55`.
+
+```
+Faithful  →  Closest to unmodded RimWorld. Two to three traits, a vanilla passion budget…
+Custom 1  →  Traits 2–4 · Passions 2.5–6.2 · Skill shift −1.0 to +3.8 · Quality 0.55
+```
+
+**No truncation is needed at this width.** The longest shipped description is 122 characters
+(`VarianceProfile.cs:219`). `Caption` renders at `GameFont.Tiny` (~5-6px/char), so 122 chars is
+~630-730px against an 840px row — all nine fit whole on one line. An earlier draft specified
+`Text.WordWrap = false` clipping plus a hover tooltip; that was a carry-over from the rejected
+270px rail and is not required here.
+
+`GenText.Truncate(width)` and a `TooltipHandler.TipRegion` carrying the full string are still
+applied, but purely as a safety net for a long localization or an unusually long fingerprint. They
+should never fire in the shipped English strings. The row height is constant either way, so the
+header cannot shift when switching profiles.
 
 Rationale for the fingerprint over a user-editable description field: a user-authored field is
 blank for most players, so it trades a boilerplate string for an empty bar. The fingerprint is
@@ -149,6 +172,23 @@ review (370-394px), which under-counted `Section` and `LabeledSlider`.
 the common path to solve ~40px of scroll. The `BeginScrollView` and the existing dynamic
 `profileEditorViewHeight = listing.CurHeight + 40f` measurement are **retained** — they cost nothing
 and cover large UI scales and long localizations.
+
+### 3.5 No new persisted UI state
+
+The persistence cost raised during review applied to **foldouts** — each section's expanded flag
+would have had to survive closing the window, meaning new fields and new `Scribe_Values` entries.
+Foldouts are dropped, so that cost is gone.
+
+Nothing else in this design persists:
+
+- The profile picker is a `FloatMenu` (`ProfileMenu`, `PawnVarianceSettings.cs:829-846`) — it opens,
+  takes one click, and closes. No state.
+- `profileEditorScrollPos` and `currentTab` (`PawnVarianceSettings.cs:58-61`) are private in-memory
+  fields, not Scribed. They reset on game restart, which is correct, and this redesign does not
+  change that.
+- The fingerprint is derived at draw time (§3.2) and stores nothing.
+
+Net change to the save/settings schema: **none.**
 
 ## 4. Rename
 
@@ -258,8 +298,12 @@ consistent with the Overrides tab.
 1. `dotnet build Source/PawnVarianceMod.csproj` → `0 Error(s), 0 Warning(s)`.
 2. In-game, Biotech **active**, `applyChildSkillShift` **checked**, on a custom profile: confirm the
    body is ~500px and the header stays pinned while the body scrolls.
-3. Select each of the 9 presets: description clips to one line, tooltip shows full prose, curve
-   redraws at full opacity, body stays greyed, `+ New` / `Duplicate` stay clickable.
+3. Select each of the 9 presets: the description renders **whole**, on one line, with no ellipsis —
+   especially `Distinct`, the 122-character longest. Curve redraws at full opacity, body stays
+   greyed, `+ New` / `Duplicate` stay clickable.
+   Then select a custom profile: the same row shows a fingerprint, never blank, and the header does
+   not change height between the two.
+   Confirm `Faithful` reads `Standard (Overall Power: 0.31)`, not `0.48`.
 4. Duplicate `Elite`, then read back `passionCountMax`: must still be `6.2`, not `6`. Drag the
    passion range and confirm the label tracks in `0.1` steps.
 5. Toggle `applyChildSkillShift` repeatedly while dragging the skill-shift range: no drag hijack
