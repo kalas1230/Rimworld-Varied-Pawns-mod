@@ -47,7 +47,7 @@ Standing up an in-process test harness for IMGUI code is a larger project than t
 | `Source/PawnVarianceSettings.cs` | Modify (shrinks ~460 lines) | Settings state, Scribe, override resolution, General + Overrides tabs, shared UI helpers |
 | `Source/ProfileEditorTab.cs` | **Create** | `partial class PawnVarianceSettings` — everything that draws the Profile Editor tab: header, body, range helpers, distribution curve |
 | `Source/Dialog_RenameProfile.cs` | **Create** | `Dialog_Rename` subclass for renaming a custom profile |
-| `Source/VarianceProfile.cs` | **Not modified** | Presets and values are governed by HANDOVER Rule 5 |
+| `Source/VarianceProfile.cs` | Modify (Task 5 only, ~6 lines) | Adds `IRenameable` to `CustomProfile` so `Dialog_Rename<T>` accepts it. **No numeric field, preset value, or `ExposeData` body may change** — those are governed by HANDOVER Rule 5. |
 
 `PawnVarianceSettings.cs` is 1255 lines. This work adds ~250 lines of UI code to it. Task 1 moves the Profile Editor drawing into its own partial-class file first so the later tasks edit a focused ~500-line file. The split is purely mechanical — no logic changes.
 
