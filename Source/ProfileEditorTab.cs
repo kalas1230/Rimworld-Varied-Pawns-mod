@@ -167,7 +167,7 @@ namespace PawnVarianceMod
             // shift when switching profiles.
             Rect descRow = new Rect(rect.x, pickerRow.yMax + 4f, rect.width, 20f);
             var preset = VarianceProfiles.GetPresetById(activeProfileId);
-            string descText = (preset != null && !string.IsNullOrEmpty(preset.description))
+            string descText = (preset != null && !string.IsNullOrWhiteSpace(preset.description))
                 ? preset.description
                 : ProfileFingerprint(v);
 
@@ -177,7 +177,13 @@ namespace PawnVarianceMod
             // chars, ~630-730px at Tiny against ~840px). Truncate is a safety net for
             // long localizations and unusually long fingerprints only.
             string truncatedDesc = descText.Truncate(descRow.width);
+            // Row 2 has a fixed 20px height that the rest of the header's geometry
+            // depends on. Word-wrap must be off so an overlong string clips to one
+            // line instead of wrapping to a second and overlapping the rows below.
+            bool prevWordWrap = Text.WordWrap;
+            Text.WordWrap = false;
             Widgets.Label(descRow, string.IsNullOrEmpty(truncatedDesc) ? descText : truncatedDesc);
+            Text.WordWrap = prevWordWrap;
             GUI.color = Color.white;
             Text.Font = GameFont.Small;
 
