@@ -36,8 +36,11 @@ namespace PawnVarianceMod
             // Marshal into a local: an r-value struct cannot be passed by ref.
             var range = new FloatRange(lo, hi);
             Widgets.FloatRange(rangeRect, id, ref range, min, max, null, style);
-            lo = range.min;
-            hi = range.max;
+            if (PawnVarianceMod.Settings.EditingCustom)
+            {
+                lo = range.min;
+                hi = range.max;
+            }
 
             if (!tooltip.NullOrEmpty())
                 TooltipHandler.TipRegion(row, tooltip);
@@ -59,7 +62,9 @@ namespace PawnVarianceMod
             Widgets.Label(titleRect, title);
             Text.Font = GameFont.Small;
 
-            Widgets.CheckboxLabeled(boxRect, "Enable", ref enabled);
+            bool val = enabled;
+            Widgets.CheckboxLabeled(boxRect, "Enable", ref val);
+            if (PawnVarianceMod.Settings.EditingCustom) enabled = val;
 
             if (!tooltip.NullOrEmpty())
                 TooltipHandler.TipRegion(row, tooltip);
@@ -82,7 +87,7 @@ namespace PawnVarianceMod
                 outRect.width,
                 outRect.height - HeaderHeight - HeaderGutter);
 
-            float viewHeight = Math.Max(profileEditorViewHeight, bodyRect.height);
+            float viewHeight = Math.Max(profileEditorViewHeight, 750f);
             var viewRect = new Rect(0f, 0f, bodyRect.width - 24f, viewHeight);
 
             Widgets.BeginScrollView(bodyRect, ref profileEditorScrollPos, viewRect);
@@ -94,7 +99,7 @@ namespace PawnVarianceMod
             DrawGenerationSettings(listing);
             GUI.enabled = wasEnabled;
 
-            profileEditorViewHeight = listing.CurHeight + 40f;
+            profileEditorViewHeight = Math.Max(listing.CurHeight + 40f, 750f);
             listing.End();
             Widgets.EndScrollView();
         }
@@ -144,17 +149,19 @@ namespace PawnVarianceMod
             }
             GUI.color = Color.white;
 
-            GUI.enabled = outerEnabled && customProfile != null && customProfiles.Count > 1;
+            GUI.enabled = outerEnabled && customProfile != null;
             GUI.color = new Color(1f, 0.4f, 0.4f);
-            if (Widgets.ButtonText(NextBtn(4), "Delete") && customProfile != null && customProfiles.Count > 1)
+            if (Widgets.ButtonText(NextBtn(4), "Delete") && customProfile != null)
             {
                 Find.WindowStack.Add(Dialog_MessageBox.CreateConfirmation(
                     $"Delete the profile \"{customProfile.name}\"? This cannot be undone.",
                     () =>
                     {
                         customProfiles.Remove(customProfile);
-                        if (customProfiles.Count > 0)
+                        if (customProfiles != null && customProfiles.Count > 0)
                             activeProfileId = customProfiles[0].id;
+                        else
+                            activeProfileId = VarianceProfiles.FaithfulId;
                         RefreshResolved();
                     },
                     destructive: true));
@@ -216,10 +223,9 @@ namespace PawnVarianceMod
             // The readout is output, not input -- always full opacity, even on a
             // read-only preset, so presets stay comparable by cycling the picker.
             float meanComposite = CalculateCompositeScore(v.averageQuality, v);
-            Widgets.Label(qReadout, $"→  {TierForQuality(meanComposite)} ({meanComposite:F2})");
+            Widgets.Label(qReadout, $"→  {PawnVarianceSettings.FormatPowerReadout(meanComposite)}");
             TooltipHandler.TipRegion(qReadout,
-                "Overall Power: the composite score every profile is calibrated against. "
-                + "Faithful's baseline is 0.31.");
+                "Overall Power: the percentage difference compared to Faithful baseline (0.31).");
 
             // Row 4: the distribution curve, full width, never greyed.
             Rect curveRect = new Rect(rect.x, qualityRow.yMax + 4f, rect.width, CurveHeight);
@@ -248,7 +254,8 @@ namespace PawnVarianceMod
             // Vertically centre the label against the range control.
             noiseLabelRect.y += 4f;
             Widgets.Label(noiseLabelRect, $"Skill noise:  {v.skillNoise:F2}");
-            v.skillNoise = Widgets.HorizontalSlider(noiseRow.RightPart(0.56f), v.skillNoise, 0f, 1f);
+            float sNoiseVal = Widgets.HorizontalSlider(noiseRow.RightPart(0.56f), v.skillNoise, 0f, 1f);
+            if (EditingCustom) v.skillNoise = sNoiseVal;
             TooltipHandler.TipRegion(noiseRow, "How widely a single pawn's own skills spread apart from each other.");
             listing.Gap(ControlGap);
             LabeledFloatRange(listing, "Skill shift", SkillShiftRangeId,
@@ -260,10 +267,12 @@ namespace PawnVarianceMod
 
             SectionHeader(listing, "Traits", ref v.enableTraitVariance,
                 "When off, this profile leaves vanilla trait generation untouched.");
+            bool countVal = v.countProtectedTraits;
             listing.CheckboxLabeled(
                 "Count xenotype/forced traits toward the trait count",
-                ref v.countProtectedTraits,
+                ref countVal,
                 "When off, the range below counts only traits this mod rolls, and traits forced by a xenotype, gene, backstory or scenario are added on top. When on, the range counts every trait the pawn has. Forced traits are never removed either way.");
+            if (EditingCustom) v.countProtectedTraits = countVal;
             listing.Gap(ControlGap);
             LabeledFloatRange(listing, "Trait count", TraitCountRangeId,
                 ref v.traitCountMin, ref v.traitCountMax, 0f, 15f, ToStringStyle.Integer,
@@ -281,14 +290,16 @@ namespace PawnVarianceMod
             // Vertically centre the label against the range control.
             passionNoiseLabelRect.y += 4f;
             Widgets.Label(passionNoiseLabelRect, $"Passion noise:  {v.passionNoise:F2}");
-            v.passionNoise = Widgets.HorizontalSlider(leftHalf.RightPart(0.46f), v.passionNoise, 0f, 1f);
+            float pNoiseVal = Widgets.HorizontalSlider(leftHalf.RightPart(0.46f), v.passionNoise, 0f, 1f);
+            if (EditingCustom) v.passionNoise = pNoiseVal;
             TooltipHandler.TipRegion(leftHalf, "How much the total passion budget varies between pawns.");
 
             Rect majorBiasLabelRect = rightHalf.LeftPart(0.52f);
             // Vertically centre the label against the range control.
             majorBiasLabelRect.y += 4f;
             Widgets.Label(majorBiasLabelRect, $"Major bias:  {v.passionMajorBias:F2}");
-            v.passionMajorBias = Widgets.HorizontalSlider(rightHalf.RightPart(0.46f), v.passionMajorBias, 0f, 1f);
+            float mBiasVal = Widgets.HorizontalSlider(rightHalf.RightPart(0.46f), v.passionMajorBias, 0f, 1f);
+            if (EditingCustom) v.passionMajorBias = mBiasVal;
             TooltipHandler.TipRegion(rightHalf, "How often the budget is spent on a Major passion instead of a Minor one. Majors always go to the pawn's best skills first.");
 
             listing.Gap(ControlGap);
@@ -303,12 +314,14 @@ namespace PawnVarianceMod
         private void DrawChildSkillShift(Listing_Standard listing, VarianceProfileValues v)
         {
             listing.Gap(ControlGap);
+            bool childVal = v.applyChildSkillShift;
             listing.CheckboxLabeled(
                 "Also shift skills when a child grows up",
-                ref v.applyChildSkillShift,
+                ref childVal,
                 "Not recommended. Diverges from vanilla growth mechanics.\n\n"
                 + "Vanilla never re-rolls skill levels at age 13. Enabling this shifts skills at that growth moment, so colonists can gain or lose skill levels on their birthday.\n\n"
                 + "Traits and passions at 13 are unaffected by this toggle. Requires \"Apply variance to children growing up\" in General settings.");
+            if (EditingCustom) v.applyChildSkillShift = childVal;
 
             if (v.applyChildSkillShift)
             {

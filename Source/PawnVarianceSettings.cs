@@ -81,7 +81,6 @@ namespace PawnVarianceMod
 
             if (hasInitializedDefaultOverrides && !force)
             {
-                EnsureDefaultPriorities();
                 return;
             }
 
@@ -129,18 +128,6 @@ namespace PawnVarianceMod
             SetXenotypeDefault("Neanderthal", VarianceProfiles.DistinctId, OverridePriority.Normal);
             SetXenotypeDefault("Yttakin", VarianceProfiles.DistinctId, OverridePriority.Normal);
             SetXenotypeDefault("Impid", VarianceProfiles.WildcardId, OverridePriority.Normal);
-        }
-
-        private void EnsureDefaultPriorities()
-        {
-            if (factionOverrides.ContainsKey("Empire") && !factionPriorities.ContainsKey("Empire")) factionPriorities["Empire"] = OverridePriority.Highest;
-            if (factionOverrides.ContainsKey("Ancients") && !factionPriorities.ContainsKey("Ancients")) factionPriorities["Ancients"] = OverridePriority.High;
-            if (factionOverrides.ContainsKey("AncientsHostile") && !factionPriorities.ContainsKey("AncientsHostile")) factionPriorities["AncientsHostile"] = OverridePriority.High;
-
-            if (xenotypeOverrides.ContainsKey("Sanguophage") && !xenotypePriorities.ContainsKey("Sanguophage")) xenotypePriorities["Sanguophage"] = OverridePriority.Highest;
-            if (xenotypeOverrides.ContainsKey("Highmate") && !xenotypePriorities.ContainsKey("Highmate")) xenotypePriorities["Highmate"] = OverridePriority.High;
-            if (xenotypeOverrides.ContainsKey("Genie") && !xenotypePriorities.ContainsKey("Genie")) xenotypePriorities["Genie"] = OverridePriority.High;
-            if (xenotypeOverrides.ContainsKey("Hussar") && !xenotypePriorities.ContainsKey("Hussar")) xenotypePriorities["Hussar"] = OverridePriority.High;
         }
 
         private void SetFactionDefault(string factionDef, string profileId, OverridePriority priority)
@@ -305,12 +292,9 @@ namespace PawnVarianceMod
 
             if (Scribe.mode == LoadSaveMode.PostLoadInit)
             {
-                if (customProfiles == null || customProfiles.Count == 0)
+                if (customProfiles == null)
                 {
-                    customProfiles = new List<CustomProfile>
-                    {
-                        new CustomProfile("custom_1", "Custom 1", VarianceProfiles.VanillaLike.MakeValues())
-                    };
+                    customProfiles = new List<CustomProfile>();
                 }
 
                 foreach (var profile in customProfiles)
@@ -575,10 +559,7 @@ namespace PawnVarianceMod
                     if (Widgets.ButtonText(prioRect, currentPrio.ToString()))
                     {
                         string k = key;
-                        PriorityMenu(p => {
-                            if (p == OverridePriority.Normal) factionPriorities.Remove(k);
-                            else factionPriorities[k] = p;
-                        });
+                        PriorityMenu(p => factionPriorities[k] = p);
                     }
                     if (Widgets.ButtonText(removeRect, "Remove"))
                     {
@@ -606,6 +587,7 @@ namespace PawnVarianceMod
                         options.Add(new FloatMenuOption(fDef.LabelCap, () =>
                         {
                             factionOverrides[fDef.defName] = VarianceProfiles.DistinctId;
+                            factionPriorities[fDef.defName] = OverridePriority.Normal;
                         }));
                     }
                 }
@@ -691,10 +673,7 @@ namespace PawnVarianceMod
                     if (Widgets.ButtonText(prioRect, currentPrio.ToString()))
                     {
                         string k = key;
-                        PriorityMenu(p => {
-                            if (p == OverridePriority.Normal) xenotypePriorities.Remove(k);
-                            else xenotypePriorities[k] = p;
-                        });
+                        PriorityMenu(p => xenotypePriorities[k] = p);
                     }
                     if (Widgets.ButtonText(removeRect, "Remove"))
                     {
@@ -722,6 +701,7 @@ namespace PawnVarianceMod
                         options.Add(new FloatMenuOption(xDef.LabelCap, () =>
                         {
                             xenotypeOverrides[xDef.defName] = VarianceProfiles.DistinctId;
+                            xenotypePriorities[xDef.defName] = OverridePriority.Normal;
                         }));
                     }
                 }
@@ -933,10 +913,7 @@ namespace PawnVarianceMod
 
         private void ResetToDefaults()
         {
-            customProfiles = new List<CustomProfile>
-            {
-                new CustomProfile("custom_1", "Custom 1", VarianceProfiles.VanillaLike.MakeValues())
-            };
+            customProfiles = new List<CustomProfile>();
             activeProfileId = VarianceProfiles.FaithfulId;
             hostileProfileId = VarianceProfiles.DistinctId;
             applyToHostilePawns = true;
@@ -952,12 +929,23 @@ namespace PawnVarianceMod
             RefreshResolved();
         }
 
-        private static string TierForQuality(float quality)
+        public static string FormatPowerReadout(float meanComposite)
         {
-            if (quality < 0.2f) return "Incompetent";
-            if (quality < 0.5f) return "Standard";
-            if (quality < 0.8f) return "Specialist";
-            return "Prodigy";
+            if (cachedFaithfulBaseline < 0f)
+            {
+                cachedFaithfulBaseline = CalculateCompositeScore(0.50f, VarianceProfiles.VanillaLike.MakeValues());
+            }
+            float baseC = cachedFaithfulBaseline;
+            if (baseC <= 0f) return $"Power: {meanComposite:F2}";
+
+            float diffPct = ((meanComposite - baseC) / baseC) * 100f;
+            if (Mathf.Abs(diffPct) < 0.5f)
+            {
+                return $"Baseline ({meanComposite:F2})";
+            }
+
+            string sign = diffPct > 0f ? "+" : "";
+            return $"{sign}{diffPct:F0}% vs Faithful ({meanComposite:F2})";
         }
 
         private static float CalculateCompositeScore(float q, VarianceProfileValues v)
@@ -966,8 +954,8 @@ namespace PawnVarianceMod
             if (v.enableSkillVariance)
             {
                 float shift = Mathf.Lerp(v.skillShiftMin, v.skillShiftMax, q);
-                float avgSkill = Mathf.Clamp(Constants.AssumedVanillaSkillBaseline + shift, 0f, 20f);
-                skillNorm = Mathf.Clamp01(avgSkill / 20f);
+                float avgSkill = Mathf.Clamp(Constants.AssumedVanillaSkillBaseline + shift, 0f, Constants.AssumedMaxSkillLevel);
+                skillNorm = Mathf.Clamp01(avgSkill / Constants.AssumedMaxSkillLevel);
             }
 
             // Trait count is deliberately NOT scored. It is a VARIANCE parameter, not a mean one:
@@ -987,11 +975,14 @@ namespace PawnVarianceMod
             {
                 float budget = Mathf.Lerp(v.passionCountMin, v.passionCountMax, q);
                 float pips = budget * (1f + 0.25f * v.passionMajorBias);
-                passionNorm = Mathf.Clamp01(pips / 12f);
+                passionNorm = Mathf.Clamp01(pips / Constants.MaxPassionPips);
             }
 
-            float wS = v.enableSkillVariance ? 1.2f : 0f;
-            float wP = v.enablePassionVariance ? 1.0f : 0f;
+            // These two weights and Constants.MaxPassionPips jointly set the skill/passion exchange
+            // rate — see the derivation on Constants.CompositeSkillWeight. Retuning one alone moves
+            // the rate without looking like it does.
+            float wS = v.enableSkillVariance ? Constants.CompositeSkillWeight : 0f;
+            float wP = v.enablePassionVariance ? Constants.CompositePassionWeight : 0f;
             float totalW = wS + wP;
 
             if (totalW <= 0f) return q;
