@@ -191,19 +191,25 @@ namespace PawnVarianceMod
 
             // Row 3: quality slider + tier/power readout.
             Rect qualityRow = new Rect(rect.x, descRow.yMax + 2f, rect.width, 28f);
-            Rect qLabel = qualityRow.LeftPart(0.26f);
-            Rect qSlider = new Rect(qualityRow.x + rect.width * 0.27f, qualityRow.y + 3f, rect.width * 0.40f, 22f);
+            Rect qLabel = qualityRow.LeftPart(0.34f);
+            Rect qSlider = new Rect(qualityRow.x + rect.width * 0.35f, qualityRow.y + 3f, rect.width * 0.33f, 22f);
             Rect qReadout = qualityRow.RightPart(0.30f);
 
+            // Row 3 is fixed-height like Row 2 above, so the label must clip
+            // rather than wrap -- the longest (read-only) variant would otherwise
+            // wrap onto a second line and overlap the distribution curve below.
+            bool prevQualityWordWrap = Text.WordWrap;
+            Text.WordWrap = false;
             Widgets.Label(qLabel, EditingCustom
                 ? $"Average pawn quality:  {v.averageQuality:F2}"
                 : $"Average pawn quality:  {v.averageQuality:F2}  (read-only)");
+            Text.WordWrap = prevQualityWordWrap;
 
             GUI.enabled = outerEnabled && EditingCustom;
             v.averageQuality = Widgets.HorizontalSlider(qSlider, v.averageQuality, 0f, 1f);
             GUI.enabled = outerEnabled;
 
-            Rect qLabelAndSlider = qualityRow.LeftPart(0.67f);
+            Rect qLabelAndSlider = qualityRow.LeftPart(0.68f);
             TooltipHandler.TipRegion(qLabelAndSlider,
                 "Drives every roll below. Higher quality shifts a pawn toward the top of each range you set.");
 
