@@ -67,7 +67,7 @@ namespace PawnVarianceMod
             listing.Gap(4f);
         }
 
-        private const float HeaderHeight = 86f;
+        private const float HeaderHeight = 118f;
         private const float HeaderGutter = 8f;
         private const float CurveHeight = 54f;
 
@@ -89,8 +89,6 @@ namespace PawnVarianceMod
             var listing = new Listing_Standard();
             listing.Begin(viewRect);
 
-            DrawProfileSelector(listing);
-
             bool wasEnabled = GUI.enabled;
             GUI.enabled = wasEnabled && EditingCustom;
             DrawGenerationSettings(listing);
@@ -106,8 +104,65 @@ namespace PawnVarianceMod
             var v = Active;
             bool outerEnabled = GUI.enabled;
 
+            // Row 1: profile picker + action strip.
+            Rect pickerRow = new Rect(rect.x, rect.y, rect.width, 28f);
+            Rect pickerRect = new Rect(pickerRow.x, pickerRow.y, 240f, 28f);
+            if (Widgets.ButtonText(pickerRect, LabelFor(activeProfileId)))
+                ProfileMenu(id => { activeProfileId = id; RefreshResolved(); });
+
+            var customProfile = GetCustomProfile(activeProfileId);
+            float stripX = pickerRect.xMax + 10f;
+            float stripW = pickerRow.xMax - stripX;
+            float btnW = (stripW - 4f * 6f) / 5f;
+
+            Rect NextBtn(int i) => new Rect(stripX + i * (btnW + 6f), pickerRow.y, btnW, 28f);
+
+            GUI.color = new Color(0.4f, 0.85f, 0.4f);
+            if (Widgets.ButtonText(NextBtn(0), "+ New"))
+                CreateNewCustomProfile();
+            GUI.color = Color.white;
+
+            if (Widgets.ButtonText(NextBtn(1), "Duplicate"))
+                DuplicateCurrentProfile();
+
+            GUI.enabled = outerEnabled && customProfile != null;
+
+            if (Widgets.ButtonText(NextBtn(2), "Rename") && customProfile != null)
+                Find.WindowStack.Add(new Dialog_RenameProfile(customProfile, RefreshResolved));
+
+            GUI.color = new Color(0.9f, 0.75f, 0.3f);
+            if (Widgets.ButtonText(NextBtn(3), "Reset") && customProfile != null)
+            {
+                Find.WindowStack.Add(Dialog_MessageBox.CreateConfirmation(
+                    "Reset this profile to Faithful? All of its current values will be replaced.",
+                    () =>
+                    {
+                        customProfile.values = VarianceProfiles.VanillaLike.MakeValues();
+                        RefreshResolved();
+                    },
+                    destructive: false));
+            }
+            GUI.color = Color.white;
+
+            GUI.enabled = outerEnabled && customProfile != null && customProfiles.Count > 1;
+            GUI.color = new Color(1f, 0.4f, 0.4f);
+            if (Widgets.ButtonText(NextBtn(4), "Delete") && customProfile != null)
+            {
+                Find.WindowStack.Add(Dialog_MessageBox.CreateConfirmation(
+                    $"Delete the profile \"{customProfile.name}\"? This cannot be undone.",
+                    () =>
+                    {
+                        customProfiles.Remove(customProfile);
+                        activeProfileId = customProfiles[0].id;
+                        RefreshResolved();
+                    },
+                    destructive: true));
+            }
+            GUI.color = Color.white;
+            GUI.enabled = outerEnabled;
+
             // Row 3: quality slider + tier/power readout.
-            Rect qualityRow = new Rect(rect.x, rect.y, rect.width, 28f);
+            Rect qualityRow = new Rect(rect.x, pickerRow.yMax + 4f, rect.width, 28f);
             Rect qLabel = qualityRow.LeftPart(0.26f);
             Rect qSlider = new Rect(qualityRow.x + rect.width * 0.27f, qualityRow.y + 3f, rect.width * 0.40f, 22f);
             Rect qReadout = qualityRow.RightPart(0.30f);
@@ -135,78 +190,6 @@ namespace PawnVarianceMod
             // Row 4: the distribution curve, full width, never greyed.
             Rect curveRect = new Rect(rect.x, qualityRow.yMax + 4f, rect.width, CurveHeight);
             DrawQualityDistributionCurve(curveRect, v);
-        }
-
-        private void DrawProfileSelector(Listing_Standard listing)
-        {
-            Text.Font = GameFont.Medium;
-            listing.Label("Profile");
-            Text.Font = GameFont.Small;
-
-            if (listing.ButtonText(LabelFor(activeProfileId)))
-                ProfileMenu(id => { activeProfileId = id; RefreshResolved(); });
-
-            var preset = VarianceProfiles.GetPresetById(activeProfileId);
-            string desc = preset != null ? preset.description : VarianceProfiles.CustomDescription;
-            GUI.color = new Color(1f, 1f, 1f, 0.7f);
-            listing.Label(desc);
-            GUI.color = Color.white;
-
-            var customProfile = GetCustomProfile(activeProfileId);
-            if (customProfile != null)
-            {
-                DrawNameField(listing, customProfile);
-
-                if (listing.ButtonText("+ New Custom Profile"))
-                {
-                    CreateNewCustomProfile();
-                }
-
-                if (listing.ButtonText("Duplicate Profile"))
-                {
-                    DuplicateCurrentProfile();
-                }
-
-                if (listing.ButtonText("Reset to Faithful"))
-                {
-                    customProfile.values = VarianceProfiles.VanillaLike.MakeValues();
-                    RefreshResolved();
-                }
-
-                if (customProfiles.Count > 1)
-                {
-                    if (listing.ButtonText("Delete this profile"))
-                    {
-                        customProfiles.Remove(customProfile);
-                        activeProfileId = customProfiles[0].id;
-                        RefreshResolved();
-                    }
-                }
-            }
-            else
-            {
-                if (listing.ButtonText("+ New Custom Profile"))
-                {
-                    CreateNewCustomProfile();
-                }
-
-                if (listing.ButtonText("Duplicate Profile"))
-                {
-                    DuplicateCurrentProfile();
-                }
-            }
-        }
-
-        private void DrawNameField(Listing_Standard listing, CustomProfile profile)
-        {
-            if (profile == null) return;
-            Rect row = listing.GetRect(28f);
-            Rect labelRect = row.LeftPart(0.34f);
-            Rect fieldRect = row.RightPart(0.64f);
-
-            Widgets.Label(labelRect, "Profile name");
-            profile.name = Widgets.TextField(fieldRect, profile.name ?? string.Empty);
-            listing.Gap(ControlGap);
         }
 
         private void DrawGenerationSettings(Listing_Standard listing)

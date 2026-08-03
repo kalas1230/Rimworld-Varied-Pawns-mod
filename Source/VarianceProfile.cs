@@ -123,11 +123,20 @@ namespace PawnVarianceMod
         }
     }
 
-    public class CustomProfile : IExposable
+    public class CustomProfile : IExposable, IRenameable
     {
         public string id;
         public string name;
         public VarianceProfileValues values = new VarianceProfileValues();
+
+        public string RenamableLabel
+        {
+            get => name;
+            set => name = value;
+        }
+
+        public string BaseLabel => name;
+        public string InspectLabel => name;
 
         public CustomProfile() { }
 
