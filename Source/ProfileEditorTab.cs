@@ -146,14 +146,15 @@ namespace PawnVarianceMod
 
             GUI.enabled = outerEnabled && customProfile != null && customProfiles.Count > 1;
             GUI.color = new Color(1f, 0.4f, 0.4f);
-            if (Widgets.ButtonText(NextBtn(4), "Delete") && customProfile != null)
+            if (Widgets.ButtonText(NextBtn(4), "Delete") && customProfile != null && customProfiles.Count > 1)
             {
                 Find.WindowStack.Add(Dialog_MessageBox.CreateConfirmation(
                     $"Delete the profile \"{customProfile.name}\"? This cannot be undone.",
                     () =>
                     {
                         customProfiles.Remove(customProfile);
-                        activeProfileId = customProfiles[0].id;
+                        if (customProfiles.Count > 0)
+                            activeProfileId = customProfiles[0].id;
                         RefreshResolved();
                     },
                     destructive: true));
