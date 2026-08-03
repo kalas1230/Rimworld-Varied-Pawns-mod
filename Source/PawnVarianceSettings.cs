@@ -60,6 +60,10 @@ namespace PawnVarianceMod
         private Vector2 profileEditorScrollPos = Vector2.zero;
         private Vector2 overridesScrollPos = Vector2.zero;
 
+        private float generalViewHeight = 800f;
+        private float profileEditorViewHeight = 2000f;
+        private float overridesViewHeight = 1600f;
+
         public bool EditingCustom => GetCustomProfile(activeProfileId) != null;
 
         public PawnVarianceSettings()
@@ -456,7 +460,7 @@ namespace PawnVarianceMod
 
         private void DrawGeneralTab(Rect outRect)
         {
-            const float viewHeight = 760f;
+            float viewHeight = Math.Max(generalViewHeight, 600f);
             var viewRect = new Rect(0f, 0f, outRect.width - 24f, viewHeight);
 
             Widgets.BeginScrollView(outRect, ref generalScrollPos, viewRect);
@@ -478,13 +482,14 @@ namespace PawnVarianceMod
 
             DrawGlobalSettings(listing);
 
+            generalViewHeight = listing.CurHeight + 40f;
             listing.End();
             Widgets.EndScrollView();
         }
 
         private void DrawProfileEditorTab(Rect outRect)
         {
-            const float viewHeight = 1600f;
+            float viewHeight = Math.Max(profileEditorViewHeight, 1000f);
             var viewRect = new Rect(0f, 0f, outRect.width - 24f, viewHeight);
 
             Widgets.BeginScrollView(outRect, ref profileEditorScrollPos, viewRect);
@@ -498,13 +503,14 @@ namespace PawnVarianceMod
             DrawGenerationSettings(listing);
             GUI.enabled = wasEnabled;
 
+            profileEditorViewHeight = listing.CurHeight + 40f;
             listing.End();
             Widgets.EndScrollView();
         }
 
         private void DrawOverridesTab(Rect outRect)
         {
-            const float viewHeight = 1400f;
+            float viewHeight = Math.Max(overridesViewHeight, 1000f);
             var viewRect = new Rect(0f, 0f, outRect.width - 24f, viewHeight);
 
             Widgets.BeginScrollView(outRect, ref overridesScrollPos, viewRect);
@@ -544,6 +550,7 @@ namespace PawnVarianceMod
 
             GUI.enabled = wasEnabled;
 
+            overridesViewHeight = listing.CurHeight + 40f;
             listing.End();
             Widgets.EndScrollView();
         }
@@ -607,7 +614,8 @@ namespace PawnVarianceMod
                 }
             }
 
-            listing.Gap(ControlGap);
+            Color oldColor = GUI.color;
+            GUI.color = new Color(0.4f, 0.85f, 0.4f);
             if (listing.ButtonText("+ Add Faction Override"))
             {
                 var options = new List<FloatMenuOption>();
@@ -628,6 +636,7 @@ namespace PawnVarianceMod
                 }
                 Find.WindowStack.Add(new FloatMenu(options));
             }
+            GUI.color = oldColor;
 
             listing.Gap(4f);
             Rect factionActionRow = listing.GetRect(28f);
@@ -635,15 +644,31 @@ namespace PawnVarianceMod
             Rect delFactionRect = new Rect(factionActionRow.x, factionActionRow.y, halfWF, factionActionRow.height);
             Rect restoreFactionRect = new Rect(factionActionRow.x + halfWF + 8f, factionActionRow.y, halfWF, factionActionRow.height);
 
+            GUI.color = new Color(1f, 0.4f, 0.4f);
             if (Widgets.ButtonText(delFactionRect, "Delete All Faction Overrides"))
             {
-                factionOverrides.Clear();
-                factionPriorities.Clear();
+                Find.WindowStack.Add(Dialog_MessageBox.CreateConfirmation(
+                    "Are you sure you want to delete all faction overrides? This will clear all custom faction profile assignments.",
+                    () =>
+                    {
+                        factionOverrides.Clear();
+                        factionPriorities.Clear();
+                    },
+                    destructive: true));
             }
+
+            GUI.color = new Color(0.9f, 0.75f, 0.3f);
             if (Widgets.ButtonText(restoreFactionRect, "Restore Default Faction Overrides"))
             {
-                RestoreDefaultFactionOverrides();
+                Find.WindowStack.Add(Dialog_MessageBox.CreateConfirmation(
+                    "Are you sure you want to restore default faction overrides? This will reset all faction profile overrides to their default assignments.",
+                    () =>
+                    {
+                        RestoreDefaultFactionOverrides();
+                    },
+                    destructive: false));
             }
+            GUI.color = oldColor;
         }
 
         private void DrawXenotypeOverridesSection(Listing_Standard listing)
@@ -705,7 +730,8 @@ namespace PawnVarianceMod
                 }
             }
 
-            listing.Gap(ControlGap);
+            Color oldColor = GUI.color;
+            GUI.color = new Color(0.4f, 0.85f, 0.4f);
             if (listing.ButtonText("+ Add Xenotype Override"))
             {
                 var options = new List<FloatMenuOption>();
@@ -726,6 +752,7 @@ namespace PawnVarianceMod
                 }
                 Find.WindowStack.Add(new FloatMenu(options));
             }
+            GUI.color = oldColor;
 
             listing.Gap(4f);
             Rect xenoActionRow = listing.GetRect(28f);
@@ -733,15 +760,31 @@ namespace PawnVarianceMod
             Rect delXenoRect = new Rect(xenoActionRow.x, xenoActionRow.y, halfWX, xenoActionRow.height);
             Rect restoreXenoRect = new Rect(xenoActionRow.x + halfWX + 8f, xenoActionRow.y, halfWX, xenoActionRow.height);
 
+            GUI.color = new Color(1f, 0.4f, 0.4f);
             if (Widgets.ButtonText(delXenoRect, "Delete All Xenotype Overrides"))
             {
-                xenotypeOverrides.Clear();
-                xenotypePriorities.Clear();
+                Find.WindowStack.Add(Dialog_MessageBox.CreateConfirmation(
+                    "Are you sure you want to delete all xenotype overrides? This will clear all custom xenotype profile assignments.",
+                    () =>
+                    {
+                        xenotypeOverrides.Clear();
+                        xenotypePriorities.Clear();
+                    },
+                    destructive: true));
             }
+
+            GUI.color = new Color(0.9f, 0.75f, 0.3f);
             if (Widgets.ButtonText(restoreXenoRect, "Restore Default Xenotype Overrides"))
             {
-                RestoreDefaultXenotypeOverrides();
+                Find.WindowStack.Add(Dialog_MessageBox.CreateConfirmation(
+                    "Are you sure you want to restore default xenotype overrides? This will reset all xenotype profile overrides to their default assignments.",
+                    () =>
+                    {
+                        RestoreDefaultXenotypeOverrides();
+                    },
+                    destructive: false));
             }
+            GUI.color = oldColor;
         }
 
         private static void Section(Listing_Standard listing, string title)
@@ -954,16 +997,16 @@ namespace PawnVarianceMod
                 + "Vanilla never re-rolls skill levels at age 13. Enabling this shifts skills at that growth moment, so colonists can gain or lose skill levels on their birthday.\n\n"
                 + "Traits and passions at 13 are unaffected by this toggle. Requires \"Apply variance to children growing up\" in General settings.");
 
-            bool outerEnabled = GUI.enabled;
-            GUI.enabled = outerEnabled && v.applyChildSkillShift;
-            listing.Gap(ControlGap);
-            Caption(listing, $"Skill shift at age 13 growth moment (hard limit per skill):  {v.childSkillShiftMin:F1} to {v.childSkillShiftMax:F1}");
-            v.childSkillShiftMin = LabeledSlider(listing, $"Lowest-quality pawn shift:  {v.childSkillShiftMin:F1}", v.childSkillShiftMin, -20f, 20f);
-            v.childSkillShiftMax = LabeledSlider(listing, $"Highest-quality pawn shift:  {v.childSkillShiftMax:F1}", v.childSkillShiftMax, -20f, 20f);
-            Caption(listing, v.childSkillShiftMin >= 0f
-                ? "The minimum is at or above zero, so growing up can never cost a pawn skill levels."
-                : $"The minimum is below zero, so a low-quality pawn can lose up to {-v.childSkillShiftMin:F0} levels in a skill on their birthday.");
-            GUI.enabled = outerEnabled;
+            if (v.applyChildSkillShift)
+            {
+                listing.Gap(ControlGap);
+                Caption(listing, $"Skill shift at age 13 growth moment (hard limit per skill):  {v.childSkillShiftMin:F1} to {v.childSkillShiftMax:F1}");
+                v.childSkillShiftMin = LabeledSlider(listing, $"Lowest-quality pawn shift:  {v.childSkillShiftMin:F1}", v.childSkillShiftMin, -20f, 20f);
+                v.childSkillShiftMax = LabeledSlider(listing, $"Highest-quality pawn shift:  {v.childSkillShiftMax:F1}", v.childSkillShiftMax, -20f, 20f);
+                Caption(listing, v.childSkillShiftMin >= 0f
+                    ? "The minimum is at or above zero, so growing up can never cost a pawn skill levels."
+                    : $"The minimum is below zero, so a low-quality pawn can lose up to {-v.childSkillShiftMin:F0} levels in a skill on their birthday.");
+            }
         }
 
         private void DrawGlobalSettings(Listing_Standard listing)
@@ -1092,12 +1135,17 @@ namespace PawnVarianceMod
                 skillNorm = Mathf.Clamp01(avgSkill / 20f);
             }
 
-            float traitNorm = 0.25f;
-            if (v.enableTraitVariance)
-            {
-                float count = Mathf.Lerp(v.traitCountMin, v.traitCountMax, q);
-                traitNorm = Mathf.Clamp01(count / 8f);
-            }
+            // Trait count is deliberately NOT scored. It is a VARIANCE parameter, not a mean one:
+            // selection is delegated to vanilla's quality-blind picker, so more traits does not buy
+            // better traits, it buys more draws from an unchanged (roughly balanced) urn — including
+            // the ~4% that can trigger uncontrolled behaviour. Scoring it as `count / 8` treated a
+            // variance knob as a mean contributor, which (a) rewarded widening a spread even though
+            // that makes pawns strictly worse to play with, and (b) compressed the whole scale,
+            // because counts normalise into a narrow 0.25-0.625 band while skill/passion span
+            // 0.1-1.0 — propping weak profiles up and holding strong ones down. Trait count does
+            // feed Best-of-N power through variance, but quantifying that needs a per-trait value
+            // model, which is not recoverable from def data (see TRAIT-DESIRABILITY-RESEARCH.md).
+            // Omitting a term we cannot estimate beats including one we know is wrong.
 
             float passionNorm = 0.25f;
             if (v.enablePassionVariance)
@@ -1108,12 +1156,11 @@ namespace PawnVarianceMod
             }
 
             float wS = v.enableSkillVariance ? 1.2f : 0f;
-            float wT = v.enableTraitVariance ? 0.8f : 0f;
             float wP = v.enablePassionVariance ? 1.0f : 0f;
-            float totalW = wS + wT + wP;
+            float totalW = wS + wP;
 
             if (totalW <= 0f) return q;
-            return Mathf.Clamp01((wS * skillNorm + wT * traitNorm + wP * passionNorm) / totalW);
+            return Mathf.Clamp01((wS * skillNorm + wP * passionNorm) / totalW);
         }
 
         private static float cachedFaithfulBaseline = -1f;

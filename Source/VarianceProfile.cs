@@ -4,14 +4,8 @@ using Verse;
 
 namespace PawnVarianceMod
 {
-    // Which profile a set of generation settings is driven by. The three Custom slots are the only
-    // ones whose values the player can edit; the rest are read-only recipes.
-    //
-    // Two names here are load-bearing and must not be renamed. Scribe_Values writes an enum as its
-    // member NAME, not its number, so renaming a member silently orphans every settings file that
-    // holds it. `Custom` (value 0) in particular is what a settings file written before profiles
-    // existed — where the node is missing entirely — falls back to, which is how those files keep
-    // the values they already had. Custom2/Custom3 were added later and take fresh numbers.
+    // Identifies standard preset quality profiles. Custom profiles are dynamically stored
+    // in PawnVarianceSettings.customProfiles using dynamic string IDs.
     public enum VarianceProfileId
     {
         Custom = 0,
@@ -20,18 +14,16 @@ namespace PawnVarianceMod
         WildSpread = 3,
         GiftedColony = 4,
         Hardscrabble = 5,
-        Custom2 = 6,
-        Custom3 = 7,
-        Elite = 8,
-        Sovereign = 9,
-        Specialist = 10,
-        Scavenger = 11,
+        Elite = 6,
+        Sovereign = 7,
+        Specialist = 8,
+        Scavenger = 9,
     }
 
     // The generation-tuning half of the settings — everything a profile decides. Deliberately does
     // not include the housekeeping toggles (hostile pawns, grow-up, logging, tier tooltip): those
     // are player preferences that should survive a profile switch, not balance choices.
-    public class VarianceProfileValues
+    public class VarianceProfileValues : IExposable
     {
         public float averageQuality = 0.5f;
         public float skillNoise = 0.35f;
@@ -68,19 +60,19 @@ namespace PawnVarianceMod
         // because there is now more than one live set of values at a time — the main profile and the
         // hostile-faction profile — and a single shared cache would hand one profile's shape to the
         // other's rolls.
-        private bool betaDirty = true;
+        private bool distributionParamsDirty = true;
         private float cachedAlpha, cachedBeta;
 
-        public void MarkBetaDirty() => betaDirty = true;
+        public void MarkDistributionParamsDirty() => distributionParamsDirty = true;
 
         public void GetBetaAlphaBeta(out float alpha, out float beta)
         {
-            if (betaDirty)
+            if (distributionParamsDirty)
             {
                 float m = Mathf.Clamp(averageQuality, Constants.QualityClampEpsilon, 1f - Constants.QualityClampEpsilon);
                 cachedAlpha = m * Constants.BetaConcentrationK;
                 cachedBeta = (1f - m) * Constants.BetaConcentrationK;
-                betaDirty = false;
+                distributionParamsDirty = false;
             }
             alpha = cachedAlpha;
             beta = cachedBeta;
@@ -89,7 +81,7 @@ namespace PawnVarianceMod
         public VarianceProfileValues Clone()
         {
             var copy = (VarianceProfileValues)MemberwiseClone();
-            copy.betaDirty = true; // never inherit a cache entry that was computed for another instance's edits
+            copy.distributionParamsDirty = true; // never inherit a cache entry that was computed for another instance's edits
             return copy;
         }
 
@@ -105,35 +97,29 @@ namespace PawnVarianceMod
             if (childSkillShiftMin > childSkillShiftMax) { var t = childSkillShiftMin; childSkillShiftMin = childSkillShiftMax; childSkillShiftMax = t; }
             if (traitCountMin > traitCountMax) { var t = traitCountMin; traitCountMin = traitCountMax; traitCountMax = t; }
             if (passionCountMin > passionCountMax) { var t = passionCountMin; passionCountMin = passionCountMax; passionCountMax = t; }
-            betaDirty = true;
+            distributionParamsDirty = true;
         }
 
-        // The first custom slot passes an empty prefix, so its node names are the pre-profile field
-        // names verbatim: an existing settings file scribed before profiles existed loads straight
-        // into custom slot 1 and nobody's tuning is lost on update. Slots 2 and 3 were added later
-        // and carry a prefix, which is also what keeps three sets of identically-named values from
-        // colliding in one flat Scribe node. Defaults must stay in sync with
-        // VarianceProfiles.VanillaLike, which is what a fresh install starts every slot out as.
-        public void ExposeData(string prefix)
+        public void ExposeData()
         {
-            Scribe_Values.Look(ref averageQuality, prefix + "averageQuality", 0.5f);
-            Scribe_Values.Look(ref skillNoise, prefix + "skillNoise", 0.2f);
-            Scribe_Values.Look(ref passionNoise, prefix + "passionNoise", 0.25f);
-            Scribe_Values.Look(ref passionMajorBias, prefix + "passionMajorBias", 0.5f);
-            Scribe_Values.Look(ref skillShiftMin, prefix + "skillShiftMin", -3f);
-            Scribe_Values.Look(ref skillShiftMax, prefix + "skillShiftMax", 3f);
-            Scribe_Values.Look(ref applyChildSkillShift, prefix + "applyChildSkillShift", false);
-            Scribe_Values.Look(ref childSkillShiftMin, prefix + "childSkillShiftMin", -1f);
-            Scribe_Values.Look(ref childSkillShiftMax, prefix + "childSkillShiftMax", 2f);
-            Scribe_Values.Look(ref traitCountMin, prefix + "traitCountMin", 2f);
-            Scribe_Values.Look(ref traitCountMax, prefix + "traitCountMax", 3f);
-            Scribe_Values.Look(ref passionCountMin, prefix + "passionCountMin", 2f);
-            Scribe_Values.Look(ref passionCountMax, prefix + "passionCountMax", 6f);
-            Scribe_Values.Look(ref enableSkillVariance, prefix + "enableSkillVariance", true);
-            Scribe_Values.Look(ref enableTraitVariance, prefix + "enableTraitVariance", true);
-            Scribe_Values.Look(ref enablePassionVariance, prefix + "enablePassionVariance", true);
-            Scribe_Values.Look(ref countProtectedTraits, prefix + "countProtectedTraits", false);
-            betaDirty = true;
+            Scribe_Values.Look(ref averageQuality, "averageQuality", 0.5f);
+            Scribe_Values.Look(ref skillNoise, "skillNoise", 0.2f);
+            Scribe_Values.Look(ref passionNoise, "passionNoise", 0.25f);
+            Scribe_Values.Look(ref passionMajorBias, "passionMajorBias", 0.5f);
+            Scribe_Values.Look(ref skillShiftMin, "skillShiftMin", -3f);
+            Scribe_Values.Look(ref skillShiftMax, "skillShiftMax", 3f);
+            Scribe_Values.Look(ref applyChildSkillShift, "applyChildSkillShift", false);
+            Scribe_Values.Look(ref childSkillShiftMin, "childSkillShiftMin", -1f);
+            Scribe_Values.Look(ref childSkillShiftMax, "childSkillShiftMax", 2f);
+            Scribe_Values.Look(ref traitCountMin, "traitCountMin", 2f);
+            Scribe_Values.Look(ref traitCountMax, "traitCountMax", 3f);
+            Scribe_Values.Look(ref passionCountMin, "passionCountMin", 2f);
+            Scribe_Values.Look(ref passionCountMax, "passionCountMax", 6f);
+            Scribe_Values.Look(ref enableSkillVariance, "enableSkillVariance", true);
+            Scribe_Values.Look(ref enableTraitVariance, "enableTraitVariance", true);
+            Scribe_Values.Look(ref enablePassionVariance, "enablePassionVariance", true);
+            Scribe_Values.Look(ref countProtectedTraits, "countProtectedTraits", false);
+            distributionParamsDirty = true;
         }
     }
 
@@ -149,7 +135,7 @@ namespace PawnVarianceMod
         {
             this.id = id;
             this.name = name;
-            this.values = values ?? new VarianceProfileValues();
+            if (values != null) this.values = values;
         }
 
         public void ExposeData()
@@ -158,7 +144,7 @@ namespace PawnVarianceMod
             Scribe_Values.Look(ref name, "name", "Custom Profile");
             if (Scribe.mode == LoadSaveMode.LoadingVars && values == null)
                 values = new VarianceProfileValues();
-            values.ExposeData(string.Empty);
+            values.ExposeData();
         }
 
         public CustomProfile Clone(string newId, string newName)
@@ -188,6 +174,7 @@ namespace PawnVarianceMod
         public VarianceProfileValues MakeValues() => values.Clone();
     }
 
+	// In the current implementation preset profiles differ by +-35% at most from the faithful profile
     public static class VarianceProfiles
     {
         public const string FaithfulId = "preset_faithful";
@@ -223,8 +210,8 @@ namespace PawnVarianceMod
                 passionCountMax = 6f,
             });
 
-        // The mod's original pre-profile defaults, preserved so long-time users can get their old
-        // tuning back in one click.
+        // The mod's original intended values for randomness, before it got to where it is with multiple
+		// profiles, settings, and all the other stuff.
         public static readonly VarianceProfile BalancedVariance = new VarianceProfile(
             VarianceProfileId.BalancedVariance,
             DistinctId,
@@ -240,8 +227,12 @@ namespace PawnVarianceMod
                 skillShiftMax = 6f,
                 childSkillShiftMin = -2f,
                 childSkillShiftMax = 3f,
-                traitCountMin = 1f,
-                traitCountMax = 6f,
+                // Was 1-6. Narrowed purely to cut hazard exposure (22.2% -> 15.4% chance of a
+                // trait that can trigger uncontrolled behaviour); score is unaffected since trait
+                // count no longer feeds CalculateCompositeScore. Individual distinctiveness comes
+                // from the skill/passion spread, which is untouched.
+                traitCountMin = 2f,
+                traitCountMax = 4f,
                 passionCountMin = 1f,
                 passionCountMax = 7f,
             });
@@ -257,14 +248,18 @@ namespace PawnVarianceMod
                 skillNoise = 0.85f,
                 passionNoise = 0.85f,
                 passionMajorBias = 0.6f,
-                skillShiftMin = -12f,
-                skillShiftMax = 7f,
+                // Trimmed from -12/+7 and 12 passions: under Best-of-N its dispersion put it at
+                // +38% vs Faithful at N=50 (outside the +-35% envelope) while sitting at -26% at
+                // N=1. Still by far the widest preset — it is a variance preset, not a power tier,
+                // so it legitimately crosses Faithful as N rises; it just may not leave the band.
+                skillShiftMin = -10.5f,
+                skillShiftMax = 6f,
                 childSkillShiftMin = -5f,
                 childSkillShiftMax = 6f,
                 traitCountMin = 0f,
-                traitCountMax = 8f,
+                traitCountMax = 8f,   // deliberately left wide: chaos is this preset's whole point
                 passionCountMin = 0f,
-                passionCountMax = 12f,
+                passionCountMax = 11f,
             });
 
         public static readonly VarianceProfile GiftedColony = new VarianceProfile(
@@ -299,14 +294,18 @@ namespace PawnVarianceMod
                 skillNoise = 0.25f,
                 passionNoise = 0.25f,
                 passionMajorBias = 0.35f,
-                skillShiftMin = -4.5f,
+                // Raised from -4.5 skill floor and 1/4.5 passions: traits-free scoring put this at
+                // -45% vs Faithful at N=1, well outside the -35% envelope. The old numbers only
+                // looked acceptable because the trait term was propping it up (its traitNorm was
+                // its single best component). It remains the lowest power tier by a clear margin.
+                skillShiftMin = -3.4f,
                 skillShiftMax = 1.5f,
                 childSkillShiftMin = -2f,
                 childSkillShiftMax = 1f,
-                traitCountMin = 1f,
+                traitCountMin = 2f,   // was 1: floor raised to vanilla's, cuts hazard exposure
                 traitCountMax = 4f,
-                passionCountMin = 1f,
-                passionCountMax = 4.5f,
+                passionCountMin = 1.4f,
+                passionCountMax = 5f,
             });
 
         public static readonly VarianceProfile Elite = new VarianceProfile(
@@ -341,14 +340,16 @@ namespace PawnVarianceMod
                 skillNoise = 0.24f,
                 passionNoise = 0.25f,
                 passionMajorBias = 0.70f,
+                // Trimmed from 4.2 skill / 6.5 passions: was +36.4% vs Faithful at N=1, just outside
+                // the +35% envelope. Still the top power tier at every batch size.
                 skillShiftMin = 0f,
-                skillShiftMax = 4.2f,
+                skillShiftMax = 3.85f,
                 childSkillShiftMin = 0f,
                 childSkillShiftMax = 3f,
                 traitCountMin = 2f,
-                traitCountMax = 5f,
+                traitCountMax = 4f,   // was 5: cuts hazard exposure 18.9% -> 15.4%, matches Elite
                 passionCountMin = 3.0f,
-                passionCountMax = 6.5f,
+                passionCountMax = 6.2f,
             });
 
         public static readonly VarianceProfile Specialist = new VarianceProfile(
@@ -410,27 +411,8 @@ namespace PawnVarianceMod
 
         public const string CustomDescription = "Editable custom profile. Adjust sliders below to customize pawn generation.";
 
-        // The three editable slots, in display order. Index in this array is the slot number the
-        // settings object stores values and names under, so the order is persisted data — append
-        // here, never reorder.
-        public static readonly VarianceProfileId[] CustomSlots =
-        {
-            VarianceProfileId.Custom,
-            VarianceProfileId.Custom2,
-            VarianceProfileId.Custom3,
-        };
-
-        public static readonly string[] DefaultCustomNames = { "Custom 1", "Custom 2", "Custom 3" };
-
         public static bool IsCustom(VarianceProfileId id) => GetPreset(id) == null;
 
-        // -1 for anything that is not a custom slot. Callers that index arrays with this must check.
-        public static int CustomSlotIndex(VarianceProfileId id)
-        {
-            for (int i = 0; i < CustomSlots.Length; i++)
-                if (CustomSlots[i] == id) return i;
-            return -1;
-        }
 
         public static VarianceProfile GetPreset(VarianceProfileId id)
         {
