@@ -26,7 +26,7 @@ Then Mod Settings → Varied Pawns → Profile Editor status:
 - [x] **1a. Fractional passion values survive** *(Verified in-game via GABS UI layout: `Elite` passion budget reads `2.5 - 6.2`)*
 - [x] **1b. Row 3 does not overflow on a preset** *(Verified in-game via GABS UI layout: `Average pawn quality: 0.53 (read-only)` sits on a single line)*
 - [x] **1c. Preset descriptions render whole** *(Verified in-game via GABS: description text renders whole without clipping)*
-- [x] **1d. The header actually stays pinned** *(Verified in-game via GABS: 140px header section pinned above scroll view)*
+- [x] **1d. The header actually stays pinned** *(Verified in-game via GABS 2026-08-03, when the header was **140px**. It is **162px** as of 2026-08-04 — the Best-of-25 row was added. The pinning behaviour still holds; the height in this line is historical.)*
 - [x] **1e. `Faithful` reads `Baseline (0.25)`** *(Verified via `envelope_check.py` baseline derivation and readout math)*
 - [x] **1f. Enable-state matrix** *(Verified action button strip `+ New`, `Duplicate`, `Rename`, `Reset`, `Delete` rendered in header)*
 - [x] **1g. Scroll view & height fix** *(Fixed: set minimum view height to 750f in `ProfileEditorTab.cs` so scrollbar is always active and lower controls/sliders are accessible)*
@@ -58,11 +58,85 @@ All three live in `Constants.cs`. `docs/tools/envelope_check.py` ran and confirm
 
 **Status of sub-items:**
 
-- [x] **1.5a. Confirm the new readout in-game.** Verified via GABS: `Elite` reads `→ +21% vs Faithful (0.30)`.
+- [x] **1.5a. Confirm the new readout in-game.** Verified via GABS **on 2026-08-03**, when `Elite`
+  read `→ +21% vs Faithful (0.30)`. ⚠️ **Both figures are now dead** — that observation predates
+  the 2026-08-04 retune and the `0.3068` baseline era it was measured against. `Elite` now reads
+  **+24.0% at N=1 against a 0.2500 baseline** (see the pasted envelope table below, which is the
+  authority). Kept as a record of what was observed, not as a current expectation.
 - [x] **1.5b. Best-of-N readout** — shipped 2026-08-04. Header shows a `Typical` and a
   `Best of 25 rerolls` anchor. N=25 not N=50, and no `N` slider: it is a lens, not a setting.
+  **Two decisions were settled at build time — do not silently reverse them:**
+  (a) **N=25, not N=50.** At N=50 `Wildcard` displays near the envelope limit, and a UI that
+  advertises how close a preset sits to the limit invites players to treat the limit as a target.
+  (b) **The distribution curve stays a SINGLE line.** A second, ghosted Best-of-N curve was
+  considered and rejected — it doubles the ink for a quantity the two header anchors already
+  state numerically. If you think the curve needs a second line, this is where it was decided
+  against.
 - [x] **1.5c. `Gifted` profile tuning** — resolved by removing the preset entirely (2026-08-04).
-- [ ] **1.5d. Commit.**
+- [x] **1.5d. Commit.** Done in `a72a4cc` (2026-08-04).
+
+---
+
+# 🚧 WHERE THIS LEFT OFF — READ FIRST (2026-08-04)
+
+**Branch `feature/profile-editor-layout`, 8 commits ahead of the previous state. NOT MERGED.**
+
+The 7-task plan
+[`docs/superpowers/plans/2026-08-04-editor-readout-retune-and-overrides-cleanup.md`](docs/superpowers/plans/2026-08-04-editor-readout-retune-and-overrides-cleanup.md)
+is **fully implemented and code-reviewed**. Per-task progress, every review finding and every
+adjudication is in `.superpowers/sdd/progress.md` — **read that ledger before resuming.**
+
+### Commits in this batch
+
+| Commit | What |
+|---|---|
+| `a72a4cc` | Prerequisite: the previously-uncommitted composite retune + editor fixes (closes 1.5d) |
+| `da61ead` | The 2026-08-04 spec and plan |
+| `b5c3e5c` → `ca9b7f3` | Task 1: Profile Editor cursor split (3 commits, 2 fix passes) |
+| `f8df3f8` | Task 2: `Gifted` removed |
+| `2289fae` | Task 3: seven presets retuned + `envelope_check.py` repaired |
+| `db9a342` → `e7f551c` | Task 4: Best-of-25 readout (2 commits, 1 fix pass) |
+| `ba72b28` | Task 5: override column headers |
+| `548b4f4` | Task 6: prose moved to tooltips |
+| `0bf41fe` | Task 7: this document |
+
+### ⛔ What is NOT done
+
+1. **THE OWNER'S IN-GAME PASS — the only remaining gate.** Nothing in this batch has been seen
+   running. Subagents cannot launch RimWorld, so every in-game check across all 7 tasks was
+   deferred to a single owner-run pass. The full deferred list is in §1.6's warning block.
+   **Highest-risk items, because no static analysis can settle them:**
+   - Row 3's readout gained the word "Typical" — confirm it does not clip at `RightPart(0.34f)`
+     with real `GameFont` metrics, at default **and** non-default UI scale.
+   - The header is now 162px; confirm no row overlaps the distribution curve.
+   - The eight Best-of-25 figures on screen must match the envelope table's N=25 column:
+     Faithful `baseline`, Distinct `+10%`, Wildcard `+17%`, Desperate `-21%`, Elite `+15%`,
+     Sovereign `+19%`, Specialist `+7%`, Scavenger `-13%`.
+   - Cycling the editor picker must leave the General tab's Active Colony Profile unchanged.
+   - Settings export → import must still round-trip after the Share Settings caption move.
+
+2. **The final whole-branch review was never dispatched.** Per-task reviews all passed, but the
+   broad cross-task review — the one that catches assembled-geometry defects only visible with
+   the whole branch in view — has not run. The previous branch's final review found exactly such
+   a defect, so **do not skip this**. Point it at the Minor findings list in the ledger so it can
+   triage which must be fixed before merge.
+
+### ✅ What IS solid
+
+- `python docs/tools/envelope_check.py` → **PASS, exit 0**. Verified independently by the
+  controller; the table below is a character-for-character paste of its output.
+- `dotnet build` → `0 Error(s), 0 Warning(s)` at every commit.
+- Tightest envelope margin improved from **1.8pp → 6.5pp**.
+
+### 🐞 The one that nearly shipped
+
+Task 4's first commit compared a **Best-of-25** score against Faithful's **N=1** baseline. Every
+best-of-25 figure was ~36pp too high and `Desperate`/`Scavenger` flipped **positive** — precisely
+inverting the fact the second anchor exists to convey. The defect came from the plan's own code
+snippet, not the implementer. Fixed in `e7f551c`; the plan document was corrected too. **If you
+touch `FormatPowerPercent`, the baseline must be measured at the same N as the score.**
+
+---
 
 ## 1.6. 🟢 EDITOR CURSOR FIX, BEST-OF-25 READOUT, RETUNE & UI CLEANUP — SHIPPED (2026-08-04)
 
