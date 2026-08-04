@@ -106,16 +106,16 @@ namespace PawnVarianceMod
 
         private void DrawProfileEditorHeader(Rect rect)
         {
-            var v = Active;
+            var v = Editing;
             bool outerEnabled = GUI.enabled;
 
             // Row 1: profile picker + action strip.
             Rect pickerRow = new Rect(rect.x, rect.y, rect.width, 28f);
             Rect pickerRect = new Rect(pickerRow.x, pickerRow.y, 240f, 28f);
-            if (Widgets.ButtonText(pickerRect, LabelFor(activeProfileId)))
-                ProfileMenu(id => { activeProfileId = id; RefreshResolved(); });
+            if (Widgets.ButtonText(pickerRect, LabelFor(EditorProfileId)))
+                ProfileMenu(SetEditorProfile);
 
-            var customProfile = GetCustomProfile(activeProfileId);
+            var customProfile = GetCustomProfile(EditorProfileId);
             float stripX = pickerRect.xMax + 10f;
             float stripW = pickerRow.xMax - stripX;
             float btnW = (stripW - 4f * 6f) / 5f;
@@ -143,6 +143,8 @@ namespace PawnVarianceMod
                     () =>
                     {
                         customProfile.values = VarianceProfiles.VanillaLike.MakeValues();
+                        // The cached editing reference points at the object we just replaced.
+                        RefreshEditor();
                         RefreshResolved();
                     },
                     destructive: false));
@@ -157,11 +159,39 @@ namespace PawnVarianceMod
                     $"Delete the profile \"{customProfile.name}\"? This cannot be undone.",
                     () =>
                     {
+                        string deletedId = customProfile.id;
                         customProfiles.Remove(customProfile);
-                        if (customProfiles != null && customProfiles.Count > 0)
-                            activeProfileId = customProfiles[0].id;
-                        else
-                            activeProfileId = VarianceProfiles.FaithfulId;
+
+                        // The editor moves to whatever is left.
+                        SetEditorProfile(customProfiles != null && customProfiles.Count > 0
+                            ? customProfiles[0].id
+                            : VarianceProfiles.FaithfulId);
+
+                        // The deleted profile may ALSO have been in use as the colony profile, the
+                        // hostile profile, or in an override map. Before the editor cursor was split
+                        // out, the colony case was handled implicitly because they were one field.
+                        // Now it has to be explicit or the settings keep a dangling id.
+                        if (activeProfileId == deletedId) activeProfileId = VarianceProfiles.FaithfulId;
+                        if (hostileProfileId == deletedId) hostileProfileId = VarianceProfiles.DistinctId;
+
+                        var staleFactions = new List<string>();
+                        foreach (var kv in factionOverrides)
+                            if (kv.Value == deletedId) staleFactions.Add(kv.Key);
+                        foreach (var k in staleFactions)
+                        {
+                            factionOverrides.Remove(k);
+                            factionPriorities.Remove(k);
+                        }
+
+                        var staleXenotypes = new List<string>();
+                        foreach (var kv in xenotypeOverrides)
+                            if (kv.Value == deletedId) staleXenotypes.Add(kv.Key);
+                        foreach (var k in staleXenotypes)
+                        {
+                            xenotypeOverrides.Remove(k);
+                            xenotypePriorities.Remove(k);
+                        }
+
                         RefreshResolved();
                     },
                     destructive: true));
@@ -173,7 +203,7 @@ namespace PawnVarianceMod
             // Constant height, and never empty in either state, so the header cannot
             // shift when switching profiles.
             Rect descRow = new Rect(rect.x, pickerRow.yMax + 4f, rect.width, 20f);
-            var preset = VarianceProfiles.GetPresetById(activeProfileId);
+            var preset = VarianceProfiles.GetPresetById(EditorProfileId);
             string descText = (preset != null && !string.IsNullOrWhiteSpace(preset.description))
                 ? preset.description
                 : ProfileFingerprint(v);
@@ -245,7 +275,7 @@ namespace PawnVarianceMod
 
         private void DrawGenerationSettings(Listing_Standard listing)
         {
-            var v = Active;
+            var v = Editing;
 
             SectionHeader(listing, "Skills", ref v.enableSkillVariance,
                 "When off, this profile leaves vanilla skill levels untouched.");

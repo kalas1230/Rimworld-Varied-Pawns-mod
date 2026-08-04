@@ -28,6 +28,13 @@ namespace PawnVarianceMod
         public string activeProfileId = VarianceProfiles.FaithfulId;
         public string hostileProfileId = VarianceProfiles.DistinctId;
 
+        // Which profile the Profile Editor tab is LOOKING AT. Deliberately separate from
+        // activeProfileId and deliberately NOT Scribed: this is a view cursor, not a setting.
+        // Sharing one field meant that cycling the editor's picker to compare presets silently
+        // reassigned the colony's active profile out from under the player.
+        private string editorProfileId;
+        private VarianceProfileValues editingValues;
+
         public bool enableOverrides = true;
         public bool factionOverridesTakePrecedence = true;
         public bool hasInitializedDefaultOverrides = false;
@@ -64,7 +71,42 @@ namespace PawnVarianceMod
         private float profileEditorViewHeight = 2000f;
         private float overridesViewHeight = 1600f;
 
-        public bool EditingCustom => GetCustomProfile(activeProfileId) != null;
+        public string EditorProfileId
+        {
+            get
+            {
+                // Opens on whatever the colony is using, then diverges freely.
+                if (string.IsNullOrEmpty(editorProfileId))
+                    editorProfileId = activeProfileId;
+                return editorProfileId;
+            }
+        }
+
+        // Resolved values the Profile Editor edits. Cached rather than resolved per frame:
+        // Resolve() hands back a fresh MakeValues() for presets, so a per-frame call would
+        // allocate every frame and discard the Beta cache on VarianceProfileValues each time.
+        public VarianceProfileValues Editing
+        {
+            get
+            {
+                if (editingValues == null) RefreshEditor();
+                return editingValues;
+            }
+        }
+
+        public bool EditingCustom => GetCustomProfile(EditorProfileId) != null;
+
+        public void SetEditorProfile(string id)
+        {
+            editorProfileId = id;
+            RefreshEditor();
+        }
+
+        public void RefreshEditor()
+        {
+            editingValues = Resolve(EditorProfileId);
+            editingValues.profileLabel = LabelFor(EditorProfileId);
+        }
 
         public PawnVarianceSettings()
         {
@@ -810,18 +852,17 @@ namespace PawnVarianceMod
             string newName = "Custom " + (customProfiles.Count + 1);
             var profile = new CustomProfile(newId, newName, VarianceProfiles.VanillaLike.MakeValues());
             customProfiles.Add(profile);
-            activeProfileId = newId;
-            RefreshResolved();
+            // Selects it in the editor only. The colony keeps whatever profile it was using.
+            SetEditorProfile(newId);
         }
 
         private void DuplicateCurrentProfile()
         {
             string newId = "custom_" + DateTime.Now.Ticks;
-            string newName = LabelFor(activeProfileId) + " Copy";
-            var profile = new CustomProfile(newId, newName, Resolve(activeProfileId).Clone());
+            string newName = LabelFor(EditorProfileId) + " Copy";
+            var profile = new CustomProfile(newId, newName, Resolve(EditorProfileId).Clone());
             customProfiles.Add(profile);
-            activeProfileId = newId;
-            RefreshResolved();
+            SetEditorProfile(newId);
         }
 
         private void DrawGlobalSettings(Listing_Standard listing)
