@@ -59,54 +59,36 @@ All three live in `Constants.cs`. `docs/tools/envelope_check.py` ran and confirm
 **Status of sub-items:**
 
 - [x] **1.5a. Confirm the new readout in-game.** Verified via GABS: `Elite` reads `→ +21% vs Faithful (0.30)`.
-- [ ] **1.5b. Decide the Best-of-N readout** (proposed UI feature — design settled, not built yet).
-- [ ] **1.5c. `Gifted` profile tuning** (deferred — unreachable in default config).
-- [ ] **1.5d. Commit.** Commit branch changes to git.
+- [x] **1.5b. Best-of-N readout** — shipped 2026-08-04. Header shows a `Typical` and a
+  `Best of 25 rerolls` anchor. N=25 not N=50, and no `N` slider: it is a lens, not a setting.
+- [x] **1.5c. `Gifted` profile tuning** — resolved by removing the preset entirely (2026-08-04).
+- [ ] **1.5d. Commit.**
 
-### 📊 Proposed: show Best-of-N in the Profile Editor, not just the mean
+## 1.6. 🟢 EDITOR CURSOR FIX, BEST-OF-25 READOUT, RETUNE & UI CLEANUP — SHIPPED (2026-08-04)
 
-**The problem, stated as data.** Deviation vs `Faithful` across N:
+- **Profile Editor no longer hijacks the colony profile.** It had no selection state of its own —
+  its picker read and wrote `activeProfileId`. Now uses a separate, non-persisted
+  `editorProfileId`. Delete also clears the deleted id from the colony profile, hostile profile
+  and both override maps; the shared-field version handled only the colony case, by accident.
+- **Best-of-25 readout** in the header, beside the typical-pawn figure. Mirrors
+  `envelope_check.py` at 1024 integration nodes (0.17pp of its 20000-node reference).
+  **If you change one, change both.**
+- **Seven presets retuned** to owner-approved targets. `Sovereign`'s skill range is deliberately
+  untouched — `skillShiftMin` stays `0` so it can never roll below the vanilla baseline; the
+  whole gain is passion budget. Translating it instead would have left 0.5pp of N=1 headroom.
+- **`Gifted` removed.** +152% at N=1, unreachable by default, skipped by two retunes.
+- **Override columns labelled**, and the overlapping prose blocks moved to tooltips.
+- **Neanderthal stays `Distinct`** — reviewed 2026-08-04 and deliberately left alone.
 
-| | N=1 | N=50 | Δ |
-|---|---|---|---|
-| `Elite` | +20.9% | +11.7% | 9pp |
-| `Sovereign` | +30.9% | +14.9% | 16pp |
-| **`Distinct`** | **−19.9%** | **+6.7%** | **27pp — crosses zero** |
-| **`Wildcard`** | **−23.6%** | **+33.1%** | **57pp — crosses zero** |
-
-The tab currently shows the **N=1 mean only**. So a player reads `Wildcard: −24% vs Faithful`,
-concludes "weaker", and picks it for a harder run — when in actual play (rerolling starts, picking
-from captures, accepting or refusing quest pawns) `Wildcard` is *stronger* than `Faithful`. The
-readout is most wrong on `Distinct`, the mod's signature tuning.
-
-This is also an **internal contradiction**: this document derives the envelope from Best-of-N
-precisely because "a mean-based figure systematically understates any high-dispersion profile" —
-and then the UI ships the mean-based figure.
-
-**Second benefit:** it would give the power-tier vs variance-preset distinction — which this
-document calls "load-bearing" — its **first UI expression**. A flat row is a power tier; a steeply
-rising row is a variance preset. The player learns the concept from the number.
-
-**Recommended shape — two fixed anchors, one row, no new control:**
-
-```
-→  Typical pawn −24%  ·  Best of 25 rerolls +27%     vs Faithful
-```
-
-- **No `N` slider.** It is jargon, and it is not a setting — it is a lens. A slider invites
-  fiddling with something that has no correct value.
-- No new persisted state, no schema change. Reuses `CalculateCompositeScore` unchanged; only the
-  `q` fed to it differs (max-of-N instead of the mean).
-
-**Do NOT build this before §1 passes.** §1 is a blocking in-game verification of a layout whose
-every figure is arithmetic, already at ~501px against a ~460px viewport. Adding a header row now
-invalidates that checklist and you would run it twice.
-
-**Two decisions deferred to build time:**
-1. Second anchor at **N=25 or N=50**? N=50 is more dramatic but puts `Wildcard` on screen at
-   **+33.1%**, ~2pp from a visible envelope breach — the UI would be advertising how close to the
-   limit that preset sits.
-2. Does the distribution curve gain a second ghosted Best-of-N line, or stay single?
+> [!WARNING]
+> **None of this batch has been seen running.** Every task in §1.6 — the cursor fix, the
+> Best-of-25 readout, the seven-preset retune, `Gifted`'s removal, and the override/tooltip
+> cleanup — was verified by clean build, `envelope_check.py`, and static review only.
+> Subagents cannot launch RimWorld. All six in-game checks (cursor independence across reset
+> and import, delete leaving no dangling id, the 162px header rendering without overlap at
+> default and non-default UI scale, export/import round-trip after the caption move, and the
+> UI figures matching the tool's N=25 column) are deferred to a single owner-run pass. Do not
+> mark this batch verified or the branch ready to merge until that pass happens.
 
 ## 2. User File-by-File Code Review (IN PROGRESS)
 - [x] [`Source/VarianceProfile.cs`](file:///C:/Users/gokal/Desktop/Rimworld-mod/Rimworld-Pawn-variance-mod/Source/VarianceProfile.cs) — **DONE (REVIEWED)** (Legacy enum/comment cleanup, `IExposable` parameterless `ExposeData()`, `distributionParamsDirty` cache, `MakeValues()`, `?`/`??` operators).
@@ -180,14 +162,15 @@ Plan: [`docs/superpowers/plans/2026-08-03-profile-editor-layout.md`](file:///C:/
 > **Every layout figure below is arithmetic, not observation.** This repo has no
 > test harness for IMGUI code, so all seven tasks were verified by clean build and
 > static review only — RimWorld was never launched. The header sums to exactly
-> `140f` on paper and the body should land near 500px, but **no pixel of this has
+> `162f` on paper (grew from `140f` after the 2026-08-04 Best-of-25 readout row was added —
+> see §1.6) and the body should land near 500px, but **no pixel of this has
 > been seen**. Do not treat it as working until the owner's in-game pass is done.
 > **The checklist is §1 at the top of this document** (also spec §9 / plan Task 7).
 
-- **Pinned 140px header** (`DrawProfileEditorHeader`), does not scroll: profile picker +
+- **Pinned 162px header** (`DrawProfileEditorHeader`), does not scroll: profile picker +
   5-button action strip (`+ New`, `Duplicate`, `Rename`, `Reset`, `Delete`) / one-line
-  description / quality slider with `{tier} ({power})` readout / full-width distribution
-  curve. Rows: 28 + 4 + 20 + 2 + 28 + 4 + 54 = 140.
+  description / quality slider with `{tier} ({power})` readout / Best-of-25 readout row /
+  full-width distribution curve. Rows: 28 + 4 + 20 + 2 + 28 + 2 + 20 + 4 + 54 = 162.
 - **The curve is never greyed**, even on read-only presets. It is a readout, not a control;
   greying it would break comparing presets by cycling the picker. Only the quality *slider*
   is disabled. Do not "fix" this.
@@ -260,6 +243,9 @@ Decided after a four-agent review (2 Claude, 2 Gemini via agy-bridge). What the 
 
 - Passion is an **XP-rate multiplier**, not an additive gift: `None 0.35× / Minor 1.0× / Major 1.5×`.
   A Minor pip is a 2.86× learning-rate advantage over no passion.
+- **The UI said `Major = 2` until 2026-08-04.** It was always a text bug, never a maths bug:
+  `PassionVarianceApplier.cs:61-64` has always spent `1.5` per Major, and `MaxPassionPips = 18`
+  is derived as 12 skills × 1.5. No envelope figure ever depended on the wrong string.
 - Its value in skill-levels is therefore **time-dependent**: ≈0 on day 1 (pure future value), peaking
   near 4.8 around day 30, saturating near 3.2 once skill decay reaches equilibrium. The project
   owner's intuition — *skill dominates in emergencies/early game, passion dominates long-run* — is
@@ -277,31 +263,52 @@ Decided after a four-agent review (2 Claude, 2 Gemini via agy-bridge). What the 
   exceeded its `skillNorm` (0.250), so raising `wS` pushed `Sovereign` toward +35% and crushed
   `Wildcard`. Two of the four agents asserted the opposite; the simulation says otherwise.
 
-**Verified Best-of-N envelope at the new weights** (deterministic integration over
-`q ~ Beta(m·8, (1−m)·8)`, density of the max `= N·F(q)^(N−1)·f(q)`; % vs `Faithful` at the same N):
+**Verified Best-of-N envelope at the new weights** — verbatim output of
+`python docs/tools/envelope_check.py` (deterministic integration over
+`q ~ Beta(m·8, (1−m)·8)`, density of the max `= N·F(q)^(N−1)·f(q)`; % vs `Faithful` at the same N).
+Pasted, not hand-edited (Rule 6):
 
-| Profile | N=1 | N=5 | N=25 | N=50 |
-|---|---|---|---|---|
-| Faithful | 0.2500 — | 0.3022 — | 0.3333 — | 0.3424 — |
-| Desperate | −33.2% | −30.0% | −27.3% | −26.4% |
-| Scavenger | −24.6% | −22.1% | −20.3% | −19.7% |
-| Distinct *(variance)* | −19.9% | −6.0% | +3.5% | +6.7% |
-| Wildcard *(variance)* | −23.6% | +6.8% | +27.1% | **+33.1%** |
-| Specialist | +6.9% | +5.3% | +4.6% | +4.5% |
-| Elite | +20.9% | +15.3% | +12.5% | +11.7% |
-| Sovereign | +30.9% | +21.0% | +16.2% | +14.9% |
-| Gifted *(not in default config)* | +152.2% | +132.1% | +119.6% | **+115.9%** |
+```
+wS=0.8  wP=1.4  pips/18  skill/20  K=8
+Exchange rate R = (20/18) * (1.4/0.8) = 1.94 skill levels per passion pip
+Faithful baseline @ q=0.50: 0.2500
 
-**Rule 1 (±35%) holds at every N for all eight in-config presets. Rule 2 ordering holds at every N.**
-`Gifted` remains far out — see below; it is unreachable by default and was again left unpatched.
+profile                     N=1                N=5               N=25               N=50
+Faithful        0.2500   +0.0%     0.3022   +0.0%     0.3333   +0.0%     0.3424   +0.0% 
+Distinct        0.2261   -9.6%     0.3075   +1.7%     0.3670  +10.1%     0.3866  +12.9%   (variance)
+Wildcard        0.2047  -18.1%     0.3120   +3.2%     0.3909  +17.3%     0.4161  +21.5%   (variance)
+Desperate       0.1895  -24.2%     0.2341  -22.5%     0.2648  -20.6%     0.2746  -19.8% 
+Elite           0.3101  +24.0%     0.3561  +17.8%     0.3826  +14.8%     0.3902  +13.9% 
+Sovereign       0.3213  +28.5%     0.3695  +22.2%     0.3965  +18.9%     0.4041  +18.0% 
+Specialist      0.2749   +9.9%     0.3260   +7.9%     0.3565   +6.9%     0.3654   +6.7% 
+Scavenger       0.2112  -15.5%     0.2580  -14.6%     0.2883  -13.5%     0.2976  -13.1% 
 
-**Tightest margins — there is very little room left:**
+Rule 2 - power-tier ordering at the same N:
+  N=1   Desperate(0.190) < Scavenger(0.211) < Faithful(0.250) < Specialist(0.275) < Elite(0.310) < Sovereign(0.321)   OK
+  N=5   Desperate(0.234) < Scavenger(0.258) < Faithful(0.302) < Specialist(0.326) < Elite(0.356) < Sovereign(0.369)   OK
+  N=25  Desperate(0.265) < Scavenger(0.288) < Faithful(0.333) < Specialist(0.356) < Elite(0.383) < Sovereign(0.396)   OK
+  N=50  Desperate(0.275) < Scavenger(0.298) < Faithful(0.342) < Specialist(0.365) < Elite(0.390) < Sovereign(0.404)   OK
 
-| Preset | Worst N | Deviation | Headroom |
-|---|---|---|---|
-| `Desperate` | N=1 | −33.2% | **1.8pp** |
-| `Wildcard` | N=50 | +33.1% | **1.9pp** |
-| `Sovereign` | N=1 | +30.9% | 4.1pp |
+Tightest envelope margins:
+  Sovereign @ N=1: +28.5%  (6.5pp of headroom)
+  Desperate @ N=1: -24.2%  (10.8pp of headroom)
+  Elite @ N=1: +24.0%  (11.0pp of headroom)
+
+PASS: Rule 1 and Rule 2 hold at every N for all enforced presets.
+If any number moved, update the table in HANDOVER.md "The skill <-> passion exchange rate".
+```
+
+**Rule 1 (±35%) holds at every N for all eight enforced presets. Rule 2 ordering holds at every N.**
+
+**Tightest margins** — the 2026-08-04 retune roughly tripled the worst-case headroom
+(was 1.8pp on `Desperate`):
+
+```
+Tightest envelope margins:
+  Sovereign @ N=1: +28.5%  (6.5pp of headroom)
+  Desperate @ N=1: -24.2%  (10.8pp of headroom)
+  Elite @ N=1: +24.0%  (11.0pp of headroom)
+```
 
 > [!CAUTION]
 > ## 🔁 RECALCULATE AFTER ANY CONSTANT CHANGE — the table above goes stale silently
@@ -320,10 +327,12 @@ Decided after a four-agent review (2 Claude, 2 Gemini via agy-bridge). What the 
 > violation, so it can gate a commit. Deterministic integration, not sampling — same input, same
 > output, every run. No third-party dependencies.
 >
-> **Why this matters more than it looks:** with only ~1.8pp of headroom on `Desperate`, a change
-> that *feels* cosmetic — nudging one preset's `averageQuality` by 0.02, or "tidying" a normalizer —
-> can breach the envelope without touching the preset that breaks. The weights are shared, so every
-> preset moves when any weight moves. **Do not hand-edit the percentages in this document.**
+> **Why this matters more than it looks:** even with the 2026-08-04 retune's larger cushion —
+> **6.5pp** of headroom on the tightest preset (`Sovereign` @ N=1, was 1.8pp on `Desperate`) — a
+> change that *feels* cosmetic — nudging one preset's `averageQuality` by 0.02, or "tidying" a
+> normalizer — can breach the envelope without touching the preset that breaks. The weights are
+> shared, so every preset moves when any weight moves. **Do not hand-edit the percentages in this
+> document.**
 
 **Interpretation note on Rule 2:** an earlier wording ("even a Best-of-50 `Desperate` pawn must
 remain below `Faithful`") is ambiguous and, read strictly as *Best-of-50 of a lower tier < Best-of-1
@@ -381,7 +390,6 @@ by their **display name** in discussion; the variable name only matters when edi
 | **Sovereign** | `SovereignId` | `Sovereign` | power tier (top) | Archite lords, Sanguophages, supreme leaders. |
 | **Distinct** | `DistinctId` | `BalancedVariance` | **variance** | The mod's signature tuning. Strong individual strengths *and* weaknesses, fair colony average. |
 | **Wildcard** | `WildcardId` | `WildSpread` | **variance** | Maximum variation. 0–8 traits, zero-to-many passions, wide skill swings. |
-| **Gifted** | `GiftedId` | `GiftedColony` | power tier | Higher capability across the board. **Not reachable in the default config** — manual selection only. |
 
 **Power tier vs variance preset is a load-bearing distinction.** Power tiers must obey the Rule 2
 ordering. Variance presets are tuned for *dispersion* around a roughly baseline mean, so they cross
@@ -408,25 +416,11 @@ Rule 4 consultation item.
 | Neanderthal / Yttakin | **Distinct** (Normal) | " |
 | Impid | **Wildcard** (Normal) | " |
 
-**`Gifted` is the only preset not reachable by default.** It sits at **+152% at N=1** vs `Faithful`
-(+116% at N=50) — far outside the envelope. It was left unpatched through both the 2026-08-03 retune
-and the `/12 → /18` normalizer fix, precisely because it is not in the default config.
-**Fix it before ever making it a default.**
-
-> [!NOTE]
-> **The `/18` normalizer did NOT fix `Gifted`, and a future agent should not expect it to.** The
-> old diagnosis — "it pins at 1.0 against a `/12` normalizer" — was only half the story. `/18` does
-> unpin `passionNorm` (12.3 pips → 0.683 instead of a clamped 1.0), but `Gifted`'s deviation got
-> *worse*, not better (+144% → +152% at N=1). The real cause is that **every one of its inputs is
-> extreme at once**: `averageQuality = 0.72`, `skillShift 0…+8`, `passionCount 5…12`,
-> `passionMajorBias 0.9`. Un-clamping merely stopped hiding some of that. Fixing it means pulling
-> the input values down, not adjusting the normalizer.
-
 > **Remaining rules:**
 > 3. **NEVER PUT TRAIT COUNT BACK INTO THE QUALITY SCORE**: `CalculateCompositeScore` MUST NOT include a trait term. Trait count is a **variance** parameter, not a **mean** one — vanilla's picker is quality-blind, so more traits buys more draws from an unchanged urn, not better traits. Scoring it (a) rewarded widening spreads even though that makes pawns strictly worse to play with, and (b) compressed the whole scale, propping weak profiles up and holding strong ones down. If you think you have found a way to score traits, read `TRAIT-DESIRABILITY-RESEARCH.md` §4 and §5 first — seven approaches were evaluated and rejected with measured data.
 > 4. **DO NOT TOUCH KIDS BY DEFAULT**: The default setting for children and growth moments MUST be **OFF** (`applyVarianceToChildren = false` and `applyChildSkillShift = false`). Growth moments must be left untouched out-of-the-box unless explicitly enabled by the user.
 > 5. **MANDATORY CONSULTATION**: **DO NOT MODIFY OR TOUCH** these percentage bounds, statistical scaling rules, children/growth moment defaults, or profile parameters without explicitly raising a question to the project creator / user and obtaining explicit approval first!
-> 6. **RECALCULATE THE ENVELOPE AFTER ANY SCORING-CONSTANT CHANGE**: run `python docs/tools/envelope_check.py` and paste its output into the table in "How the percentages are derived". The composite weights are **shared across all nine presets**, so changing one constant moves every profile at once — and the tightest preset currently has only **1.8pp** of headroom. Never hand-edit those percentages. See the full trigger list in that section.
+> 6. **RECALCULATE THE ENVELOPE AFTER ANY SCORING-CONSTANT CHANGE**: run `python docs/tools/envelope_check.py` and paste its output into the table in "How the percentages are derived". The composite weights are **shared across all eight presets**, so changing one constant moves every profile at once — and the tightest preset currently has only **6.5pp** of headroom (`Sovereign` @ N=1). Never hand-edit those percentages. See the full trigger list in that section.
 > 7. **THE EXCHANGE RATE `R` DEPENDS ON THE NORMALIZER, NOT JUST THE WEIGHTS**: `R = (AssumedMaxSkillLevel / MaxPassionPips) · (wP / wS)`. Changing `MaxPassionPips` alone silently moves the skill↔passion exchange rate even though no weight was touched — this exact trap nearly reverted the 2026-08-03 retune (`/12 → /18` on its own would have cut `R` from 1.94 to 1.33, *below* the 1.389 it replaced). Recompute `R` before and after touching any of the three.
 > 6. **PROTECTION OF REVIEWED CODE (STRICT PERMISSION REQUIRED)**: **DO NOT MODIFY, REFACTOR, OR REWRITE** any code inside a file marked as `[x] DONE (REVIEWED)` in Section 2 without explicitly presenting the rationale and proposed changes to the user and obtaining explicit permission first!
 
