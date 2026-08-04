@@ -253,7 +253,10 @@ namespace PawnVarianceMod
             v.averageQuality = Widgets.HorizontalSlider(qSlider, v.averageQuality, 0f, 1f);
             GUI.enabled = outerEnabled;
 
-            Rect qLabelAndSlider = qualityRow.LeftPart(0.68f);
+            // 0.66 against qReadout's RightPart(0.34f): those two must stay disjoint (0.66 + 0.34
+            // = 1.00), or the last sliver of the row registers two competing TipRegions and the
+            // tooltip flickers between them. Do not raise this to 0.68 -- that summed to 1.02.
+            Rect qLabelAndSlider = qualityRow.LeftPart(0.66f);
             TooltipHandler.TipRegion(qLabelAndSlider,
                 "Drives every roll below. Higher quality shifts a pawn toward the top of each range you set.");
 
@@ -276,6 +279,7 @@ namespace PawnVarianceMod
             // best-of-25: a player picking it for a harder run gets an easier one.
             Rect bestRow = new Rect(rect.x, qualityRow.yMax + 2f, rect.width, 20f);
             float bestComposite = PawnVarianceSettings.CalculateBestOfNScore(v, Constants.BestOfNSampleCount);
+            float bestBaseline = PawnVarianceSettings.FaithfulBestOfNBaseline(Constants.BestOfNSampleCount);
 
             Text.Font = GameFont.Tiny;
             GUI.color = new Color(1f, 1f, 1f, 0.75f);
@@ -283,7 +287,7 @@ namespace PawnVarianceMod
             Text.WordWrap = false;
             Widgets.Label(bestRow,
                 $"Best of {Constants.BestOfNSampleCount} rerolls:  "
-                + $"{PawnVarianceSettings.FormatPowerPercent(bestComposite)} vs Faithful ({bestComposite:F2})"
+                + $"{PawnVarianceSettings.FormatPowerPercent(bestComposite, bestBaseline)} vs Faithful ({bestComposite:F2})"
                 + "   —   what you actually get if you reroll for this profile");
             Text.WordWrap = prevBestWordWrap;
             GUI.color = Color.white;

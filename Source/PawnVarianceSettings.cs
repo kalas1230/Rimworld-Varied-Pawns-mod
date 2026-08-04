@@ -1014,12 +1014,18 @@ namespace PawnVarianceMod
 
         // Just the signed percentage. FormatPowerReadout returns a whole sentence, which would
         // print "vs Faithful" twice when two anchors sit on screen together.
-        public static string FormatPowerPercent(float composite)
+        //
+        // The caller must supply a baseline measured at the SAME N as `composite`. A Best-of-N
+        // score compared against the N=1 mean silently compares two different quantities -- the
+        // batch size changes the shape of the distribution being summarised, not just its value.
+        // (Best-of-25 Sovereign vs the N=1 Faithful baseline reads +59%; vs Faithful's own
+        // Best-of-25 score it is the true +19%.) Passing the wrong-N baseline compiles fine and
+        // looks plausible, which is exactly how this bug shipped once already.
+        public static string FormatPowerPercent(float composite, float baseline)
         {
-            float baseC = FaithfulBaseline();
-            if (baseC <= 0f) return composite.ToString("F2");
+            if (baseline <= 0f) return composite.ToString("F2");
 
-            float diffPct = ((composite - baseC) / baseC) * 100f;
+            float diffPct = ((composite - baseline) / baseline) * 100f;
             if (Mathf.Abs(diffPct) < 0.5f) return "baseline";
 
             return $"{(diffPct > 0f ? "+" : "")}{diffPct:F0}%";
@@ -1081,9 +1087,53 @@ namespace PawnVarianceMod
         // Mirror of expected_best_of_n() in docs/tools/envelope_check.py. If you change one, change
         // both, and re-run the cross-check -- the UI and HANDOVER's table must not disagree.
         // Density of the max is n * F(q)^(n-1) * f(q).
+        //
+        // Single-entry cache keyed on every input that affects the integration. The header calls
+        // this once per frame for the edited profile AND once (via FaithfulBestOfNBaseline) for
+        // Faithful -- if both went through the same cache slot they would evict each other every
+        // frame and the cache would never hit. FaithfulBestOfNBaseline therefore has its own,
+        // separate cache and calls the uncached core directly instead of sharing this slot.
+        private static float cachedBestOfNResult;
+        private static float cachedBestOfN_avgQ, cachedBestOfN_shiftMin, cachedBestOfN_shiftMax;
+        private static float cachedBestOfN_passionMin, cachedBestOfN_passionMax, cachedBestOfN_majorBias;
+        private static bool cachedBestOfN_skillOn, cachedBestOfN_passionOn;
+        private static int cachedBestOfN_n = -1;
+
         public static float CalculateBestOfNScore(VarianceProfileValues v, int n)
         {
             if (v == null || n < 1) return 0f;
+
+            if (cachedBestOfN_n == n
+                && cachedBestOfN_avgQ == v.averageQuality
+                && cachedBestOfN_shiftMin == v.skillShiftMin
+                && cachedBestOfN_shiftMax == v.skillShiftMax
+                && cachedBestOfN_passionMin == v.passionCountMin
+                && cachedBestOfN_passionMax == v.passionCountMax
+                && cachedBestOfN_majorBias == v.passionMajorBias
+                && cachedBestOfN_skillOn == v.enableSkillVariance
+                && cachedBestOfN_passionOn == v.enablePassionVariance)
+            {
+                return cachedBestOfNResult;
+            }
+
+            float result = CalculateBestOfNScoreCore(v, n);
+
+            cachedBestOfN_n = n;
+            cachedBestOfN_avgQ = v.averageQuality;
+            cachedBestOfN_shiftMin = v.skillShiftMin;
+            cachedBestOfN_shiftMax = v.skillShiftMax;
+            cachedBestOfN_passionMin = v.passionCountMin;
+            cachedBestOfN_passionMax = v.passionCountMax;
+            cachedBestOfN_majorBias = v.passionMajorBias;
+            cachedBestOfN_skillOn = v.enableSkillVariance;
+            cachedBestOfN_passionOn = v.enablePassionVariance;
+            cachedBestOfNResult = result;
+
+            return result;
+        }
+
+        private static float CalculateBestOfNScoreCore(VarianceProfileValues v, int n)
+        {
             if (n == 1) return CalculateCompositeScore(v.averageQuality, v);
 
             int nodes = Constants.BestOfNIntegrationNodes;
@@ -1127,6 +1177,24 @@ namespace PawnVarianceMod
             if (cachedFaithfulBaseline < 0f)
                 cachedFaithfulBaseline = CalculateCompositeScore(0.50f, VarianceProfiles.VanillaLike.MakeValues());
             return cachedFaithfulBaseline;
+        }
+
+        // Faithful's own Best-of-N score, for comparing a Best-of-N figure against Best-of-N (see
+        // FormatPowerPercent). Cached separately from CalculateBestOfNScore's cache -- see the
+        // comment on that cache for why sharing a slot would thrash -- and keyed on n as well as
+        // the value, so a future change to Constants.BestOfNSampleCount cannot serve a stale
+        // baseline computed for a different n.
+        private static float cachedFaithfulBestOfN = -1f;
+        private static int cachedFaithfulBestOfN_n = -1;
+
+        public static float FaithfulBestOfNBaseline(int n)
+        {
+            if (cachedFaithfulBestOfN_n != n || cachedFaithfulBestOfN < 0f)
+            {
+                cachedFaithfulBestOfN = CalculateBestOfNScoreCore(VarianceProfiles.VanillaLike.MakeValues(), n);
+                cachedFaithfulBestOfN_n = n;
+            }
+            return cachedFaithfulBestOfN;
         }
 
         private static float MapToCenteredX(float compositeScore)
