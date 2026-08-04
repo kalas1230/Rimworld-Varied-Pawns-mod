@@ -230,8 +230,8 @@ namespace PawnVarianceMod
                 skillNoise = 0.35f,
                 passionNoise = 0.35f,
                 passionMajorBias = 0.8f,
-                skillShiftMin = -4f,
-                skillShiftMax = 6f,
+                skillShiftMin = -3.3f,
+                skillShiftMax = 6.5f,
                 childSkillShiftMin = -2f,
                 childSkillShiftMax = 3f,
                 // Was 1-6. Narrowed purely to cut hazard exposure (22.2% -> 15.4% chance of a
@@ -240,8 +240,8 @@ namespace PawnVarianceMod
                 // from the skill/passion spread, which is untouched.
                 traitCountMin = 2f,
                 traitCountMax = 4f,
-                passionCountMin = 1f,
-                passionCountMax = 7f,
+                passionCountMin = 1.4f,
+                passionCountMax = 7.2f,
             });
 
         public static readonly VarianceProfile WildSpread = new VarianceProfile(
@@ -255,18 +255,20 @@ namespace PawnVarianceMod
                 skillNoise = 0.85f,
                 passionNoise = 0.85f,
                 passionMajorBias = 0.6f,
-                // Trimmed from -12/+7 and 12 passions: under Best-of-N its dispersion put it at
-                // +38% vs Faithful at N=50 (outside the +-35% envelope) while sitting at -26% at
-                // N=1. Still by far the widest preset — it is a variance preset, not a power tier,
-                // so it legitimately crosses Faithful as N rises; it just may not leave the band.
-                skillShiftMin = -10.5f,
-                skillShiftMax = 6f,
+                // Retuned 2026-08-04: narrowed to ~0.78x its previous dispersion, which pulls
+                // Best-of-25 from +27.1% to +17.3% and Best-of-50 from a near-breach +33.1% to
+                // +21.5%. Narrowing raises N=1 (-23.6% -> -18.1%) and lowers N=25 at the same
+                // time, so it buys headroom at both ends. Still by far the widest preset -- it is
+                // a variance preset, not a power tier, so it legitimately crosses Faithful as N
+                // rises; it just may not leave the +-35% band.
+                skillShiftMin = -8.7f,
+                skillShiftMax = 4.2f,
                 childSkillShiftMin = -5f,
                 childSkillShiftMax = 6f,
                 traitCountMin = 0f,
                 traitCountMax = 8f,   // deliberately left wide: chaos is this preset's whole point
-                passionCountMin = 0f,
-                passionCountMax = 11f,
+                passionCountMin = 1.2f,
+                passionCountMax = 9.8f,
             });
 
         public static readonly VarianceProfile Hardscrabble = new VarianceProfile(
@@ -280,18 +282,18 @@ namespace PawnVarianceMod
                 skillNoise = 0.25f,
                 passionNoise = 0.25f,
                 passionMajorBias = 0.35f,
-                // Raised from -4.5 skill floor and 1/4.5 passions: traits-free scoring put this at
-                // -45% vs Faithful at N=1, well outside the -35% envelope. The old numbers only
-                // looked acceptable because the trait term was propping it up (its traitNorm was
-                // its single best component). It remains the lowest power tier by a clear margin.
-                skillShiftMin = -3.4f,
-                skillShiftMax = 1.5f,
+                // Retuned 2026-08-04: translated up to -20.6% at Best-of-25 (was -27.3%), which
+                // also lifts N=1 from a very tight -33.2% to -24.2%. This preset had only 1.8pp
+                // of envelope headroom and was the single tightest number in the whole set.
+                // It remains the lowest power tier by a clear margin at every N.
+                skillShiftMin = -2.8f,
+                skillShiftMax = 2.1f,
                 childSkillShiftMin = -2f,
                 childSkillShiftMax = 1f,
                 traitCountMin = 2f,   // was 1: floor raised to vanilla's, cuts hazard exposure
                 traitCountMax = 4f,
-                passionCountMin = 1.4f,
-                passionCountMax = 5f,
+                passionCountMin = 1.7f,
+                passionCountMax = 5.3f,
             });
 
         public static readonly VarianceProfile Elite = new VarianceProfile(
@@ -305,14 +307,14 @@ namespace PawnVarianceMod
                 skillNoise = 0.22f,
                 passionNoise = 0.25f,
                 passionMajorBias = 0.65f,
-                skillShiftMin = -1f,
-                skillShiftMax = 3.8f,
+                skillShiftMin = -0.8f,
+                skillShiftMax = 4.0f,
                 childSkillShiftMin = -1f,
                 childSkillShiftMax = 2f,
                 traitCountMin = 2f,
                 traitCountMax = 4f,
-                passionCountMin = 2.5f,
-                passionCountMax = 6.2f,
+                passionCountMin = 2.6f,
+                passionCountMax = 6.3f,
             });
 
         public static readonly VarianceProfile Sovereign = new VarianceProfile(
@@ -326,16 +328,20 @@ namespace PawnVarianceMod
                 skillNoise = 0.24f,
                 passionNoise = 0.25f,
                 passionMajorBias = 0.70f,
-                // Trimmed from 4.2 skill / 6.5 passions: was +36.4% vs Faithful at N=1, just outside
-                // the +35% envelope. Still the top power tier at every batch size.
+                // Retuned 2026-08-04 to +18.9% at Best-of-25 (was +16.2%). The skill range is
+                // deliberately UNCHANGED -- skillShiftMin stays at 0 so a Sovereign pawn can never
+                // roll below the vanilla baseline, which is the preset's identity. The entire
+                // increase comes from widening the passion budget (3.0-6.2 -> 2.2-6.6).
+                // Translating the whole profile up instead would have hit +34.5% at N=1, leaving
+                // 0.5pp of headroom; this shape lands at +28.5% with 6.5pp, better than before.
                 skillShiftMin = 0f,
                 skillShiftMax = 3.85f,
                 childSkillShiftMin = 0f,
                 childSkillShiftMax = 3f,
                 traitCountMin = 2f,
                 traitCountMax = 4f,   // was 5: cuts hazard exposure 18.9% -> 15.4%, matches Elite
-                passionCountMin = 3.0f,
-                passionCountMax = 6.2f,
+                passionCountMin = 2.2f,
+                passionCountMax = 6.6f,
             });
 
         public static readonly VarianceProfile Specialist = new VarianceProfile(
@@ -349,14 +355,14 @@ namespace PawnVarianceMod
                 skillNoise = 0.25f,
                 passionNoise = 0.25f,
                 passionMajorBias = 0.60f,
-                skillShiftMin = -2f,
-                skillShiftMax = 3.5f,
+                skillShiftMin = -1.8f,
+                skillShiftMax = 3.7f,
                 childSkillShiftMin = -1f,
                 childSkillShiftMax = 2f,
                 traitCountMin = 2f,
                 traitCountMax = 4f,
-                passionCountMin = 2f,
-                passionCountMax = 6.0f,
+                passionCountMin = 2.1f,
+                passionCountMax = 6.1f,
             });
 
         public static readonly VarianceProfile Scavenger = new VarianceProfile(
@@ -370,14 +376,14 @@ namespace PawnVarianceMod
                 skillNoise = 0.25f,
                 passionNoise = 0.25f,
                 passionMajorBias = 0.45f,
-                skillShiftMin = -3.5f,
-                skillShiftMax = 2.0f,
+                skillShiftMin = -2.9f,
+                skillShiftMax = 2.6f,
                 childSkillShiftMin = -2f,
                 childSkillShiftMax = 1f,
                 traitCountMin = 2f,
                 traitCountMax = 4f,
-                passionCountMin = 1.5f,
-                passionCountMax = 5.0f,
+                passionCountMin = 1.8f,
+                passionCountMax = 5.3f,
             });
 
         // Display order in the dropdown. Custom is not in here — it is not a recipe, it is wherever

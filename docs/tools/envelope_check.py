@@ -41,13 +41,11 @@ NAMES = {
     "Specialist": "Specialist",
     "Elite": "Elite",
     "Sovereign": "Sovereign",
-    "GiftedColony": "Gifted",
 }
 # Rule 2 applies to power tiers only. Distinct/Wildcard are variance presets and are exempt
-# from ordering (but NOT from the Rule 1 envelope). Gifted is unreachable in the default
-# config and is reported but not enforced -- see HANDOVER.
+# from ordering (but NOT from the Rule 1 envelope).
 TIERS = ["Desperate", "Scavenger", "Faithful", "Specialist", "Elite", "Sovereign"]
-NOT_ENFORCED = {"Gifted"}
+NOT_ENFORCED = set()
 BATCHES = (1, 5, 25, 50)
 ENVELOPE = 35.0
 FIELDS = ("averageQuality", "skillShiftMin", "skillShiftMax",
