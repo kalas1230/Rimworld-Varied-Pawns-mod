@@ -591,12 +591,22 @@ And in `MapToCenteredX` replace lines 996-1000 the same way:
 
 In `Source/PawnVarianceSettings.cs`, directly after `FormatPowerReadout` (after line 949):
 
+> **CORRECTION (found at Task 4 review, fixed in `e7f551c`).** The signature below is WRONG as
+> originally written: it took only `composite` and always divided by `FaithfulBaseline()`, which is
+> Faithful's **N=1** mean. Row 3b feeds it a **Best-of-25** score, so every best-of-25 figure came
+> out ~36pp too high and both `Desperate` and `Scavenger` flipped positive — inverting the exact
+> fact the second anchor exists to show. A score must be compared against Faithful **at the same
+> N**, as `envelope_check.py` does. The shipped version takes the baseline as a parameter and adds
+> a cached `FaithfulBestOfNBaseline(int n)`. Read the code, not this snippet.
+
 ```csharp
         // Just the signed percentage. FormatPowerReadout returns a whole sentence, which would
         // print "vs Faithful" twice when two anchors sit on screen together.
-        public static string FormatPowerPercent(float composite)
+        //
+        // The baseline is a PARAMETER on purpose: it must be measured at the same N as `composite`,
+        // or the two anchors silently compare different quantities.
+        public static string FormatPowerPercent(float composite, float baseC)
         {
-            float baseC = FaithfulBaseline();
             if (baseC <= 0f) return composite.ToString("F2");
 
             float diffPct = ((composite - baseC) / baseC) * 100f;
@@ -724,7 +734,7 @@ through the `DrawQualityDistributionCurve` call):
             Text.WordWrap = false;
             Widgets.Label(bestRow,
                 $"Best of {Constants.BestOfNSampleCount} rerolls:  "
-                + $"{PawnVarianceSettings.FormatPowerPercent(bestComposite)} vs Faithful ({bestComposite:F2})"
+                + $"{PawnVarianceSettings.FormatPowerPercent(bestComposite, PawnVarianceSettings.FaithfulBestOfNBaseline(Constants.BestOfNSampleCount))} vs Faithful ({bestComposite:F2})"
                 + "   —   what you actually get if you reroll for this profile");
             Text.WordWrap = prevBestWordWrap;
             GUI.color = Color.white;
@@ -1149,7 +1159,11 @@ Co-Authored-By: Claude Opus 5 <noreply@anthropic.com>"
 
 - [ ] `dotnet build Source/PawnVarianceMod.csproj` → `0 Error(s), 0 Warning(s)`
 - [ ] `python docs/tools/envelope_check.py` → `PASS`, exit code `0`
-- [ ] `git grep -n "Gifted" -- Source/` → no output
+- [ ] `git grep -nE "GiftedColony|GiftedId|preset_gifted" -- Source/` → no output.
+      (The plan originally specified a bare `"Gifted"` grep here, which was self-contradictory:
+      Task 2 Step 5 deliberately writes a `Constants.cs` comment recording the removal, and that
+      comment contains the word. The identifier-scoped grep is the gate that was actually meant —
+      no code references remain.)
 - [ ] All eight Best-of-25 figures in the UI match the tool's N=25 column (Task 4, Step 8)
 - [ ] Cycling the editor picker leaves the General tab's Active Colony Profile unchanged
 - [ ] Deleting a custom profile in use as the colony profile leaves no dangling id
