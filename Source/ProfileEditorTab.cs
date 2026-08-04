@@ -133,7 +133,11 @@ namespace PawnVarianceMod
             GUI.enabled = outerEnabled && customProfile != null;
 
             if (Widgets.ButtonText(NextBtn(2), "Rename") && customProfile != null)
-                Find.WindowStack.Add(new Dialog_RenameProfile(customProfile, RefreshResolved));
+                Find.WindowStack.Add(new Dialog_RenameProfile(customProfile, () =>
+                {
+                    RefreshEditor();
+                    RefreshResolved();
+                }));
 
             GUI.color = new Color(0.9f, 0.75f, 0.3f);
             if (Widgets.ButtonText(NextBtn(3), "Reset") && customProfile != null)

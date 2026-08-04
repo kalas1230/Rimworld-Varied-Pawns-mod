@@ -77,7 +77,18 @@ namespace PawnVarianceMod
             {
                 // Opens on whatever the colony is using, then diverges freely.
                 if (string.IsNullOrEmpty(editorProfileId))
+                {
                     editorProfileId = activeProfileId;
+                    editingValues = null;
+                }
+                // Self-heals if the id was left dangling by a reset/import that wiped
+                // customProfiles out from under it (see ResetToDefaults/CopyFrom).
+                else if (VarianceProfiles.GetPresetById(editorProfileId) == null
+                    && GetCustomProfile(editorProfileId) == null)
+                {
+                    editorProfileId = activeProfileId;
+                    editingValues = null;
+                }
                 return editorProfileId;
             }
         }
@@ -433,6 +444,12 @@ namespace PawnVarianceMod
 
             if (string.IsNullOrEmpty(activeProfileId)) activeProfileId = VarianceProfiles.FaithfulId;
             if (string.IsNullOrEmpty(hostileProfileId)) hostileProfileId = VarianceProfiles.DistinctId;
+
+            // customProfiles was just replaced wholesale; drop the editor's cached cursor and
+            // values so the next access re-resolves against the new state instead of pointing
+            // at a profile that no longer exists.
+            editorProfileId = null;
+            editingValues = null;
 
             MarkDirtyOnWrite();
         }
@@ -968,6 +985,12 @@ namespace PawnVarianceMod
             xenotypePriorities.Clear();
             PopulateDefaultOverrides(force: true);
             RefreshResolved();
+
+            // customProfiles was just replaced wholesale; drop the editor's cached cursor and
+            // values so the next access re-resolves against the new state instead of pointing
+            // at a profile that no longer exists.
+            editorProfileId = null;
+            editingValues = null;
         }
 
         public static string FormatPowerReadout(float meanComposite)
