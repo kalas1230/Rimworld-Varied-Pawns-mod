@@ -543,9 +543,6 @@ namespace PawnVarianceMod
             var listing = new Listing_Standard();
             listing.Begin(viewRect);
 
-            Caption(listing, "Priority Levels: Every override defaults to Normal. Overrides set to High / Highest take precedence over lower tiers. Ties at the same priority level are broken by the Faction vs Xenotype Precedence toggle above. Unlisted factions/xenotypes have no custom profile override.");
-            listing.Gap(4f);
-
             listing.CheckboxLabeled(
                 "Enable Faction & Xenotype Overrides",
                 ref enableOverrides,
@@ -600,8 +597,8 @@ namespace PawnVarianceMod
 
             // The fourth column is the Remove button and needs no caption.
             TooltipHandler.TipRegion(c3,
-                "Every override defaults to Normal. Overrides set to High or Highest take "
-                + "precedence over lower ones.\n\n"
+                "Every override defaults to Normal. Higher priority levels take precedence over "
+                + "lower ones.\n\n"
                 + "Ties at the same priority are broken by the faction-vs-xenotype toggle above.\n\n"
                 + "Factions and xenotypes not listed here have no override and fall back to the "
                 + "hostile or colony profile.");
@@ -612,7 +609,6 @@ namespace PawnVarianceMod
         private void DrawFactionOverridesSection(Listing_Standard listing)
         {
             Section(listing, "Faction Overrides");
-            Caption(listing, "Assign custom profiles to specific factions. Faction overrides take precedence over Hostile and General settings.");
 
             if (factionOverrides.Count == 0)
             {
@@ -727,7 +723,6 @@ namespace PawnVarianceMod
         private void DrawXenotypeOverridesSection(Listing_Standard listing)
         {
             Section(listing, "Xenotype Overrides");
-            Caption(listing, "Assign custom profiles to specific xenotypes. Xenotype overrides take precedence over Faction, Hostile, and General settings.");
 
             if (xenotypeOverrides.Count == 0)
             {
@@ -930,9 +925,12 @@ namespace PawnVarianceMod
             {
                 listing.Gap(ControlGap);
                 Caption(listing, "Profile used for raiders and other hostiles:");
-                if (listing.ButtonText(LabelFor(hostileProfileId)))
+                Rect hostileRow = listing.GetRect(30f);
+                if (Widgets.ButtonText(hostileRow, LabelFor(hostileProfileId)))
                     ProfileMenu(id => { hostileProfileId = id; RefreshResolved(); });
-                Caption(listing, "Colonists are selected by the player, but raiders arrive directly. Using a separate hostile profile balances raider difficulty independently from your colony.");
+                TooltipHandler.TipRegion(hostileRow,
+                    "Colonists are selected by the player, but raiders arrive directly. Using a "
+                    + "separate hostile profile balances raider difficulty independently from your colony.");
                 listing.Gap(ControlGap);
             }
 
@@ -956,12 +954,16 @@ namespace PawnVarianceMod
         private void DrawShareSettingsSection(Listing_Standard listing)
         {
             Section(listing, "Share Settings");
-            Caption(listing, "Copies your whole configuration to the clipboard as text: every custom profile, both override lists with their priorities, and the options above. Paste it anywhere to share it, or import someone else's.");
 
             Rect row = listing.GetRect(30f);
             float halfW = (row.width - 8f) / 2f;
             Rect exportRect = new Rect(row.x, row.y, halfW, row.height);
             Rect importRect = new Rect(row.x + halfW + 8f, row.y, halfW, row.height);
+
+            TooltipHandler.TipRegion(exportRect,
+                "Copies your whole configuration to the clipboard as text: every custom profile, "
+                + "both override lists with their priorities, and the options above. Paste it "
+                + "anywhere to share it, or import someone else's.");
 
             if (Widgets.ButtonText(exportRect, "Export to Clipboard"))
             {
