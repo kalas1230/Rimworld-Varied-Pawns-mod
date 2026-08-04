@@ -581,6 +581,34 @@ namespace PawnVarianceMod
             Widgets.EndScrollView();
         }
 
+        // Column captions for the two override lists. Geometry mirrors the row rects below
+        // (0.35 / 0.28 / 0.20 / 0.14) -- if those move, move these with them.
+        private static void OverrideColumnHeaders(Listing_Standard listing, string firstColumn)
+        {
+            Rect row = listing.GetRect(18f);
+            Rect c1 = new Rect(row.x, row.y, row.width * 0.35f, row.height);
+            Rect c2 = new Rect(row.x + row.width * 0.36f, row.y, row.width * 0.28f, row.height);
+            Rect c3 = new Rect(row.x + row.width * 0.65f, row.y, row.width * 0.20f, row.height);
+
+            Text.Font = GameFont.Tiny;
+            GUI.color = new Color(1f, 1f, 1f, 0.65f);
+            Widgets.Label(c1, firstColumn);
+            Widgets.Label(c2, "Profile");
+            Widgets.Label(c3, "Priority");
+            GUI.color = Color.white;
+            Text.Font = GameFont.Small;
+
+            // The fourth column is the Remove button and needs no caption.
+            TooltipHandler.TipRegion(c3,
+                "Every override defaults to Normal. Overrides set to High or Highest take "
+                + "precedence over lower ones.\n\n"
+                + "Ties at the same priority are broken by the faction-vs-xenotype toggle above.\n\n"
+                + "Factions and xenotypes not listed here have no override and fall back to the "
+                + "hostile or colony profile.");
+
+            listing.Gap(2f);
+        }
+
         private void DrawFactionOverridesSection(Listing_Standard listing)
         {
             Section(listing, "Faction Overrides");
@@ -592,6 +620,7 @@ namespace PawnVarianceMod
             }
             else
             {
+                OverrideColumnHeaders(listing, "Faction");
                 string toRemove = null;
                 var keys = new List<string>(factionOverrides.Keys);
                 foreach (var key in keys)
@@ -706,6 +735,7 @@ namespace PawnVarianceMod
             }
             else
             {
+                OverrideColumnHeaders(listing, "Xenotype");
                 string toRemove = null;
                 var keys = new List<string>(xenotypeOverrides.Keys);
                 foreach (var key in keys)
