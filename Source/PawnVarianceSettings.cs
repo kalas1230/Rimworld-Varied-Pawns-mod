@@ -100,6 +100,10 @@ namespace PawnVarianceMod
         {
             get
             {
+                // Touch the cursor first: its getter is what revalidates a dangling id and drops
+                // the cache. Skipping it when editingValues is non-null would hand back the stale
+                // object the revalidation exists to prevent.
+                _ = EditorProfileId;
                 if (editingValues == null) RefreshEditor();
                 return editingValues;
             }
