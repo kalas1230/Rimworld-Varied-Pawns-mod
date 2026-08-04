@@ -26,7 +26,8 @@ namespace PawnVarianceMod
         // Composite-score passion normalizer. 18 = 12 skills x 1.5 pips (the cost of a Major in
         // PassionVarianceApplier's spend loop), i.e. the true saturation point: every skill Major.
         // It was 12, which is the SKILL COUNT, not the pip ceiling — an off-by-a-Major-cost error
-        // that made passionNorm saturate a third early and pinned Gifted (12.3 pips) at 1.0.
+        // that made passionNorm saturate a third early. (The preset that exposed this, Gifted,
+        // was removed 2026-08-04: it sat at +152% vs Faithful and was unreachable by default.)
         // Happy consequence: at q=0.50 the Faithful baseline is now 5/20 = 4.5/18 = 0.25 on BOTH
         // axes, so the reference score is exactly 0.2500 and no longer moves when the weights below
         // are retuned. Do not "simplify" this back to 12.

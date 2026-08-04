@@ -12,7 +12,6 @@ namespace PawnVarianceMod
         VanillaLike = 1,
         BalancedVariance = 2,
         WildSpread = 3,
-        GiftedColony = 4,
         Hardscrabble = 5,
         Elite = 6,
         Sovereign = 7,
@@ -189,7 +188,6 @@ namespace PawnVarianceMod
         public const string FaithfulId = "preset_faithful";
         public const string DistinctId = "preset_distinct";
         public const string WildcardId = "preset_wildcard";
-        public const string GiftedId = "preset_gifted";
         public const string DesperateId = "preset_desperate";
         public const string EliteId = "preset_elite";
         public const string SovereignId = "preset_sovereign";
@@ -269,27 +267,6 @@ namespace PawnVarianceMod
                 traitCountMax = 8f,   // deliberately left wide: chaos is this preset's whole point
                 passionCountMin = 0f,
                 passionCountMax = 11f,
-            });
-
-        public static readonly VarianceProfile GiftedColony = new VarianceProfile(
-            VarianceProfileId.GiftedColony,
-            GiftedId,
-            "Gifted",
-            "Higher capability. Everyone skews talented and passionate with strong recruits and skilled raiders.",
-            new VarianceProfileValues
-            {
-                averageQuality = 0.72f,
-                skillNoise = 0.35f,
-                passionNoise = 0.4f,
-                passionMajorBias = 0.9f,
-                skillShiftMin = 0f,
-                skillShiftMax = 8f,
-                childSkillShiftMin = 0f,
-                childSkillShiftMax = 4f,
-                traitCountMin = 1f,
-                traitCountMax = 5f,
-                passionCountMin = 5f,
-                passionCountMax = 12f,
             });
 
         public static readonly VarianceProfile Hardscrabble = new VarianceProfile(
@@ -410,7 +387,6 @@ namespace PawnVarianceMod
             VanillaLike,
             BalancedVariance,
             WildSpread,
-            GiftedColony,
             Hardscrabble,
             Elite,
             Sovereign,
