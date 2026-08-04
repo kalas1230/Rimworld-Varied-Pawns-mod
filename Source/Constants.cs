@@ -46,5 +46,16 @@ namespace PawnVarianceMod
         // the other silently moves the exchange rate — recompute R before touching them.
         public const float CompositeSkillWeight = 0.8f;
         public const float CompositePassionWeight = 1.4f;
+
+        // The Profile Editor shows power at two anchors: the typical pawn (N=1) and the best of
+        // N rerolls. 25 rather than 50: at 50 Wildcard would display +21.5%, and a UI that
+        // advertises how close a preset sits to the +-35% envelope invites players to treat the
+        // limit as a target.
+        public const int BestOfNSampleCount = 25;
+
+        // Midpoint-rule nodes for the Best-of-N integral. Measured against the 20000-node
+        // reference in docs/tools/envelope_check.py across all seven presets: 512 nodes lands
+        // 0.35pp off, which can flip a whole-percent readout; 1024 lands 0.17pp. Do not lower it.
+        public const int BestOfNIntegrationNodes = 1024;
     }
 }

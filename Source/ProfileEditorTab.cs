@@ -72,7 +72,10 @@ namespace PawnVarianceMod
             listing.Gap(4f);
         }
 
-        private const float HeaderHeight = 140f;
+        // Rows: 28 (picker) + 4 + 20 (description) + 2 + 28 (quality) + 2 + 20 (best-of-N) + 4
+        // + 54 (curve) = 162. Was 140 before the best-of-N row. The body scrolls, so header
+        // height costs scrolled space, not visible content.
+        private const float HeaderHeight = 162f;
         private const float HeaderGutter = 8f;
         private const float CurveHeight = 54f;
 
@@ -232,9 +235,9 @@ namespace PawnVarianceMod
 
             // Row 3: quality slider + tier/power readout.
             Rect qualityRow = new Rect(rect.x, descRow.yMax + 2f, rect.width, 28f);
-            Rect qLabel = qualityRow.LeftPart(0.34f);
-            Rect qSlider = new Rect(qualityRow.x + rect.width * 0.35f, qualityRow.y + 3f, rect.width * 0.33f, 22f);
-            Rect qReadout = qualityRow.RightPart(0.30f);
+            Rect qLabel = qualityRow.LeftPart(0.32f);
+            Rect qSlider = new Rect(qualityRow.x + rect.width * 0.33f, qualityRow.y + 3f, rect.width * 0.30f, 22f);
+            Rect qReadout = qualityRow.RightPart(0.34f);
 
             // Row 3 is fixed-height like Row 2 above, so the label must clip
             // rather than wrap -- the longest (read-only) variant would otherwise
@@ -256,13 +259,46 @@ namespace PawnVarianceMod
 
             // The readout is output, not input -- always full opacity, even on a
             // read-only preset, so presets stay comparable by cycling the picker.
+            // Labelled "Typical" so it reads as one half of a pair with the row below.
             float meanComposite = CalculateCompositeScore(v.averageQuality, v);
-            Widgets.Label(qReadout, $"→  {PawnVarianceSettings.FormatPowerReadout(meanComposite)}");
+            bool prevReadoutWordWrap = Text.WordWrap;
+            Text.WordWrap = false;
+            Widgets.Label(qReadout, $"→  Typical  {PawnVarianceSettings.FormatPowerReadout(meanComposite)}");
+            Text.WordWrap = prevReadoutWordWrap;
             TooltipHandler.TipRegion(qReadout,
-                "Overall Power: the percentage difference compared to Faithful baseline (0.31).");
+                "The average pawn this profile generates, compared to the Faithful baseline (0.25).");
+
+            // Row 3b: the Best-of-N anchor.
+            //
+            // Row 3 alone actively misleads. Players reroll starts, pick from captures and refuse
+            // quest pawns, so the pawn they keep is the best of many -- and on the two variance
+            // presets the two figures disagree in SIGN. Wildcard reads -18% typical but +17% at
+            // best-of-25: a player picking it for a harder run gets an easier one.
+            Rect bestRow = new Rect(rect.x, qualityRow.yMax + 2f, rect.width, 20f);
+            float bestComposite = PawnVarianceSettings.CalculateBestOfNScore(v, Constants.BestOfNSampleCount);
+
+            Text.Font = GameFont.Tiny;
+            GUI.color = new Color(1f, 1f, 1f, 0.75f);
+            bool prevBestWordWrap = Text.WordWrap;
+            Text.WordWrap = false;
+            Widgets.Label(bestRow,
+                $"Best of {Constants.BestOfNSampleCount} rerolls:  "
+                + $"{PawnVarianceSettings.FormatPowerPercent(bestComposite)} vs Faithful ({bestComposite:F2})"
+                + "   —   what you actually get if you reroll for this profile");
+            Text.WordWrap = prevBestWordWrap;
+            GUI.color = Color.white;
+            Text.Font = GameFont.Small;
+
+            TooltipHandler.TipRegion(bestRow,
+                "Generate " + Constants.BestOfNSampleCount + " pawns and keep the best one.\n\n"
+                + "This is closer to how the game is actually played: you reroll starting colonists, "
+                + "choose which captures to recruit, and refuse quest pawns you do not want.\n\n"
+                + "A profile whose two figures are close is a power tier -- consistent. A profile "
+                + "that climbs steeply between them is a variance preset -- it pays off when you "
+                + "get to choose.");
 
             // Row 4: the distribution curve, full width, never greyed.
-            Rect curveRect = new Rect(rect.x, qualityRow.yMax + 4f, rect.width, CurveHeight);
+            Rect curveRect = new Rect(rect.x, bestRow.yMax + 4f, rect.width, CurveHeight);
             DrawQualityDistributionCurve(curveRect, v);
         }
 
@@ -339,7 +375,7 @@ namespace PawnVarianceMod
             listing.Gap(ControlGap);
             LabeledFloatRange(listing, "Passion budget", PassionCountRangeId,
                 ref v.passionCountMin, ref v.passionCountMax, 0f, 24f, ToStringStyle.FloatOne,
-                "Minor passion = 1, Major passion = 2. Presets use fractional budgets, so this reads to one decimal.");
+                "Minor passion = 1, Major passion = 1.5. Presets use fractional budgets, so this reads to one decimal.");
             Caption(listing, v.passionCountMin > 0f
                 ? "Rolls vary around these target values, but every pawn receives at least one passion."
                 : "Minimum is 0, so pawns with no passions are possible.");

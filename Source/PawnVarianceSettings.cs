@@ -999,11 +999,7 @@ namespace PawnVarianceMod
 
         public static string FormatPowerReadout(float meanComposite)
         {
-            if (cachedFaithfulBaseline < 0f)
-            {
-                cachedFaithfulBaseline = CalculateCompositeScore(0.50f, VarianceProfiles.VanillaLike.MakeValues());
-            }
-            float baseC = cachedFaithfulBaseline;
+            float baseC = FaithfulBaseline();
             if (baseC <= 0f) return $"Power: {meanComposite:F2}";
 
             float diffPct = ((meanComposite - baseC) / baseC) * 100f;
@@ -1014,6 +1010,19 @@ namespace PawnVarianceMod
 
             string sign = diffPct > 0f ? "+" : "";
             return $"{sign}{diffPct:F0}% vs Faithful ({meanComposite:F2})";
+        }
+
+        // Just the signed percentage. FormatPowerReadout returns a whole sentence, which would
+        // print "vs Faithful" twice when two anchors sit on screen together.
+        public static string FormatPowerPercent(float composite)
+        {
+            float baseC = FaithfulBaseline();
+            if (baseC <= 0f) return composite.ToString("F2");
+
+            float diffPct = ((composite - baseC) / baseC) * 100f;
+            if (Mathf.Abs(diffPct) < 0.5f) return "baseline";
+
+            return $"{(diffPct > 0f ? "+" : "")}{diffPct:F0}%";
         }
 
         private static float CalculateCompositeScore(float q, VarianceProfileValues v)
@@ -1057,15 +1066,72 @@ namespace PawnVarianceMod
             return Mathf.Clamp01((wS * skillNorm + wP * passionNorm) / totalW);
         }
 
+        // Scratch buffer for the Best-of-N grid. Static and reused: the settings window redraws
+        // every frame while open, and a fresh 1024-float array per frame is pure GC churn.
+        private static float[] betaDensityScratch;
+
+        // Expected composite score of the best of n pawns: E[composite(max(q1..qn))].
+        //
+        // This is the figure that describes actual play. The player CHOOSES which pawns to keep --
+        // rerolling start scenarios, picking from raid captures, accepting or refusing quest pawns
+        // -- so the pawn that ends up in the colony is the maximum of n rolls, not a typical roll.
+        // A mean-based figure systematically understates any high-dispersion profile, which is
+        // exactly why the project's own envelope maths is Best-of-N.
+        //
+        // Mirror of expected_best_of_n() in docs/tools/envelope_check.py. If you change one, change
+        // both, and re-run the cross-check -- the UI and HANDOVER's table must not disagree.
+        // Density of the max is n * F(q)^(n-1) * f(q).
+        public static float CalculateBestOfNScore(VarianceProfileValues v, int n)
+        {
+            if (v == null || n < 1) return 0f;
+            if (n == 1) return CalculateCompositeScore(v.averageQuality, v);
+
+            int nodes = Constants.BestOfNIntegrationNodes;
+            if (betaDensityScratch == null || betaDensityScratch.Length != nodes)
+                betaDensityScratch = new float[nodes];
+
+            v.GetBetaAlphaBeta(out float alpha, out float beta);
+            float dq = 1f / nodes;
+
+            // Unnormalised Beta density on a midpoint grid. The normalising constant is divided
+            // out below rather than computed via lgamma, which keeps this allocation-free.
+            float total = 0f;
+            for (int i = 0; i < nodes; i++)
+            {
+                float q = (i + 0.5f) * dq;
+                float d = Mathf.Exp((alpha - 1f) * Mathf.Log(q) + (beta - 1f) * Mathf.Log(1f - q));
+                betaDensityScratch[i] = d;
+                total += d * dq;
+            }
+
+            if (total <= 0f || float.IsNaN(total) || float.IsInfinity(total))
+                return CalculateCompositeScore(v.averageQuality, v);
+
+            float acc = 0f;
+            float cdf = 0f;
+            for (int i = 0; i < nodes; i++)
+            {
+                float q = (i + 0.5f) * dq;
+                float density = betaDensityScratch[i] / total;
+                cdf += density * dq;   // running CDF, inclusive of the current cell
+                acc += CalculateCompositeScore(q, v) * n * Mathf.Pow(cdf, n - 1) * density * dq;
+            }
+
+            return acc;
+        }
+
         private static float cachedFaithfulBaseline = -1f;
+
+        private static float FaithfulBaseline()
+        {
+            if (cachedFaithfulBaseline < 0f)
+                cachedFaithfulBaseline = CalculateCompositeScore(0.50f, VarianceProfiles.VanillaLike.MakeValues());
+            return cachedFaithfulBaseline;
+        }
 
         private static float MapToCenteredX(float compositeScore)
         {
-            if (cachedFaithfulBaseline < 0f)
-            {
-                cachedFaithfulBaseline = CalculateCompositeScore(0.50f, VarianceProfiles.VanillaLike.MakeValues());
-            }
-            float baseC = cachedFaithfulBaseline;
+            float baseC = FaithfulBaseline();
             if (baseC <= 0f || baseC >= 1f) return compositeScore;
 
             if (compositeScore <= baseC)
