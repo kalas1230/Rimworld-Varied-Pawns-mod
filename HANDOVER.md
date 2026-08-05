@@ -2,8 +2,17 @@
 
 Date: 2026-08-06
 Repo: `C:\Users\gokal\Desktop\Rimworld-mod\Rimworld-Pawn-variance-mod`
-Branch: **`feature/profile-editor-layout`** (14 commits ahead of `main`, **unmerged**)
-`HEAD`: `ab73c6b` — **plus a substantial uncommitted working tree, itemised in the next section.**
+Branch: **`main`** (34 commits ahead of `origin/main`, **not pushed**)
+`HEAD`: `f2e44d4` — working tree clean.
+
+> [!IMPORTANT]
+> **`feature/profile-editor-layout` was merged into `main` and deleted on 2026-08-06.** The
+> merge was a fast-forward (`main` was strictly behind), so every commit below is now on
+> `main` unchanged and no merge commit exists. Nothing was pushed — `origin/main` is still at
+> the pre-merge state.
+>
+> **Merging did not verify anything.** The in-game gate in §1.6 and §5 is still open; it was a
+> merge gate and is now simply an open gate on `main`. Read those warnings as they stand.
 
 ---
 
@@ -37,8 +46,9 @@ Then Mod Settings → Varied Pawns → Profile Editor status:
 - [x] **1k. UI scale rendering** *(User verified working)*
 - [x] **Zero Default Custom Profiles** *(Fixed: removed pre-populated `custom_1` profile from default state in `PawnVarianceSettings.cs` and enabled `Delete` for single custom profiles)*
 
-**If everything passes:** the branch is ready to merge and §5's warning banner should be
-replaced with a normal completion note.
+**If everything passes:** §5's warning banner should be replaced with a normal completion note.
+(The branch itself was already merged on 2026-08-06 — see the header. The remaining checks now
+gate *pushing* and calling the work verified, not merging.)
 
 ## 1.5. 🟢 COMPOSITE-SCORE RETUNE — **VERIFIED IN-GAME VIA GABS & SCRIPT** (2026-08-04)
 
@@ -121,9 +131,10 @@ None of these are bugs in the "must fix" sense; each is a deliberate deferral aw
 
 ---
 
-# 🚧 WHERE THIS LEFT OFF — THE 2026-08-04 BATCH (still the merge gate)
+# 🚧 WHERE THIS LEFT OFF — THE 2026-08-04 BATCH (still the open gate)
 
-**Branch `feature/profile-editor-layout`, 8 commits ahead of the previous state. NOT MERGED.**
+**Merged to `main` on 2026-08-06 (fast-forward). The gate below did NOT close — the work was
+merged unverified, at the owner's instruction. Everything in "What is NOT done" still stands.**
 
 The 7-task plan
 [`docs/superpowers/plans/2026-08-04-editor-readout-retune-and-overrides-cleanup.md`](docs/superpowers/plans/2026-08-04-editor-readout-retune-and-overrides-cleanup.md)
@@ -143,6 +154,34 @@ adjudication is in `.superpowers/sdd/progress.md` — **read that ledger before 
 | `ba72b28` | Task 5: override column headers |
 | `548b4f4` | Task 6: prose moved to tooltips |
 | `0bf41fe` | Task 7: this document |
+| `5ee2155` → `ab73c6b` | Doc corrections (stale claims, a wrong plan snippet) |
+| `f2e44d4` | The 2026-08-05/06 working tree, committed at merge time — see below |
+
+### `f2e44d4` — the tooltip semantics pass (committed 2026-08-06, unreviewed)
+
+This was a large uncommitted working tree at merge time. It went in as one commit. **It has had
+no code review and no in-game pass.** What it changes:
+
+- **Every range tooltip now states which kind of range it is.** The quality slider states the
+  shared rule once (quality picks one point between the handles); each range then declares
+  itself a **target** that noise can carry a pawn past (`Skill shift`, `Passion budget`) or a
+  **hard limit** (`Trait count`, `Child shift at 13`). This is the open-question-5 hazard —
+  "`skillShiftMin` means two things" — addressed at the UI layer rather than by renaming.
+- **`Passion budget`'s upper bound was 24 and is now `Constants.MaxPassionPips` (18).** The `24`
+  was `12 × 2`, correct only under the pre-2026-08-04 era when a Major cost 2 pips. The caption
+  was fixed then and the bound was not, leaving 6 pips of range that could never buy anything.
+  **No preset was affected** — the highest is `Wildcard` at 9.8, so nothing was calibrated
+  against the old bound.
+- **`Reset All Settings` now asks for confirmation** and is tinted amber.
+- **The `Typical` readout tooltip now says what the figure excludes** (traits, and dispersion —
+  `CalculateCompositeScore` takes neither `skillNoise` nor `passionNoise`). Without it, a player
+  reads `Distinct`'s −10% as "weaker" and picks against the profile for the exact reason it
+  exists: its spread is 1.52× `Faithful`'s.
+- **`TraitProtection.cs` commentary was trimmed** to the load-bearing parts. Behaviour unchanged.
+- Adds `Source/DebugActions.cs` and the generated `Source/EnvelopeFigures.g.cs` (both were
+  untracked), plus the `docs/tools/envelope_check.py` work behind them.
+
+`dotnet build` → `0 Error(s), 0 Warning(s)` immediately before the merge.
 
 ### ⛔ What is NOT done
 
@@ -286,7 +325,7 @@ touch `FormatPowerPercent`, the baseline must be measured at the same N as the s
 
 ## 5. Profile Editor Tab Layout Redesign — ⚠️ BUILT, NOT YET VISUALLY VERIFIED (2026-08-03)
 
-Branch: `feature/profile-editor-layout`. **Not merged. Gated on §1's checklist.**
+Merged to `main` 2026-08-06. **Still gated on §1's checklist — merging verified nothing.**
 Spec: [`docs/superpowers/specs/2026-08-03-profile-editor-layout-design.md`](file:///C:/Users/gokal/Desktop/Rimworld-mod/Rimworld-Pawn-variance-mod/docs/superpowers/specs/2026-08-03-profile-editor-layout-design.md)
 Plan: [`docs/superpowers/plans/2026-08-03-profile-editor-layout.md`](file:///C:/Users/gokal/Desktop/Rimworld-mod/Rimworld-Pawn-variance-mod/docs/superpowers/plans/2026-08-03-profile-editor-layout.md)
 
@@ -321,9 +360,27 @@ Plan: [`docs/superpowers/plans/2026-08-03-profile-editor-layout.md`](file:///C:/
   stays one line and cannot overlap the quality slider. Keep all three restores.
 - Profile Editor drawing moved to [`Source/ProfileEditorTab.cs`](file:///C:/Users/gokal/Desktop/Rimworld-mod/Rimworld-Pawn-variance-mod/Source/ProfileEditorTab.cs)
   (`partial class PawnVarianceSettings`). New [`Source/Dialog_RenameProfile.cs`](file:///C:/Users/gokal/Desktop/Rimworld-mod/Rimworld-Pawn-variance-mod/Source/Dialog_RenameProfile.cs).
-- **Schema unchanged.** `git diff main` over the branch shows zero `Scribe_` lines added or
-  removed. The only `VarianceProfile.cs` change is `IRenameable` on `CustomProfile` (6 lines);
-  no numeric field, preset value, constructor, `Clone`, or `ExposeData` body was touched.
+- ~~**Schema unchanged.**~~ **True of the 2026-08-03 layout work only — no longer true of `main`.**
+  `git diff 98e90d6..f2e44d4` adds and removes no `Scribe_` *line*, but one changed its default:
+
+  ```
+  - Scribe_Values.Look(ref countProtectedTraits, "countProtectedTraits", false);
+  + Scribe_Values.Look(ref countProtectedTraits, "countProtectedTraits", true);
+  ```
+
+  > [!CAUTION]
+  > **Silent behaviour change for existing settings, and unverified.** `Scribe_Values.Look`
+  > omits a value from the written XML when it equals the default. Any settings file saved
+  > while the default was `false`, by a user who had it `false`, therefore has **no
+  > `countProtectedTraits` key at all** — and now loads as `true`, flipping `Trait count` from
+  > "traits this mod rolls" to "total traits including forced ones" without the player touching
+  > anything. **Confirm this is intended before pushing.** If it is, it wants a release note; if
+  > it is not, the field initialiser and the `Scribe_` default must both go back to `false`.
+
+  `VarianceProfile.cs` also gained `IRenameable` on `CustomProfile`, dropped the `GiftedColony`
+  enum member, and now clamps `passionCountMin`/`Max` to `Constants.MaxPassionPips` in the
+  normalise path — deliberately, because the slider bound only guards new input, while old saves
+  and `SettingsTransfer` imports reach those fields without passing a widget.
 - Open Minor findings carried to final review are listed in `.superpowers/sdd/progress.md`.
 
 ---
