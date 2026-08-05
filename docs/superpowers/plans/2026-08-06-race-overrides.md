@@ -366,18 +366,48 @@ check("overrides disabled",
       resolve(race_def="Wolfein_Race", race_overrides=RO, enable_overrides=False),
       None)
 
+# A Lowest-priority override still wins when it is the only match.
+check("lowest priority wins as sole match",
+      resolve(race_def="Wolfein_Race", race_overrides=RO,
+              race_priorities={"Wolfein_Race": LOWEST}),
+      "wolf")
+
+# Ties at non-Normal priority levels: rank rule is priority-independent.
+check("tie at High: race beats xeno",
+      resolve(race_def="Wolfein_Race", xeno_def="Hussar",
+              race_overrides=RO, xenotype_overrides=XO,
+              race_priorities={"Wolfein_Race": HIGH},
+              xenotype_priorities={"Hussar": HIGH}),
+      "wolf")
+check("tie at Lowest: race beats xeno",
+      resolve(race_def="Wolfein_Race", xeno_def="Hussar",
+              race_overrides=RO, xenotype_overrides=XO,
+              race_priorities={"Wolfein_Race": LOWEST},
+              xenotype_priorities={"Hussar": LOWEST}),
+      "wolf")
+
+# Faction-vs-xeno pairwise tie in isolation (no race candidate), both toggles.
+check("tie: faction beats xeno, toggle on",
+      resolve(faction_def="Empire", xeno_def="Hussar",
+              faction_overrides=FO, xenotype_overrides=XO, faction_first=True),
+      "empire")
+check("tie: xeno beats faction, toggle off",
+      resolve(faction_def="Empire", xeno_def="Hussar",
+              faction_overrides=FO, xenotype_overrides=XO, faction_first=False),
+      "hussar")
+
 if FAILURES:
     print("FAIL (%d)" % len(FAILURES))
     for f in FAILURES:
         print("  " + f)
     sys.exit(1)
-print("PASS: all 14 resolution cases")
+print("PASS: all 19 resolution cases")
 ```
 
 - [ ] **Step 2: Run the test to verify the rule table is self-consistent**
 
 Run: `python zzz-Do-Not-Commit/test_race_resolution.py`
-Expected: `PASS: all 14 resolution cases`
+Expected: `PASS: all 19 resolution cases`
 
 If it fails, the rule table is wrong — fix the table before writing any C#. Do not adjust an assertion to match the code.
 
@@ -900,7 +930,7 @@ Co-Authored-By: Claude Opus 5 <noreply@anthropic.com>"
 Run before calling the feature done:
 
 - [ ] `cd Source && dotnet build -v q -nologo` → 0 errors, 0 warnings
-- [ ] `python zzz-Do-Not-Commit/test_race_resolution.py` → PASS, 14 cases
+- [ ] `python zzz-Do-Not-Commit/test_race_resolution.py` → PASS, 19 cases
 - [ ] **+ Add Race Override** lists Human / Wolfein / Milira / Milian and no mechanoids
 - [ ] A race override survives a full game restart
 - [ ] With Biotech disabled, the Race Overrides section still renders and still applies (the Xenotype section correctly disappears)
