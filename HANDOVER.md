@@ -2,8 +2,8 @@
 
 Date: 2026-08-06
 Repo: `C:\Users\gokal\Desktop\Rimworld-mod\Rimworld-Pawn-variance-mod`
-Branch: **`main`** (34 commits ahead of `origin/main`, **not pushed**)
-`HEAD`: `f2e44d4` — working tree clean.
+Branch: **`main`** (41 commits ahead of `origin/main`, **not pushed**)
+`HEAD`: `cfb1df8` — one uncommitted file, `Source/ProfileEditorTab.cs` (the owner's, see below).
 
 > [!IMPORTANT]
 > **`feature/profile-editor-layout` was merged into `main` and deleted on 2026-08-06.** The
@@ -13,10 +13,58 @@ Branch: **`main`** (34 commits ahead of `origin/main`, **not pushed**)
 >
 > **Merging did not verify anything.** The in-game gate in §1.6 and §5 is still open; it was a
 > merge gate and is now simply an open gate on `main`. Read those warnings as they stand.
+>
+> **The race-overrides batch (§1.7) was also built directly on `main`,** at the owner's
+> instruction — `feature/race-overrides` was created, fast-forwarded in and deleted. So `main`
+> now carries **two** batches that have never been seen running. They are independent: §1.7
+> touches override resolution and the Overrides tab, the 2026-08-04 batch touches the Profile
+> Editor tab and the composite maths. One in-game session can clear both.
 
 ---
 
 # ⚠️ CURRENT PRIORITIES & IN-PROGRESS TASKS
+
+## 1.7. 🟡 RACE OVERRIDES — BUILT, REVIEWED, **NEVER SEEN RUNNING** (2026-08-06)
+
+The newest batch and the top open gate. Full detail in
+**"WHERE THIS LEFT OFF — THE 2026-08-06 RACE OVERRIDES BATCH"** below; ledger at
+`.superpowers/sdd/progress.md`.
+
+**The problem it solves.** The owner runs Humanoid Alien Races mods — Wolfein Race
+(`3473140562`) and Milira Race (`3256974620`) — and neither appeared in the Xenotype override
+menu. **Root cause: those mods define zero `XenotypeDef`s.** Their races are
+`ThingDef_AlienRace` defs (`Wolfein_Race`, `Milira_Race`, `Milian_Race`), and the Add menu reads
+`DefDatabase<XenotypeDef>.AllDefs`, so it never could have found them. This was a category error
+in the mod's model, not a bug in the menu.
+
+**Race and xenotype are orthogonal layers, and the mod now treats them that way.** A pawn has
+exactly one race (`ThingDef`) *and* one xenotype (`XenotypeDef`). Both of the owner's race mods
+restrict `raceRestriction/whiteXenotypeList` to `Baseliner`, but some `Milira_Race` Church
+pawnkinds still roll Hussar 0.12 / Neanderthal 0.04 / Genie 0.01 — so race×xenotype collisions
+are real, just rare.
+
+**Three sources are now resolved by a total order, not pairwise rules.** Pairwise comparison
+across three sources can produce a cycle with no winner. `RankOf` therefore ranks them:
+
+| `factionOverridesTakePrecedence` | Order at equal priority |
+|---|---|
+| `true` (default) | Faction > Race > Xenotype |
+| `false` | Race > Xenotype > Faction |
+
+**Priority level always outranks source.** Rank is consulted only on an exact priority tie.
+Because the shipped xenotype defaults sit at High/Highest (Sanguophage, Highmate, Genie, Hussar),
+a race override at the default Normal loses to them automatically — the tie rule only fires
+against the Normal-tier xenotypes.
+
+**Two decisions that are easy to reverse by accident:**
+
+1. **Race overrides ship with ZERO defaults.** There is no `RestoreDefaultRaceOverrides` and the
+   section has one Delete button, not the delete/restore pair the other two have. The installed
+   race list is mod-dependent and unknowable at compile time — there is nothing sensible to seed.
+2. **`DrawRaceOverridesSection` is NOT gated on `ModsConfig.BiotechActive`.** Only the xenotype
+   section is. Wolfein Race does not depend on Biotech; gating race there silently disables the
+   entire feature for the users it was built for. This was the single highest-risk requirement
+   in the batch and is worth re-checking after any edit to `ValuesFor` or the Overrides tab.
 
 ## 1. 🟡 IN-GAME VERIFICATION OF THE PROFILE EDITOR REDESIGN — **IN PROGRESS (VERIFIED VIA GABS)**
 
@@ -39,7 +87,7 @@ Then Mod Settings → Varied Pawns → Profile Editor status:
 - [x] **1d. The header actually stays pinned** *(Verified in-game via GABS 2026-08-03, when the header was **140px**. It is **162px** as of 2026-08-04 — the Best-of-25 row was added. The pinning behaviour still holds; the height in this line is historical.)*
 - [x] **1e. `Faithful` reads `Baseline (0.25)`** *(Verified via `envelope_check.py` baseline derivation and readout math)*
 - [x] **1f. Enable-state matrix** *(Verified action button strip `+ New`, `Duplicate`, `Rename`, `Reset`, `Delete` rendered in header)*
-- [x] **1g. Scroll view & height fix** *(Fixed: set minimum view height to 750f in `ProfileEditorTab.cs` so scrollbar is always active and lower controls/sliders are accessible)*
+- [x] **1g. Scroll view & height fix** *(Fixed by setting a minimum view height in `ProfileEditorTab.cs` so the scrollbar is always active and lower controls stay reachable. ⚠️ **The figure has moved and is currently uncommitted** — it was `750f`, and the owner's in-flight working-tree change makes it `580f` with the `Math.Max` clamp dropped from `profileEditorViewHeight`. Treat the number here as historical; read the file.)*
 - [x] **1h. Rename and destructive guards** *(User verified working)*
 - [x] **1i. Import/export round trip** *(User verified working)*
 - [x] **1j. Range slider drag isolation** *(User verified working)*
@@ -90,30 +138,30 @@ All three live in `Constants.cs`. `docs/tools/envelope_check.py` ran and confirm
 
 # 🧾 UNCOMMITTED WORK IN THE TREE — READ BEFORE ANYTHING ELSE (2026-08-06)
 
-> [!CAUTION]
-> **Nothing from the 2026-08-05/06 sessions is committed.** `HEAD` is still `ab73c6b`. Everything
-> below lives only in the working tree — do not `git checkout`, `reset` or `stash` without reading
-> this list first.
+> [!NOTE]
+> **This section used to list the whole 2026-08-05/06 working tree. That work is now committed**
+> — it went in as `f2e44d4` at merge time (see the batch table below). The list that was here is
+> preserved in git history at `f2e44d4:HANDOVER.md`.
+
+Only one file is uncommitted:
 
 | File | State |
 |---|---|
-| `Source/DebugActions.cs` | **NEW, untracked.** The verification harness — see "🧪 Verification harness". |
-| `Source/EnvelopeFigures.g.cs` | **NEW, untracked, auto-generated.** Golden Best-of-N reference. Regenerate with the tool, never hand-edit. |
-| `docs/tools/envelope_check.py` | Dispersion columns + generates the file above. |
-| `Source/ProfileEditorTab.cs` | Passion-budget cap `24f → MaxPassionPips`; six tooltips rewritten for range semantics. |
-| `Source/VarianceProfile.cs` | `ClampAndSwap` now bounds passion counts to `[0, MaxPassionPips]`; corrected the false Sovereign comment. |
-| `Source/PawnVarianceSettings.cs` | `countProtectedTraits` default flip (predates these sessions). |
-| `Source/TraitProtection.cs` | Comment condensation. **Not authored by the agent sessions** — provenance unknown, logic appears untouched (10 insertions / 27 deletions, all comment lines). Verify before committing. |
-| `HANDOVER.md` | This document. |
+| `Source/ProfileEditorTab.cs` | **The owner's, in flight.** Profile-editor scroll height: floor `750f → 580f`, and `profileEditorViewHeight` now takes `listing.CurHeight + 40f` without the `Math.Max(..., 750f)` clamp. Iterated twice during the 2026-08-06 session. Not agent-authored; left uncommitted deliberately. |
 
-**Verified state:** `dotnet build` → `0 Error(s), 0 Warning(s)`. `python docs/tools/envelope_check.py`
-→ **PASS, exit 0, every percentage unchanged** from the committed baseline. `EnvelopeFigures.g.cs`
-reports `unchanged` on a re-run, so generation is idempotent.
+> [!CAUTION]
+> **The owner edits this file while agents run.** During the race-overrides batch, three files
+> were dirty at session start (`HANDOVER.md`, `DebugActions.cs`, `ProfileEditorTab.cs`); by the
+> time a `git stash` ran minutes later, the first two had been reverted by hand and the third
+> re-edited to different values. Nothing was lost, but **read the working tree immediately before
+> any `stash`/`checkout`/`reset`, not from a snapshot taken earlier in the session.** A `git status`
+> from the top of a long session is not evidence about the tree now.
 
-**Not verified:** none of it has been seen running. `DebugActions.cs` compiles — which does confirm
-the `LudeonTK.DebugAction` signature, `Dialog_DebugOptionListLister`, the `PawnGenerationRequest`
-named arguments and `Discard(true)` all resolve against the real `Assembly-CSharp` — but neither
-debug action has ever been executed.
+**Verified state at `cfb1df8`:** `dotnet build` → `0 Error(s), 0 Warning(s)`.
+`python zzz-Do-Not-Commit/test_race_resolution.py` → **PASS, 19/19**.
+
+**Not verified:** neither open batch has been seen running. See §1.7 and the two
+"WHERE THIS LEFT OFF" sections.
 
 ### 🔓 Open decisions — raised, analysed, NOT decided
 
@@ -131,7 +179,98 @@ None of these are bugs in the "must fix" sense; each is a deliberate deferral aw
 
 ---
 
-# 🚧 WHERE THIS LEFT OFF — THE 2026-08-04 BATCH (still the open gate)
+# 🚧 WHERE THIS LEFT OFF — THE 2026-08-06 RACE OVERRIDES BATCH
+
+**Newest batch. Built directly on `main` at the owner's instruction. Fully implemented,
+per-task reviewed and final-reviewed — but nothing has been seen running.**
+
+Plan: [`docs/superpowers/plans/2026-08-06-race-overrides.md`](docs/superpowers/plans/2026-08-06-race-overrides.md).
+Per-task findings, review adjudications and the carried Minor list are in
+`.superpowers/sdd/progress.md` — **read that ledger before resuming.**
+
+### Commits in this batch
+
+| Commit | What |
+|---|---|
+| `ef40e97` | The plan and a fresh progress ledger |
+| `38f1e24` | Task 1: `raceOverrides`/`racePriorities` + Scribe persistence |
+| `4d1c669` | Task 2: rank-based three-way resolution; Biotech gate rescoped |
+| `1f4a21b` | Task 2 fix: closed test-coverage gaps (14 → 19 cases) |
+| `b59f8a1` | Task 3: shared override-row renderer extracted (−24 lines net) |
+| `c7019ef` | Task 4: the Race Overrides section + filtered Add menu |
+| `cfb1df8` | Task 5: scrub race overrides when their profile is deleted |
+
+### 🧬 The Add-menu filter has two halves and both are load-bearing
+
+`SelectableRaces()` returns humanlike races referenced by at least one `PawnKindDef`.
+
+- **`Humanlike`** excludes ~37 mechanoid alien races those same two mods ship
+  (`Wolfein_Mechanoid_*`, `Milian_Mechanoid_*`, `Milira_Drone*`, `*_FloatUnit_*`). Without it the
+  menu is unusable.
+- **The `PawnKindDef` traversal** excludes abstract and unreferenced race defs.
+
+On the owner's install this yields exactly **Human, Wolfein, Milira, Milian**. If someone
+"simplifies" this to `DefDatabase<ThingDef>.AllDefs.Where(d => d.race != null)`, the menu floods.
+
+### ⛔ What is NOT done
+
+1. **THE OWNER'S IN-GAME PASS — the only gate that can call this verified.** No subagent can
+   launch RimWorld, so every in-game check was deferred. In priority order:
+   - **The Add menu contents.** Must list exactly Human / Wolfein / Milira / Milian, with no
+     `*_Mechanoid_*` or `*_FloatUnit_*` entries. Mechanoids appearing = the `Humanlike` filter
+     regressed. *This is the acceptance check for the whole feature.*
+   - **The Task 3 refactor regression check.** The Faction and Xenotype sections must render
+     **exactly** as before — Task 3 rewrote the row-drawing loop both of them use. There is no
+     automated gate in this repo that can see an IMGUI regression. This is the highest-risk item
+     in the batch precisely because it touches code that already worked.
+   - **Priority beats source.** Wolfein race override at High vs. its faction override at Normal
+     → the race profile wins. Drop race to Low → the faction profile wins.
+   - **The precedence toggle flips the winner** for an equal-priority race + faction pair. In
+     neither toggle state may Xenotype beat Race at equal priority.
+   - **The stale scrub.** Assign a custom profile to a race override, delete that profile in the
+     Profile Editor tab, confirm the row disappears rather than showing a raw guid.
+   - **Assembled tab geometry.** Three sections stack where two did. Populate all three with
+     several rows and scroll — no overlap, no clipping, especially on the frame right after
+     adding a row.
+
+2. **Nothing is pushed.** `origin/main` is 41 commits behind.
+
+### ✅ What IS solid
+
+- `dotnet build` → `0 Error(s), 0 Warning(s)` at every commit in the batch.
+- `python zzz-Do-Not-Commit/test_race_resolution.py` → **PASS, 19/19.** Controller-run.
+- The final whole-branch review returned **SOUND** — no Critical or Important findings. It traced
+  both composite paths end to end and confirmed an empty race map resolves identically to the
+  old two-source logic, so pre-existing configs are unaffected.
+- Scroll math independently checked by the controller: `PawnVarianceSettings.cs:614` is
+  `Math.Max(overridesViewHeight, 1000f)` — a **floor, not a cap** — and `:656` recomputes
+  `listing.CurHeight + 40f` each frame, so three sections expand the view rather than clipping.
+
+### 🐞 The one worth knowing about
+
+The Python resolver mirror passed **14/14 while never asserting a `Lowest`-priority override
+winning as the sole match** — a case the task's own constraints named explicitly. The gate was
+green and not watching. All five added assertions passed on the first run, so the resolver was
+already correct, but **a passing test suite said nothing about the requirement it was built to
+protect.** Now 19/19.
+
+### 🔀 Carried, not fixed
+
+Seven Minor findings were triaged as carry by the final review; all are in the ledger. The two
+worth knowing:
+
+- **`Def.LabelCap` is called without a null-`label` guard** in all three override sections. A
+  third-party def shipping no `<label>` would throw. Pre-existing, symmetric across faction,
+  race and xenotype — a single `string.IsNullOrEmpty(d.label) ? d.defName : ...` fallback hardens
+  all three.
+- **`ProfileEditorTab.cs` now has three near-identical 9-line scrub blocks.** Same duplication
+  the owner chose to remove in Task 3, one layer up. A `ScrubStaleOverrides(overrides,
+  priorities, deletedId)` helper would collapse them and stop a future fourth axis forgetting one
+  of its two dictionaries.
+
+---
+
+# 🚧 WHERE THIS LEFT OFF — THE 2026-08-04 BATCH (still an open gate)
 
 **Merged to `main` on 2026-08-06 (fast-forward). The gate below did NOT close — the work was
 merged unverified, at the owner's instruction. Everything in "What is NOT done" still stands.**
@@ -819,10 +958,18 @@ Rule 4 consultation item.
 
 # 🛠️ FEATURE SUMMARY & RECENT ARCHITECTURE
 
-1. **5-Bucket Override Priority System**:
-   - Resolution hierarchy: `Xenotype Overrides > Faction Overrides > Hostile Profile > Default Active Profile` (or `Faction > Xenotype` if `factionOverridesTakePrecedence = true`).
+1. **5-Bucket Override Priority System** — **three sources as of 2026-08-06** (see §1.7):
    - Priority buckets: `Lowest (0)`, `Low (1)`, `Normal (2)`, `High (3)`, `Highest (4)`.
-   - Pre-assigned default overrides: `Empire` & `Sanguophage` $\rightarrow$ `Highest` (`Elite`/`Sovereign`), `Ancients`/ DLC xenotypes $\rightarrow$ `High`/`Normal`.
+   - **Priority level is compared first and always wins.** Source rank breaks exact ties only.
+   - Source rank is a **total order**, not pairwise rules — three sources compared pairwise can
+     cycle with no winner. `RankOf` gives `Faction > Race > Xenotype` when
+     `factionOverridesTakePrecedence` is `true` (the default), `Race > Xenotype > Faction` when
+     it is `false`. **Race beats Xenotype at equal priority in both states.**
+   - No override matches → `Hostile Profile` (if applicable) → `Default Active Profile`.
+   - Pre-assigned defaults: `Empire` & `Sanguophage` $\rightarrow$ `Highest` (`Elite`/`Sovereign`),
+     `Ancients` / DLC xenotypes $\rightarrow$ `High`/`Normal`. **Race overrides ship empty** —
+     the installed race list is mod-dependent, so there is nothing to seed.
+   - The xenotype source is skipped entirely without Biotech; **race and faction are not.**
 
 2. **Unlimited Dynamic Custom Profiles**:
    - Managed via dynamic [`CustomProfile`](file:///C:/Users/gokal/Desktop/Rimworld-mod/Rimworld-Pawn-variance-mod/Source/VarianceProfile.cs#L126) instances in `customProfiles` list using string IDs (`"custom_1"`, `"custom_2"`).
@@ -909,8 +1056,11 @@ the batch and restored in a `finally`, and throwaway pawns are `Discard`ed so th
 into the world pawn pool.
 
 > [!NOTE]
-> It samples player-faction colonists, so it exercises the **active profile only** — the faction
-> and xenotype override paths are not covered by it.
+> It samples player-faction colonists, so it exercises the **active profile only** — the faction,
+> race and xenotype override paths are not covered by it. Nothing in this repo exercises override
+> resolution at runtime; the closest thing is the Python mirror
+> `zzz-Do-Not-Commit/test_race_resolution.py` (19 cases), which validates the rule table but not
+> the C# that implements it.
 
 ---
 
