@@ -619,9 +619,9 @@ namespace PawnVarianceMod
             listing.Begin(viewRect);
 
             listing.CheckboxLabeled(
-                "Enable Faction & Xenotype Overrides",
+                "Enable Faction, Race & Xenotype Overrides",
                 ref enableOverrides,
-                "When enabled, specific faction and xenotype profiles take precedence over Hostile and General profiles.");
+                "When enabled, specific faction, race and xenotype profiles take precedence over Hostile and General profiles.");
 
             listing.Gap(4f);
 
@@ -629,17 +629,22 @@ namespace PawnVarianceMod
             if (!enableOverrides)
             {
                 GUI.enabled = false;
-                Caption(listing, "Enable the checkbox above to configure per-faction and per-xenotype profiles.");
+                Caption(listing, "Enable the checkbox above to configure per-faction, per-race and per-xenotype profiles.");
             }
 
+            // Field name is deliberately unchanged -- it is Scribed as
+            // "factionOverridesTakePrecedence" and renaming it would orphan every saved config.
             listing.CheckboxLabeled(
-                "Faction Overrides Take Priority Over Xenotype Overrides",
+                "Faction Overrides Take Priority Over Race & Xenotype Overrides",
                 ref factionOverridesTakePrecedence,
-                "When checked, if a pawn matches both a Faction override and a Xenotype override (e.g. an Empire Neanderthal), the Faction override is used. If unchecked, the Xenotype override takes priority.");
+                "When checked, if a pawn matches a Faction override and also a Race or Xenotype override at the same priority (e.g. an Empire Neanderthal), the Faction override is used. If unchecked, Race and Xenotype overrides take priority.\n\nRace always beats Xenotype at equal priority, regardless of this setting.");
 
             listing.Gap(SectionGap);
 
             DrawFactionOverridesSection(listing);
+
+            // Not behind a Biotech check -- HAR races exist without it.
+            DrawRaceOverridesSection(listing);
 
             if (ModsConfig.BiotechActive)
             {
@@ -674,9 +679,10 @@ namespace PawnVarianceMod
             TooltipHandler.TipRegion(c3,
                 "Every override defaults to Normal. Higher priority levels take precedence over "
                 + "lower ones.\n\n"
-                + "Ties at the same priority are broken by the faction-vs-xenotype toggle above.\n\n"
-                + "Factions and xenotypes not listed here have no override and fall back to the "
-                + "hostile or colony profile.");
+                + "At equal priority the order is Faction, then Race, then Xenotype -- or Race, "
+                + "Xenotype, then Faction if the faction-precedence toggle above is off.\n\n"
+                + "Factions, races and xenotypes not listed here have no override and fall back to "
+                + "the hostile or colony profile.");
 
             listing.Gap(2f);
         }
@@ -883,6 +889,82 @@ namespace PawnVarianceMod
                     destructive: false));
             }
             GUI.color = oldColor;
+        }
+
+        private void DrawRaceOverridesSection(Listing_Standard listing)
+        {
+            Section(listing, "Race Overrides");
+
+            if (raceOverrides.Count == 0)
+            {
+                Caption(listing, "No race overrides configured. Race overrides ship empty because the available races depend on which race mods are installed.");
+            }
+            else
+            {
+                OverrideColumnHeaders(listing, "Race");
+                DrawOverrideRows(listing, raceOverrides, racePriorities,
+                    key => DefDatabase<ThingDef>.GetNamedSilentFail(key)?.LabelCap.ToString() ?? key);
+            }
+
+            Color oldColor = GUI.color;
+            GUI.color = new Color(0.4f, 0.85f, 0.4f);
+            if (listing.ButtonText("+ Add Race Override"))
+            {
+                var options = new List<FloatMenuOption>();
+                foreach (var raceDef in SelectableRaces())
+                {
+                    if (!raceOverrides.ContainsKey(raceDef.defName))
+                    {
+                        var rDef = raceDef;
+                        options.Add(new FloatMenuOption(rDef.LabelCap, () =>
+                        {
+                            raceOverrides[rDef.defName] = VarianceProfiles.DistinctId;
+                            racePriorities[rDef.defName] = OverridePriority.Normal;
+                        }));
+                    }
+                }
+                if (options.Count == 0)
+                {
+                    options.Add(new FloatMenuOption("No remaining races available", null));
+                }
+                Find.WindowStack.Add(new FloatMenu(options));
+            }
+            GUI.color = oldColor;
+
+            listing.Gap(4f);
+            Rect raceActionRow = listing.GetRect(28f);
+
+            GUI.color = new Color(1f, 0.4f, 0.4f);
+            if (Widgets.ButtonText(raceActionRow, "Delete All Race Overrides"))
+            {
+                Find.WindowStack.Add(Dialog_MessageBox.CreateConfirmation(
+                    "Are you sure you want to delete all race overrides? This will clear all custom race profile assignments.",
+                    () =>
+                    {
+                        raceOverrides.Clear();
+                        racePriorities.Clear();
+                    },
+                    destructive: true));
+            }
+            GUI.color = oldColor;
+        }
+
+        // Humanlike races that something actually spawns. Two filters, both load-bearing:
+        // Humanlike drops the ~35 mechanoid ThingDef_AlienRace entries that Wolfein and Milira
+        // ship alongside their playable races, and the PawnKindDef pass drops abstract or
+        // unreferenced race defs. On a Wolfein + Milira install this yields exactly Human,
+        // Wolfein_Race, Milira_Race and Milian_Race.
+        private static IEnumerable<ThingDef> SelectableRaces()
+        {
+            var seen = new HashSet<ThingDef>();
+            foreach (var kind in DefDatabase<PawnKindDef>.AllDefs)
+            {
+                ThingDef race = kind.race;
+                if (race?.race == null) continue;
+                if (!race.race.Humanlike) continue;
+                seen.Add(race);
+            }
+            return seen.OrderBy(d => d.LabelCap.ToString());
         }
 
         private static void Section(Listing_Standard listing, string title)
