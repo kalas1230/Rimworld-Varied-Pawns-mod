@@ -199,6 +199,15 @@ namespace PawnVarianceMod
                             xenotypePriorities.Remove(k);
                         }
 
+                        var staleRaces = new List<string>();
+                        foreach (var kv in raceOverrides)
+                            if (kv.Value == deletedId) staleRaces.Add(kv.Key);
+                        foreach (var k in staleRaces)
+                        {
+                            raceOverrides.Remove(k);
+                            racePriorities.Remove(k);
+                        }
+
                         RefreshResolved();
                     },
                     destructive: true));
