@@ -681,6 +681,64 @@ namespace PawnVarianceMod
             listing.Gap(2f);
         }
 
+        // The row body shared by all three override sections. Geometry is the single source of
+        // truth for the 0.35 / 0.28 / 0.20 / 0.14 columns -- OverrideColumnHeaders above mirrors
+        // these fractions and must move with them.
+        //
+        // defLabelFor maps a stored defName to its display label. It is a delegate rather than a
+        // generic type parameter because each section looks its key up in a different
+        // DefDatabase, and all three fall back to the raw defName when the def is missing so a
+        // row whose mod was uninstalled stays visible and removable.
+        private void DrawOverrideRows(
+            Listing_Standard listing,
+            Dictionary<string, string> overrides,
+            Dictionary<string, OverridePriority> priorities,
+            Func<string, string> defLabelFor)
+        {
+            string toRemove = null;
+            var keys = new List<string>(overrides.Keys);
+            foreach (var key in keys)
+            {
+                var currentProfile = overrides[key];
+                OverridePriority currentPrio = OverridePriority.Normal;
+                if (priorities.TryGetValue(key, out var p))
+                    currentPrio = p;
+
+                string label = defLabelFor(key);
+
+                Rect rowRect = listing.GetRect(30f);
+                Rect labelRect = new Rect(rowRect.x, rowRect.y, rowRect.width * 0.35f, rowRect.height);
+                Rect buttonRect = new Rect(rowRect.x + rowRect.width * 0.36f, rowRect.y, rowRect.width * 0.28f, rowRect.height);
+                Rect prioRect = new Rect(rowRect.x + rowRect.width * 0.65f, rowRect.y, rowRect.width * 0.20f, rowRect.height);
+                Rect removeRect = new Rect(rowRect.x + rowRect.width * 0.86f, rowRect.y, rowRect.width * 0.14f, rowRect.height);
+
+                Text.Anchor = TextAnchor.MiddleLeft;
+                Widgets.Label(labelRect, label);
+                Text.Anchor = TextAnchor.UpperLeft;
+
+                if (Widgets.ButtonText(buttonRect, LabelFor(currentProfile)))
+                {
+                    string k = key;
+                    ProfileMenu(id => overrides[k] = id);
+                }
+                if (Widgets.ButtonText(prioRect, currentPrio.ToString()))
+                {
+                    string k = key;
+                    PriorityMenu(pr => priorities[k] = pr);
+                }
+                if (Widgets.ButtonText(removeRect, "Remove"))
+                {
+                    toRemove = key;
+                }
+                listing.Gap(4f);
+            }
+            if (toRemove != null)
+            {
+                overrides.Remove(toRemove);
+                priorities.Remove(toRemove);
+            }
+        }
+
         private void DrawFactionOverridesSection(Listing_Standard listing)
         {
             Section(listing, "Faction Overrides");
@@ -692,49 +750,8 @@ namespace PawnVarianceMod
             else
             {
                 OverrideColumnHeaders(listing, "Faction");
-                string toRemove = null;
-                var keys = new List<string>(factionOverrides.Keys);
-                foreach (var key in keys)
-                {
-                    var currentProfile = factionOverrides[key];
-                    OverridePriority currentPrio = OverridePriority.Normal;
-                    if (factionPriorities.TryGetValue(key, out var p))
-                        currentPrio = p;
-
-                    FactionDef def = DefDatabase<FactionDef>.GetNamedSilentFail(key);
-                    string label = def != null ? def.LabelCap.ToString() : key;
-
-                    Rect rowRect = listing.GetRect(30f);
-                    Rect labelRect = new Rect(rowRect.x, rowRect.y, rowRect.width * 0.35f, rowRect.height);
-                    Rect buttonRect = new Rect(rowRect.x + rowRect.width * 0.36f, rowRect.y, rowRect.width * 0.28f, rowRect.height);
-                    Rect prioRect = new Rect(rowRect.x + rowRect.width * 0.65f, rowRect.y, rowRect.width * 0.20f, rowRect.height);
-                    Rect removeRect = new Rect(rowRect.x + rowRect.width * 0.86f, rowRect.y, rowRect.width * 0.14f, rowRect.height);
-
-                    Text.Anchor = TextAnchor.MiddleLeft;
-                    Widgets.Label(labelRect, label);
-                    Text.Anchor = TextAnchor.UpperLeft;
-
-                    if (Widgets.ButtonText(buttonRect, LabelFor(currentProfile)))
-                    {
-                        string k = key;
-                        ProfileMenu(id => factionOverrides[k] = id);
-                    }
-                    if (Widgets.ButtonText(prioRect, currentPrio.ToString()))
-                    {
-                        string k = key;
-                        PriorityMenu(p => factionPriorities[k] = p);
-                    }
-                    if (Widgets.ButtonText(removeRect, "Remove"))
-                    {
-                        toRemove = key;
-                    }
-                    listing.Gap(4f);
-                }
-                if (toRemove != null)
-                {
-                    factionOverrides.Remove(toRemove);
-                    factionPriorities.Remove(toRemove);
-                }
+                DrawOverrideRows(listing, factionOverrides, factionPriorities,
+                    key => DefDatabase<FactionDef>.GetNamedSilentFail(key)?.LabelCap.ToString() ?? key);
             }
 
             Color oldColor = GUI.color;
@@ -806,49 +823,8 @@ namespace PawnVarianceMod
             else
             {
                 OverrideColumnHeaders(listing, "Xenotype");
-                string toRemove = null;
-                var keys = new List<string>(xenotypeOverrides.Keys);
-                foreach (var key in keys)
-                {
-                    var currentProfile = xenotypeOverrides[key];
-                    OverridePriority currentPrio = OverridePriority.Normal;
-                    if (xenotypePriorities.TryGetValue(key, out var p))
-                        currentPrio = p;
-
-                    XenotypeDef def = DefDatabase<XenotypeDef>.GetNamedSilentFail(key);
-                    string label = def != null ? def.LabelCap.ToString() : key;
-
-                    Rect rowRect = listing.GetRect(30f);
-                    Rect labelRect = new Rect(rowRect.x, rowRect.y, rowRect.width * 0.35f, rowRect.height);
-                    Rect buttonRect = new Rect(rowRect.x + rowRect.width * 0.36f, rowRect.y, rowRect.width * 0.28f, rowRect.height);
-                    Rect prioRect = new Rect(rowRect.x + rowRect.width * 0.65f, rowRect.y, rowRect.width * 0.20f, rowRect.height);
-                    Rect removeRect = new Rect(rowRect.x + rowRect.width * 0.86f, rowRect.y, rowRect.width * 0.14f, rowRect.height);
-
-                    Text.Anchor = TextAnchor.MiddleLeft;
-                    Widgets.Label(labelRect, label);
-                    Text.Anchor = TextAnchor.UpperLeft;
-
-                    if (Widgets.ButtonText(buttonRect, LabelFor(currentProfile)))
-                    {
-                        string k = key;
-                        ProfileMenu(id => xenotypeOverrides[k] = id);
-                    }
-                    if (Widgets.ButtonText(prioRect, currentPrio.ToString()))
-                    {
-                        string k = key;
-                        PriorityMenu(p => xenotypePriorities[k] = p);
-                    }
-                    if (Widgets.ButtonText(removeRect, "Remove"))
-                    {
-                        toRemove = key;
-                    }
-                    listing.Gap(4f);
-                }
-                if (toRemove != null)
-                {
-                    xenotypeOverrides.Remove(toRemove);
-                    xenotypePriorities.Remove(toRemove);
-                }
+                DrawOverrideRows(listing, xenotypeOverrides, xenotypePriorities,
+                    key => DefDatabase<XenotypeDef>.GetNamedSilentFail(key)?.LabelCap.ToString() ?? key);
             }
 
             Color oldColor = GUI.color;
