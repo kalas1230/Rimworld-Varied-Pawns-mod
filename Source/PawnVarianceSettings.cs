@@ -947,8 +947,15 @@ namespace PawnVarianceMod
             DrawShareSettingsSection(listing);
 
             listing.Gap(SectionGap);
+            GUI.color = new Color(0.9f, 0.75f, 0.3f);
             if (listing.ButtonText("Reset All Settings"))
-                ResetToDefaults();
+            {
+                Find.WindowStack.Add(Dialog_MessageBox.CreateConfirmation(
+                    "Reset all settings to defaults? All custom profiles, overrides, and options will be restored to defaults.",
+                    () => ResetToDefaults(),
+                    destructive: false));
+            }
+            GUI.color = Color.white;
         }
 
         private void DrawShareSettingsSection(Listing_Standard listing)

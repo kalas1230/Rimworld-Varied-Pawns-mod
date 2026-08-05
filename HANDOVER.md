@@ -1,8 +1,9 @@
 # Handover — Varied Pawns Mod
 
-Date: 2026-08-03
+Date: 2026-08-06
 Repo: `C:\Users\gokal\Desktop\Rimworld-mod\Rimworld-Pawn-variance-mod`
 Branch: **`feature/profile-editor-layout`** (14 commits ahead of `main`, **unmerged**)
+`HEAD`: `ab73c6b` — **plus a substantial uncommitted working tree, itemised in the next section.**
 
 ---
 
@@ -77,7 +78,50 @@ All three live in `Constants.cs`. `docs/tools/envelope_check.py` ran and confirm
 
 ---
 
-# 🚧 WHERE THIS LEFT OFF — READ FIRST (2026-08-04)
+# 🧾 UNCOMMITTED WORK IN THE TREE — READ BEFORE ANYTHING ELSE (2026-08-06)
+
+> [!CAUTION]
+> **Nothing from the 2026-08-05/06 sessions is committed.** `HEAD` is still `ab73c6b`. Everything
+> below lives only in the working tree — do not `git checkout`, `reset` or `stash` without reading
+> this list first.
+
+| File | State |
+|---|---|
+| `Source/DebugActions.cs` | **NEW, untracked.** The verification harness — see "🧪 Verification harness". |
+| `Source/EnvelopeFigures.g.cs` | **NEW, untracked, auto-generated.** Golden Best-of-N reference. Regenerate with the tool, never hand-edit. |
+| `docs/tools/envelope_check.py` | Dispersion columns + generates the file above. |
+| `Source/ProfileEditorTab.cs` | Passion-budget cap `24f → MaxPassionPips`; six tooltips rewritten for range semantics. |
+| `Source/VarianceProfile.cs` | `ClampAndSwap` now bounds passion counts to `[0, MaxPassionPips]`; corrected the false Sovereign comment. |
+| `Source/PawnVarianceSettings.cs` | `countProtectedTraits` default flip (predates these sessions). |
+| `Source/TraitProtection.cs` | Comment condensation. **Not authored by the agent sessions** — provenance unknown, logic appears untouched (10 insertions / 27 deletions, all comment lines). Verify before committing. |
+| `HANDOVER.md` | This document. |
+
+**Verified state:** `dotnet build` → `0 Error(s), 0 Warning(s)`. `python docs/tools/envelope_check.py`
+→ **PASS, exit 0, every percentage unchanged** from the committed baseline. `EnvelopeFigures.g.cs`
+reports `unchanged` on a re-run, so generation is idempotent.
+
+**Not verified:** none of it has been seen running. `DebugActions.cs` compiles — which does confirm
+the `LudeonTK.DebugAction` signature, `Dialog_DebugOptionListLister`, the `PawnGenerationRequest`
+named arguments and `Discard(true)` all resolve against the real `Assembly-CSharp` — but neither
+debug action has ever been executed.
+
+### 🔓 Open decisions — raised, analysed, NOT decided
+
+None of these are bugs in the "must fix" sense; each is a deliberate deferral awaiting the owner.
+
+| # | Decision | Notes |
+|---|---|---|
+| 1 | **Noise-slider floors** — disclose in tooltips, or drop `MinMagnitudeFloor`/`PassionBudgetSpreadMin` to `0f`? | See "Surprise 1" above. Dropping them changes generation (Rule 5) but moves **no** envelope figure — the composite reads neither constant. Leaning: disclose, since the floors look deliberate. |
+| 2 | **Wildcard realized-budget overshoot** | ~2.7σ rolls exceed the 18-pip capacity and the surplus is silently discarded. Independent of the slider cap fix. Clamping the realized budget to capacity is the minimal fix. Rule 5. |
+| 3 | **Composite saturation mismatch** | Score saturates at budget 18/16/14.4 by Major bias; reality at 12/15/18. No shipped preset reaches it. Fixing it **would** move envelope figures → full recalc-and-repaste cycle. |
+| 4 | **Skill-shift downside floor** | The asymmetric-risk axis: a passion budget escaping upward is harmless, a skill shift escaping downward by up to 6 levels on an already-low-quality pawn is not. Raised by the design review as the one place a soft floor might genuinely be wanted. |
+| 5 | **`skillShiftMin` means two things** | Soft target in `Apply`, hard floor in `ApplyGrowUp`. Intentional and documented, but the design review called it the most likely future bug here. Fix is naming at the call sites, not unifying semantics. |
+| 6 | **User-facing derivation write-up** | Decided: no formula in the settings UI. If wanted, it belongs in the mod's About/description or `docs/`, not a tooltip. |
+| 7 | **Exposing the exchange rate `R` as a player setting** | Rejected. It would be a control that changes nothing (the score is display-only) while visibly breaking the ±35% envelope the mod advertises. Do not revisit without reading "⚖️ The skill ↔ passion exchange rate". |
+
+---
+
+# 🚧 WHERE THIS LEFT OFF — THE 2026-08-04 BATCH (still the merge gate)
 
 **Branch `feature/profile-editor-layout`, 8 commits ahead of the previous state. NOT MERGED.**
 
@@ -114,6 +158,10 @@ adjudication is in `.superpowers/sdd/progress.md` — **read that ledger before 
      Sovereign `+19%`, Specialist `+7%`, Scavenger `-13%`.
    - Cycling the editor picker must leave the General tab's Active Colony Profile unchanged.
    - Settings export → import must still round-trip after the Share Settings caption move.
+   - **Run both new debug actions** (`Varied Pawns` category — see "🧪 Verification harness").
+     `Verify Best-of-N against envelope_check.py` should PASS, and it settles the eight
+     Best-of-25 figures above mechanically instead of by eye. `Roll pawns and dump distribution`
+     at 200 gives the first *observed* dispersion numbers this project has ever had.
 
 2. **The final whole-branch review was never dispatched.** Per-task reviews all passed, but the
    broad cross-task review — the one that catches assembled-geometry defects only visible with
@@ -146,10 +194,15 @@ touch `FormatPowerPercent`, the baseline must be measured at the same N as the s
   and both override maps; the shared-field version handled only the colony case, by accident.
 - **Best-of-25 readout** in the header, beside the typical-pawn figure. Mirrors
   `envelope_check.py` at 1024 integration nodes (0.17pp of its 20000-node reference).
-  **If you change one, change both.**
+  **If you change one, change both** — and this is no longer on your memory: the
+  `Varied Pawns > Verify Best-of-N against envelope_check.py` debug action diffs the two
+  (see "🧪 Verification harness"). Run it after touching either.
 - **Seven presets retuned** to owner-approved targets. `Sovereign`'s skill range is deliberately
-  untouched — `skillShiftMin` stays `0` so it can never roll below the vanilla baseline; the
+  untouched — `skillShiftMin` stays `0` so its mean band sits at or above the vanilla baseline; the
   whole gain is passion budget. Translating it instead would have left 0.5pp of N=1 headroom.
+  **That `0` bounds the band, not each skill:** `SkillVarianceApplier.Apply` adds an *unclamped*
+  noise term on top (magnitude ≈1.8 at `skillNoise` 0.24), so an individual skill on a low-quality
+  roll can still land below vanilla's level. Only the grow-up path clamps (`clampToRange: true`).
 - **`Gifted` removed.** +152% at N=1, unreachable by default, skipped by two retunes.
 - **Override columns labelled**, and the overlapping prose blocks moved to tooltips.
 - **Neanderthal stays `Distinct`** — reviewed 2026-08-04 and deliberately left alone.
@@ -167,10 +220,15 @@ touch `FormatPowerPercent`, the baseline must be measured at the same N as the s
 ## 2. User File-by-File Code Review (IN PROGRESS)
 - [x] [`Source/VarianceProfile.cs`](file:///C:/Users/gokal/Desktop/Rimworld-mod/Rimworld-Pawn-variance-mod/Source/VarianceProfile.cs) — **DONE (REVIEWED)** (Legacy enum/comment cleanup, `IExposable` parameterless `ExposeData()`, `distributionParamsDirty` cache, `MakeValues()`, `?`/`??` operators).
 - [x] [`Source/PawnVarianceSettings.cs`](file:///C:/Users/gokal/Desktop/Rimworld-mod/Rimworld-Pawn-variance-mod/Source/PawnVarianceSettings.cs) — **DONE (REVIEWED)** (Overrides tab UX safety, button colors & dialogs, dynamic scroll view height, explicit Normal priority handling, percentage readout vs Faithful).
-- [ ] [`Source/SettingsTransfer.cs`](file:///C:/Users/gokal/Desktop/Rimworld-mod/Rimworld-Pawn-variance-mod/Source/SettingsTransfer.cs) — **NEXT UP**
-- [ ] [`Source/QualityRoller.cs`](file:///C:/Users/gokal/Desktop/Rimworld-mod/Rimworld-Pawn-variance-mod/Source/QualityRoller.cs)
-- [ ] [`Source/SkillVarianceApplier.cs`](file:///C:/Users/gokal/Desktop/Rimworld-mod/Rimworld-Pawn-variance-mod/Source/SkillVarianceApplier.cs)
-- [ ] [`Source/TraitVarianceApplier.cs`](file:///C:/Users/gokal/Desktop/Rimworld-mod/Rimworld-Pawn-variance-mod/Source/TraitVarianceApplier.cs)
+- [x] [`Source/ProfileEditorTab.cs`](file:///C:/Users/gokal/Desktop/Rimworld-mod/Rimworld-Pawn-variance-mod/Source/ProfileEditorTab.cs) — **DONE (REVIEWED)** (Profile Editor GUI layout redesign, partial class of PawnVarianceSettings, pinned header, delete cascade cleanup, Best-of-25 readout math, Beta curve plotting).
+- [x] [`Source/Dialog_RenameProfile.cs`](file:///C:/Users/gokal/Desktop/Rimworld-mod/Rimworld-Pawn-variance-mod/Source/Dialog_RenameProfile.cs) — **DONE (REVIEWED)** (Rename profile dialog modal, subclassing Dialog_Rename<CustomProfile>).
+- [x] [`Source/SettingsTransfer.cs`](file:///C:/Users/gokal/Desktop/Rimworld-mod/Rimworld-Pawn-variance-mod/Source/SettingsTransfer.cs) — **DONE (REVIEWED)** (Scribe export/import clipboard transfer, ForceStop safety, XmlDocument pre-validation, atomic CopyFrom swap).
+- [x] [`Source/QualityRoller.cs`](file:///C:/Users/gokal/Desktop/Rimworld-mod/Rimworld-Pawn-variance-mod/Source/QualityRoller.cs) — **DONE (REVIEWED)** (Beta distribution Q ~ Beta(a,b) sampling via Gamma variates, Marsaglia-Tsang, Stuart's theorem, Box-Muller, 0/0 NaN underflow guard).
+- [x] [`Source/SkillVarianceApplier.cs`](file:///C:/Users/gokal/Desktop/Rimworld-mod/Rimworld-Pawn-variance-mod/Source/SkillVarianceApplier.cs) — **DONE (REVIEWED)** (Baseline lerp + triangular noise, generation vs age-13 growth moment, Biotech gene aptitude bug fix reading levelInt directly).
+- [ ] [`Source/TraitVarianceApplier.cs`](file:///C:/Users/gokal/Desktop/Rimworld-mod/Rimworld-Pawn-variance-mod/Source/TraitVarianceApplier.cs) — **NEXT UP**
+- [x] [`Source/TraitProtection.cs`](file:///C:/Users/gokal/Desktop/Rimworld-mod/Rimworld-Pawn-variance-mod/Source/TraitProtection.cs) — **DONE (REVIEWED)** (Biotech gene DNA protection, ScenForced, multi-source forced trait capture, relationship-aware sexuality protection).
+- [ ] [`Source/TraitAgeCap.cs`](file:///C:/Users/gokal/Desktop/Rimworld-mod/Rimworld-Pawn-variance-mod/Source/TraitAgeCap.cs)
+- [ ] [`Source/TraitTrace.cs`](file:///C:/Users/gokal/Desktop/Rimworld-mod/Rimworld-Pawn-variance-mod/Source/TraitTrace.cs)
 - [ ] [`Source/PassionVarianceApplier.cs`](file:///C:/Users/gokal/Desktop/Rimworld-mod/Rimworld-Pawn-variance-mod/Source/PassionVarianceApplier.cs)
 - [ ] [`Source/GrowUpVariance.cs`](file:///C:/Users/gokal/Desktop/Rimworld-mod/Rimworld-Pawn-variance-mod/Source/GrowUpVariance.cs)
 - [ ] [`Source/GrowthUpPatch.cs`](file:///C:/Users/gokal/Desktop/Rimworld-mod/Rimworld-Pawn-variance-mod/Source/GrowthUpPatch.cs)
@@ -274,7 +332,7 @@ Plan: [`docs/superpowers/plans/2026-08-03-profile-editor-layout.md`](file:///C:/
 
 > [!IMPORTANT]
 > **CRITICAL RULES FOR ALL FUTURE AGENTS / DEVELOPERS**:
-> 1. **Statistical Envelope ($\pm 35\%$)**: Every preset profile MUST remain within $\pm 35\%$ of `Faithful` **at every batch size** ($N = 1, 5, 25, 50$) — not only at Best-of-1.
+> 1. **Mean-Power Envelope ($\pm 35\%$)**: Every preset profile MUST remain within $\pm 35\%$ of `Faithful` **at every batch size** ($N = 1, 5, 25, 50$) — not only at Best-of-1. **Read "mean-power" as a scope limit, not decoration** — this rule does not constrain dispersion at all; see "What the envelope does NOT measure" below before assuming it makes a profile safe.
 > 2. **Monotonic Power-Tier Ordering**: The power tiers MUST hold at ANY batch size ($N = 1, 5, 25, 50$):
 >    `Desperate < Scavenger < Faithful < Specialist < Elite < Sovereign`.
 >    **`Distinct` and `Wildcard` are exempt** — they are *variance* presets, not power tiers (see the profile table below). They legitimately sit below `Faithful` at N=1 and cross above it as N rises; that is cherry-picking working as designed, not an inversion.
@@ -299,6 +357,180 @@ tail, so a mean-based figure systematically understates any high-dispersion prof
    **Trait count is deliberately NOT part of the score** — see the next section for why.
 4. Compare each profile to `Faithful` **at the same N**. Deviation must stay inside ±35% at every N.
 
+### 🎚️ Range semantics — two kinds, and they are NOT uniform
+
+**Settled 2026-08-05 after a two-agent design review. Do not "unify" these without re-reading it.**
+
+A range's handles are mapped by quality — `Lerp(min, max, q)` picks the pawn's target. What
+happens *next* differs per control, and the split is deliberate:
+
+| Control | Kind | Mechanism |
+|---|---|---|
+| **Skill shift** | **Target** | `baseline + (tri·2−1)·magnitude`, `clampToRange: false`. Exceeds both handles. |
+| **Passion budget** | **Target** | `mean + Clamp(Gaussian(0,σ), ±4σ)`. Exceeds above; floored at 1 below unless `min = 0`. |
+| **Trait count** | **Hard limit** | `Clamp(Round(lerp + jitter), min, max)`. Jitter is only ±0.25 and there is no trait noise knob. |
+| **Child shift at 13** | **Hard limit** | Same formula as Skill shift but `clampToRange: true`. |
+
+**Why targets, not limits, on the two big axes** — the alternative (ranges as hard bounds, noise
+reshaping the distribution inside them) was considered and rejected:
+
+1. **The range would have to do two jobs at once.** Today `min/max` maps quality onto an outcome
+   and the noise scalar sets dispersion — two concepts, two controls, tunable independently.
+   Make the range a bound and it becomes the quality mapping *and* the outlier limit, which pull
+   opposite ways: allowing a rare exceptional pawn forces the typical pawn up too.
+2. **`Faithful` could no longer do its job.** Vanilla's budget is `5 + Clamp(Gaussian(0,1), −4, 4)` —
+   a mean plus unbounded-by-any-range noise, with no min/max concept at all. A hard-bounded
+   `Faithful` cannot reproduce that shape, and reproducing it is the profile's entire purpose.
+3. **`envelope_check.py` could not verify the change.** It reads `Lerp(min,max,q)` — the mean —
+   never a roll, so it would report PASS throughout while every generated pawn changed. Large
+   change, zero automated coverage.
+
+**A third option was also evaluated and rejected (2026-08-06): `lerp → noise → clamp`.**
+Keep the current formula but clamp the result to `[min, max]` at the end — i.e. what
+`ApplyGrowUp` already does, applied everywhere. It is *not* the same as making noise reshape the
+distribution inside the interval, and it fails for its own reason: **clamping a symmetric
+distribution against a wall does not remove the tail, it stacks the tail into a spike on the
+wall.** Simulated at 400k pawn-skills per preset against each one's real Beta quality:
+
+| Preset | magnitude | range width | % skills pinned to a handle |
+|---|---|---|---|
+| Faithful | 1.60 | 6.00 | 0.7% |
+| Distinct | 2.42 | 9.80 | 3.1% |
+| Sovereign | 1.82 | 3.85 | 5.1% |
+| Wildcard | 5.17 | 12.90 | 5.4% |
+
+Harmless on the shipped presets — that is *not* the argument. Two things kill it:
+
+1. **The noise slider inverts.** The pin rate is driven by `magnitude ÷ range width`, which no UI
+   surfaces. On a custom profile with a narrow band (range `1.0–3.0`), pinning goes 18% at
+   `skillNoise` 0.20 → **49% at 0.50** → **70% at 1.00**, split evenly between the two handles.
+   Past roughly half travel, *raising* the variance knob makes pawns **more alike**, not less: a
+   12-skill pawn ends with ~4 skills at exactly the min shift and ~4 at exactly the max. A control
+   that reverses direction halfway along is worse than one whose range is a soft target.
+2. **It flattens exactly the pawns worth having.** Wildcard pin rate by the pawn's own quality:
+   `q 0.0–0.2 → 29.1%`, `q 0.4–0.6 → 0.0%`, `q 0.8–1.0 → 29.2%`. Clamping does nothing to the
+   average pawn and hits the top and bottom deciles almost exclusively — so the exceptional pawn,
+   which is the entire point of a variance preset, arrives *flatter* than an average one.
+
+It also gives up an identity that is currently **exact**: because the noise is symmetric with mean
+zero, `E[shift] = Lerp(min, max, q)` precisely, which is *why* `CalculateCompositeScore` reading
+`Lerp` is correct rather than approximate. Clamping breaks that, and `envelope_check.py` computes
+`Lerp`, so it could never measure the gap.
+
+**If the guarantee is ever wanted, do not clamp — scale the noise by headroom:**
+`effective = min(magnitude, min(baseline − min, max − baseline))`. That bounds the roll with no
+point mass at either end, keeps `E[shift] = Lerp` exact, and preserves the slider's monotonic
+meaning. Cost: noise does less work at extreme quality. Rule 5 item, not yet decided.
+
+**Why the age-13 path is the exception:** at generation the pawn's levels were just rolled, so
+straying past a handle costs nothing. At 13 they are twelve years of play, so a minimum of `0`
+has to genuinely mean "never subtracts." Rationale is on `SkillVarianceApplier.cs:14-22`.
+
+> [!WARNING]
+> **`skillShiftMin` means two different things in two code paths** — a soft target in `Apply`, a
+> hard floor in `ApplyGrowUp`. That is intentional but it is a real trap: do not reuse one path's
+> helper in the other assuming shared semantics. The design review flagged this as the most
+> likely future bug in this area.
+
+All six affected tooltips were rewritten 2026-08-05 to state which kind each range is, in those
+words. **If you add a range control, its tooltip must say which kind it is.**
+
+### 🎲 How a pawn is actually rolled — granularity, and two things that surprise people
+
+**Verified against source 2026-08-06.** Every one of these has been assumed wrongly at least once
+in this project's history, including by the agent writing this section.
+
+**Quality is rolled ONCE per pawn** (`HarmonyPatches.cs:36`) and the same value is handed to all
+three appliers. That is what makes quality a coherent per-pawn property rather than three
+unrelated numbers — a high-quality pawn is high-quality in skills *and* passions *and* trait count
+together. Do not "improve" this into a per-axis roll.
+
+| Quantity | Rolled |
+|---|---|
+| Quality | **once per pawn** |
+| Skill baseline | once per pawn, `Lerp(shiftMin, shiftMax, q)` |
+| Skill noise | **once per SKILL** — 12 draws, inside the loop in `SkillVarianceApplier.Shift` |
+| Passion budget | once per pawn |
+| Trait count jitter | once per pawn, ±0.25 |
+
+#### ⚠️ Surprise 1: neither noise slider can be turned off
+
+```
+magnitude = Lerp(Constants.MinMagnitudeFloor, MaxMagnitude, skillNoise) = Lerp(0.5, 6, 0) = 0.5
+spread    = Lerp(PassionBudgetSpreadMin,      4f,           passionNoise) = 0.25
+```
+
+**`MinMagnitudeFloor = 0.5` and `PassionBudgetSpreadMin = 0.25` are floors, not zeros.** A slider
+reading `0.00` still delivers ±0.5 levels per skill, and still varies the passion budget by enough
+to change how many passions a pawn gets (a Minor costs exactly 1 pip, σ is 0.25). This is also the
+source of the 0.7% pin rate at `skillNoise = 0` in the clamp table above — it was the floor, not
+rounding error.
+
+**No UI text says this**, including the tooltips rewritten 2026-08-05. Open decision below.
+
+#### ⚠️ Surprise 2: the mod displaces vanilla's roll, it does not author the pawn
+
+`SkillVarianceApplier.cs:47` is `RoundToInt(record.levelInt + shift)` — the shift is applied **on
+top of** whatever vanilla generated from backstory, age and `PawnKindDef`. Consequence: **two pawns
+at identical quality are still completely different pawns**, because they started from different
+vanilla rolls. Even with a hypothetical true-zero noise they would differ; the shift moves the
+whole pawn up or down, it does not decide what the pawn is.
+
+This is the correct mental model for the whole mod and it is easy to lose when reading the
+envelope maths, which talks only about shifts and budgets.
+
+#### ⚠️ Surprise 3: the growth moment rolls a FRESH quality
+
+`GrowUpVariance.cs:58` calls `RollQuality` again. A pawn generated at `q = 0.20` can grow up at
+`q = 0.85`. The two rolls are independent and nothing carries over — a child is **not** "the same
+pawn's quality, re-applied." Deliberate, but it means growth-moment outcomes cannot be predicted
+from the pawn's original generation.
+
+### 🕳️ What the envelope does NOT measure — `skillNoise` and `passionNoise`
+
+**The model treats a pawn as fully determined by its quality roll `q`.** `CalculateCompositeScore`
+reads exactly six fields: `averageQuality`, `skillShiftMin/Max`, `passionCountMin/Max`,
+`passionMajorBias`. **`skillNoise` and `passionNoise` are not inputs**, and no percentage in the
+table below responds to them.
+
+That is a real gap, not a rounding detail. `skillNoise` drives the per-skill excursion term in
+`SkillVarianceApplier.Shift` — `magnitude = Lerp(0.5, 6, skillNoise)`, so up to **±6 levels per
+skill** (`Constants.MaxMagnitude`). Two profiles with identical percentages in the envelope table
+can produce visibly different populations. Concretely:
+
+| Profile | `skillNoise` | per-skill sd | vs `Faithful` |
+|---|---|---|---|
+| Faithful | 0.20 | 0.65 levels | 1.00× |
+| Distinct | 0.35 | 0.99 levels | 1.52× |
+| **Wildcard** | **0.85** | **2.11 levels** | **3.23×** |
+
+(`sd = magnitude/√6`; the `TriangularSample()*2−1` term is triangular on [−1,1], variance 1/6.)
+
+**Two consequences to carry forward:**
+
+1. **Do not cite the envelope as a general safety guarantee.** It bounds *mean power*. A profile
+   can pass Rule 1 at every N and still be wildly more swingy than `Faithful`.
+2. **"Narrowing a profile's dispersion" usually means narrowing `skillShift`, which is the mean
+   band, not the noise.** The 2026-08-04 Wildcard retune (`VarianceProfile.cs`) did exactly this:
+   it moved `skillShiftMin/Max` and left `skillNoise` at `0.85`. The envelope figures improved;
+   actual dispersion did not move.
+
+**These figures are now printed by `envelope_check.py`** as a "Within-pawn dispersion" table under
+the envelope table. **They are REPORTED, NOT ENFORCED** — deliberately. There is no Rule 1
+equivalent for spread and none is wanted: the point is to make the axis visible to whoever reaches
+for `skillNoise`, not to add an eighth architectural rule. Observed dispersion (as opposed to
+derived) comes from the **"Roll pawns and dump distribution"** debug action — see
+"🧪 Verification harness" below.
+
+**The scope limit is now stated to the player too** (2026-08-05). The Row 3 power readout's tooltip
+in `ProfileEditorTab.cs` says the figure is *"Based on starting skill levels and the passion budget
+only. It does not include traits, and it does not show how much pawns differ from each other, so
+two profiles with the same figure can still play very differently."* That second sentence is
+load-bearing, not decoration: without it a player reads `Distinct`'s **−10%** as "weaker than
+Faithful" and picks against the profile for the exact reason it exists — its spread is 1.52×
+Faithful's, and spread is the one thing the figure structurally cannot see. **If you reword that
+tooltip, keep the exclusion clause.**
+
 **Measured `Faithful` baseline is exactly `0.2500`** at `q = 0.50`. This is not a coincidence and
 not a tuned value: `skillNorm = 5/20 = 0.25` and `passionNorm = 4.5/18 = 0.25`, so both axes agree
 and **the baseline no longer depends on the weights at all**. Retuning `wS`/`wP` now moves the
@@ -317,9 +549,16 @@ Decided after a four-agent review (2 Claude, 2 Gemini via agy-bridge). What the 
 
 - Passion is an **XP-rate multiplier**, not an additive gift: `None 0.35× / Minor 1.0× / Major 1.5×`.
   A Minor pip is a 2.86× learning-rate advantage over no passion.
-- **The UI said `Major = 2` until 2026-08-04.** It was always a text bug, never a maths bug:
-  `PassionVarianceApplier.cs:61-64` has always spent `1.5` per Major, and `MaxPassionPips = 18`
-  is derived as 12 skills × 1.5. No envelope figure ever depended on the wrong string.
+- **The UI said `Major = 2` until 2026-08-04.** No *maths* depended on it:
+  `PassionVarianceApplier.cs:61-64` has always spent `1.5` per Major, `MaxPassionPips = 18` is
+  derived as 12 skills × 1.5, and no envelope figure ever read the string.
+  ⚠️ **It was not purely a text bug, though — an earlier claim here said so and was wrong.** The
+  value had leaked into the Passion-budget slider's ceiling as `24f` (12 × 2), and the 2026-08-04
+  fix corrected the caption without correcting the bound, leaving 6 pips of range that could
+  never buy anything. Fixed 2026-08-05: the slider now bounds on `Constants.MaxPassionPips`, and
+  `ClampAndSwap` clamps to it as well so imported and pre-existing profiles are caught too.
+  **No preset was ever affected** — the highest budget any of them uses is `Wildcard` at `9.8`,
+  so nothing was calibrated against the old bound and no envelope figure moved.
 - Its value in skill-levels is therefore **time-dependent**: ≈0 on day 1 (pure future value), peaking
   near 4.8 around day 30, saturating near 3.2 once skill decay reaches equilibrium. The project
   owner's intuition — *skill dominates in emergencies/early game, passion dominates long-run* — is
@@ -368,11 +607,27 @@ Tightest envelope margins:
   Desperate @ N=1: -24.2%  (10.8pp of headroom)
   Elite @ N=1: +24.0%  (11.0pp of headroom)
 
+Within-pawn dispersion (REPORTED, NOT ENFORCED -- invisible to every % above):
+  profile      skillNoise   per-skill sd  vs Faithful  passionNoise   budget sd
+  Faithful           0.20        0.65 lv        1.00x          0.25     1.19 pips
+  Distinct           0.35        0.99 lv        1.52x          0.35     1.56 pips
+  Wildcard           0.85        2.11 lv        3.23x          0.85     3.44 pips
+  Desperate          0.25        0.77 lv        1.17x          0.25     1.19 pips
+  Elite              0.22        0.70 lv        1.07x          0.25     1.19 pips
+  Sovereign          0.24        0.74 lv        1.14x          0.25     1.19 pips
+  Specialist         0.25        0.77 lv        1.17x          0.25     1.19 pips
+  Scavenger          0.25        0.77 lv        1.17x          0.25     1.19 pips
+  A profile can be flat in the table above and 3x wider here. Wildcard is exactly
+  that case: its 2026-08-04 retune narrowed skillShift (the mean band), not skillNoise.
+
+Source/EnvelopeFigures.g.cs: unchanged.
+
 PASS: Rule 1 and Rule 2 hold at every N for all enforced presets.
 If any number moved, update the table in HANDOVER.md "The skill <-> passion exchange rate".
 ```
 
 **Rule 1 (±35%) holds at every N for all eight enforced presets. Rule 2 ordering holds at every N.**
+**The dispersion block is enforced by nothing** — see "What the envelope does NOT measure" above.
 
 **Tightest margins** — the 2026-08-04 retune roughly tripled the worst-case headroom
 (was 1.8pp on `Desperate`):
@@ -400,6 +655,11 @@ Tightest envelope margins:
 > hardcoding values, so it cannot drift from what ships. It exits non-zero on a Rule 1 or Rule 2
 > violation, so it can gate a commit. Deterministic integration, not sampling — same input, same
 > output, every run. No third-party dependencies.
+>
+> **It also regenerates `Source/EnvelopeFigures.g.cs`** (checked in, auto-generated, never
+> hand-edited). If `git status` shows that file dirty after a run, **the shipped figures were
+> stale — commit it.** That file is the golden reference the in-game cross-check diffs the mod's
+> own integrator against; see "🧪 Verification harness" below.
 >
 > **Why this matters more than it looks:** even with the 2026-08-04 retune's larger cushion —
 > **6.5pp** of headroom on the tightest preset (`Sovereign` @ N=1, was 1.8pp on `Desperate`) — a
@@ -494,7 +754,7 @@ Rule 4 consultation item.
 > 3. **NEVER PUT TRAIT COUNT BACK INTO THE QUALITY SCORE**: `CalculateCompositeScore` MUST NOT include a trait term. Trait count is a **variance** parameter, not a **mean** one — vanilla's picker is quality-blind, so more traits buys more draws from an unchanged urn, not better traits. Scoring it (a) rewarded widening spreads even though that makes pawns strictly worse to play with, and (b) compressed the whole scale, propping weak profiles up and holding strong ones down. If you think you have found a way to score traits, read `TRAIT-DESIRABILITY-RESEARCH.md` §4 and §5 first — seven approaches were evaluated and rejected with measured data.
 > 4. **DO NOT TOUCH KIDS BY DEFAULT**: The default setting for children and growth moments MUST be **OFF** (`applyVarianceToChildren = false` and `applyChildSkillShift = false`). Growth moments must be left untouched out-of-the-box unless explicitly enabled by the user.
 > 5. **MANDATORY CONSULTATION**: **DO NOT MODIFY OR TOUCH** these percentage bounds, statistical scaling rules, children/growth moment defaults, or profile parameters without explicitly raising a question to the project creator / user and obtaining explicit approval first!
-> 6. **RECALCULATE THE ENVELOPE AFTER ANY SCORING-CONSTANT CHANGE**: run `python docs/tools/envelope_check.py` and paste its output into the table in "How the percentages are derived". The composite weights are **shared across all eight presets**, so changing one constant moves every profile at once — and the tightest preset currently has only **6.5pp** of headroom (`Sovereign` @ N=1). Never hand-edit those percentages. See the full trigger list in that section.
+> 6. **RECALCULATE THE ENVELOPE AFTER ANY SCORING-CONSTANT CHANGE**: run `python docs/tools/envelope_check.py` and paste its output into the table in "How the percentages are derived". The composite weights are **shared across all eight presets**, so changing one constant moves every profile at once — and the tightest preset currently has only **6.5pp** of headroom (`Sovereign` @ N=1). Never hand-edit those percentages. See the full trigger list in that section. **Commit `Source/EnvelopeFigures.g.cs` if the run rewrites it** (auto-generated — never hand-edit it either), then run the `Varied Pawns > Verify Best-of-N against envelope_check.py` debug action in-game to confirm the mod's own integrator still agrees.
 > 7. **THE EXCHANGE RATE `R` DEPENDS ON THE NORMALIZER, NOT JUST THE WEIGHTS**: `R = (AssumedMaxSkillLevel / MaxPassionPips) · (wP / wS)`. Changing `MaxPassionPips` alone silently moves the skill↔passion exchange rate even though no weight was touched — this exact trap nearly reverted the 2026-08-03 retune (`/12 → /18` on its own would have cut `R` from 1.94 to 1.33, *below* the 1.389 it replaced). Recompute `R` before and after touching any of the three.
 > 6. **PROTECTION OF REVIEWED CODE (STRICT PERMISSION REQUIRED)**: **DO NOT MODIFY, REFACTOR, OR REWRITE** any code inside a file marked as `[x] DONE (REVIEWED)` in Section 2 without explicitly presenting the rationale and proposed changes to the user and obtaining explicit permission first!
 
@@ -541,6 +801,59 @@ Copy-Item Assemblies/PawnVarianceMod.dll, Assemblies/PawnVarianceMod.pdb "C:/Pro
 
 - **Guard**: Check `tasklist /FI "IMAGENAME eq RimWorldWin64.exe"` before copying to avoid locked DLL errors.
 - **Verification**: Ensure `dotnet build` returns `0 Error(s), 0 Warning(s)`.
+
+---
+
+# 🧪 VERIFICATION HARNESS
+
+**There is no unit-test project, and that is a decision rather than a gap.** The interesting code
+is `Pawn`-coupled — the Harmony postfix, `ValuesFor` resolution, and all three appliers only mean
+anything against a real generated pawn — so an out-of-game test double would be testing a *copy*
+of the logic instead of the logic. The harness is therefore two dev-mode debug actions in
+[`Source/DebugActions.cs`](file:///C:/Users/gokal/Desktop/Rimworld-mod/Rimworld-Pawn-variance-mod/Source/DebugActions.cs),
+under the **`Varied Pawns`** category. Both are invisible to normal players by construction
+(RimWorld gates the debug menu behind `Prefs.DevMode`) and both are runnable through GABS via
+`rimworld/execute_debug_action`.
+
+### 1. `Verify Best-of-N against envelope_check.py`
+
+Diffs the mod's live 1024-node integrator against the 20000-node reference in
+`Source/EnvelopeFigures.g.cs`, for all 8 presets × N = 1, 5, 25, 50. Tolerance **0.5pp** —
+not arbitrary: `FormatPowerPercent` renders whole percents, so a smaller delta cannot change a
+digit on screen and a larger one can.
+
+**Why this exists:** the mod and `envelope_check.py` genuinely contain two implementations of the
+same integral (custom profiles need a live figure no precomputed table can cover), and until now
+the only thing holding them together was a comment saying *"if you change one, change both."*
+**That contract has already failed once** — see "🐞 The one that nearly shipped". This converts it
+from something a future agent has to remember into something that fails loudly.
+
+It also compares the six scoring constants against a snapshot taken at generation time, so
+*"changed a constant, forgot to re-run the tool"* is caught as well — otherwise a stale table
+passes by being merely self-consistent.
+
+### 2. `Roll pawns and dump distribution`
+
+Generates 50 / 200 / 1000 colonists through the real `PawnGenerator.GeneratePawn` path and dumps
+mean / sd / min / p10 / median / p90 / max for per-skill level, per-pawn mean skill, passion pips
+and trait count, plus a histogram and the passionless-pawn rate.
+
+**This is the only place dispersion can be *observed* rather than derived.** The ±35% envelope is
+a mean-power model and cannot see `skillNoise`, the passion spend loop, trait protection or the
+age cap. Hold the reported per-skill sd against the `per-skill sd` column from
+`envelope_check.py`: **observed should sit above predicted**, since the tool models the noise term
+only while the observed figure also carries the spread of the quality roll itself. If observed
+comes in *below* predicted, the noise term is not reaching pawns and something upstream is
+clamping it.
+
+Passion pips are priced as the spend loop prices them (Major 1.5, Minor 1) — counting passions
+instead would understate any Major-biased profile by a third. Verbose logging is suppressed for
+the batch and restored in a `finally`, and throwaway pawns are `Discard`ed so they cannot leak
+into the world pawn pool.
+
+> [!NOTE]
+> It samples player-faction colonists, so it exercises the **active profile only** — the faction
+> and xenotype override paths are not covered by it.
 
 ---
 

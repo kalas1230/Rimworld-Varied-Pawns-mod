@@ -48,7 +48,7 @@ namespace PawnVarianceMod
         public bool enableSkillVariance = true;
         public bool enableTraitVariance = true;
         public bool enablePassionVariance = true;
-        public bool countProtectedTraits = false;
+        public bool countProtectedTraits = true;
 
         // Display name of the profile these values were resolved from. Diagnostic only, never
         // scribed: without it a verbose trace cannot show WHICH profile produced a pawn, which is
@@ -96,6 +96,20 @@ namespace PawnVarianceMod
             if (childSkillShiftMin > childSkillShiftMax) { var t = childSkillShiftMin; childSkillShiftMin = childSkillShiftMax; childSkillShiftMax = t; }
             if (traitCountMin > traitCountMax) { var t = traitCountMin; traitCountMin = traitCountMax; traitCountMax = t; }
             if (passionCountMin > passionCountMax) { var t = passionCountMin; passionCountMin = passionCountMax; passionCountMax = t; }
+
+            // The budget is spent in pips (Minor 1, Major 1.5) and each of the 12 skills can hold
+            // at most one passion, so 12 x 1.5 = MaxPassionPips is the most that can ever be spent
+            // -- and only at passionMajorBias 1.0. Anything above it is unspendable by
+            // construction: PassionVarianceApplier converts the budget to Major/Minor counts
+            // before it knows how many skills exist, then silently discards whatever will not fit.
+            //
+            // Clamped here as well as bounded on the slider because the slider only guards NEW
+            // input. Settings saved before this bound existed -- the editor allowed up to 24, an
+            // orphan of the era when the UI believed a Major cost 2 -- and profiles arriving
+            // through SettingsTransfer's import both reach these fields without passing a widget.
+            passionCountMin = Mathf.Clamp(passionCountMin, 0f, Constants.MaxPassionPips);
+            passionCountMax = Mathf.Clamp(passionCountMax, 0f, Constants.MaxPassionPips);
+
             distributionParamsDirty = true;
         }
 
@@ -117,7 +131,7 @@ namespace PawnVarianceMod
             Scribe_Values.Look(ref enableSkillVariance, "enableSkillVariance", true);
             Scribe_Values.Look(ref enableTraitVariance, "enableTraitVariance", true);
             Scribe_Values.Look(ref enablePassionVariance, "enablePassionVariance", true);
-            Scribe_Values.Look(ref countProtectedTraits, "countProtectedTraits", false);
+            Scribe_Values.Look(ref countProtectedTraits, "countProtectedTraits", true);
             distributionParamsDirty = true;
         }
     }
@@ -329,9 +343,12 @@ namespace PawnVarianceMod
                 passionNoise = 0.25f,
                 passionMajorBias = 0.70f,
                 // Retuned 2026-08-04 to +18.9% at Best-of-25 (was +16.2%). The skill range is
-                // deliberately UNCHANGED -- skillShiftMin stays at 0 so a Sovereign pawn can never
-                // roll below the vanilla baseline, which is the preset's identity. The entire
-                // increase comes from widening the passion budget (3.0-6.2 -> 2.2-6.6).
+                // deliberately UNCHANGED -- skillShiftMin stays at 0 to keep the preset's mean band
+                // at or above the vanilla baseline, which is its identity. NB this is a bound on
+                // the BAND, not a per-skill guarantee: SkillVarianceApplier.Apply adds an unclamped
+                // noise term (magnitude ~1.8 at skillNoise 0.24) on top of the band, so an
+                // individual skill on a low-quality roll can still land below vanilla's level. The
+                // entire increase comes from widening the passion budget (3.0-6.2 -> 2.2-6.6).
                 // Translating the whole profile up instead would have hit +34.5% at N=1, leaving
                 // 0.5pp of headroom; this shape lands at +28.5% with 6.5pp, better than before.
                 skillShiftMin = 0f,

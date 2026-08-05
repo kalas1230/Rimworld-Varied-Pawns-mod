@@ -257,8 +257,17 @@ namespace PawnVarianceMod
             // = 1.00), or the last sliver of the row registers two competing TipRegions and the
             // tooltip flickers between them. Do not raise this to 0.68 -- that summed to 1.02.
             Rect qLabelAndSlider = qualityRow.LeftPart(0.66f);
+            // This is the control that gives every range below its meaning, so it is the right
+            // place to state the shared rule once. Each range then says which of the two kinds
+            // it is, in its own tooltip.
             TooltipHandler.TipRegion(qLabelAndSlider,
-                "Drives every roll below. Higher quality shifts a pawn toward the top of each range you set.");
+                "Drives every roll below. Each pawn rolls a quality, and that quality picks one "
+                + "point between the handles of every range you set: 0 lands on the low handle, "
+                + "1 on the high handle.\n\n"
+                + "This slider sets the AVERAGE quality. Individual pawns roll around it.\n\n"
+                + "Trait count and Child shift stop there — their handles are hard limits. Skill "
+                + "shift and Passion budget then have their noise setting added on top, so those "
+                + "handles are targets a pawn can be carried past.");
 
             // The readout is output, not input -- always full opacity, even on a
             // read-only preset, so presets stay comparable by cycling the picker.
@@ -268,8 +277,16 @@ namespace PawnVarianceMod
             Text.WordWrap = false;
             Widgets.Label(qReadout, $"→  Typical  {PawnVarianceSettings.FormatPowerReadout(meanComposite)}");
             Text.WordWrap = prevReadoutWordWrap;
+            // The second paragraph is the load-bearing half. Without it a player reads Distinct's
+            // -10% as "weaker than Faithful" and picks against the profile for the exact reason it
+            // exists: its spread is 1.52x Faithful's, and spread is the one thing this figure
+            // structurally cannot see (CalculateCompositeScore takes neither skillNoise nor
+            // passionNoise). Say what the number excludes, not how it is computed.
             TooltipHandler.TipRegion(qReadout,
-                "The average pawn this profile generates, compared to the Faithful baseline (0.25).");
+                "The average pawn this profile generates, compared to the Faithful baseline (0.25).\n\n"
+                + "Based on starting skill levels and the passion budget only. It does not include "
+                + "traits, and it does not show how much pawns differ from each other, so two "
+                + "profiles with the same figure can still play very differently.");
 
             // Row 3b: the Best-of-N anchor.
             //
@@ -330,11 +347,26 @@ namespace PawnVarianceMod
             Widgets.Label(noiseLabelRect, $"Skill noise:  {v.skillNoise:F2}");
             float sNoiseVal = Widgets.HorizontalSlider(noiseRow.RightPart(0.56f), v.skillNoise, 0f, 1f);
             if (EditingCustom) v.skillNoise = sNoiseVal;
-            TooltipHandler.TipRegion(noiseRow, "How widely a single pawn's own skills spread apart from each other.");
+            // "within a pawn" vs Passion noise's "between pawns" is the real distinction and is
+            // easy to lose: this magnitude is drawn independently per skill around one shared
+            // baseline, so it separates a pawn's own skills. Passion noise perturbs a single
+            // per-pawn budget, so it separates pawns. Keep both halves of that contrast.
+            TooltipHandler.TipRegion(noiseRow,
+                "How widely a single pawn's own skills spread apart from each other.\n\n"
+                + "Drawn separately for every skill, so it makes one pawn uneven. It does not make "
+                + "pawns differ from each other; the quality roll does that.\n\n"
+                + "Because it is added on top of the Skill shift range, a high value can push "
+                + "individual skills past either handle of that range.");
             listing.Gap(ControlGap);
             LabeledFloatRange(listing, "Skill shift", SkillShiftRangeId,
                 ref v.skillShiftMin, ref v.skillShiftMax, -20f, 20f, ToStringStyle.FloatOne,
-                "Applied on top of the vanilla roll. The low handle is the shift for the lowest-quality pawn, the high handle for the highest-quality pawn.");
+                "Levels added to or taken from every skill, on top of the vanilla roll.\n\n"
+                + "A TARGET, NOT A LIMIT. Quality picks one point between the handles: the low "
+                + "handle is what the lowest-quality pawn aims for, the high handle the highest. "
+                + "Skill noise then scatters that pawn's twelve skills around that point, and can "
+                + "carry them past either handle.\n\n"
+                + "Set the handles for the pawn you expect. Set Skill noise for how far the "
+                + "exceptions stray.");
 
             if (ModsConfig.BiotechActive)
                 DrawChildSkillShift(listing, v);
@@ -348,11 +380,21 @@ namespace PawnVarianceMod
                 "When off, the range below counts only traits this mod rolls, and traits forced by a xenotype, gene, backstory or scenario are added on top. When on, the range counts every trait the pawn has. Forced traits are never removed either way.");
             if (EditingCustom) v.countProtectedTraits = countVal;
             listing.Gap(ControlGap);
+            // Unlike Skill shift and Passion budget, this one really is a bound --
+            // TraitVarianceApplier clamps the rolled target to [min, max] and there is no trait
+            // noise knob to push past it. Say so, or a player reasonably assumes the looser
+            // semantics they just read two controls above.
             LabeledFloatRange(listing, "Trait count", TraitCountRangeId,
                 ref v.traitCountMin, ref v.traitCountMax, 0f, 15f, ToStringStyle.Integer,
-                v.countProtectedTraits
+                (v.countProtectedTraits
                     ? "Total traits on the pawn, including xenotype and forced traits."
-                    : "Traits this mod rolls. Xenotype, gene, backstory and scenario traits are added on top.");
+                    : "Traits this mod rolls. Xenotype, gene, backstory and scenario traits are added on top.")
+                + "\n\nA HARD LIMIT, unlike Skill shift and Passion budget. Quality picks a point "
+                + "between the handles and the roll never leaves them. There is no trait noise "
+                + "setting.\n\n"
+                + "More traits is not better. Vanilla picks traits without regard to quality, so a "
+                + "wider range only buys more draws from the same pool, including the ones that "
+                + "cause mental breaks. Vanilla's own range is 2 to 3.");
 
             SectionHeader(listing, "Passions", ref v.enablePassionVariance,
                 "When off, this profile leaves vanilla passion assignment untouched.");
@@ -366,7 +408,12 @@ namespace PawnVarianceMod
             Widgets.Label(passionNoiseLabelRect, $"Passion noise:  {v.passionNoise:F2}");
             float pNoiseVal = Widgets.HorizontalSlider(leftHalf.RightPart(0.46f), v.passionNoise, 0f, 1f);
             if (EditingCustom) v.passionNoise = pNoiseVal;
-            TooltipHandler.TipRegion(leftHalf, "How much the total passion budget varies between pawns.");
+            TooltipHandler.TipRegion(leftHalf,
+                "How much the total passion budget varies between pawns.\n\n"
+                + "The opposite of Skill noise: this one perturbs a single per-pawn budget, so it "
+                + "makes pawns differ from each other rather than making one pawn uneven.\n\n"
+                + "Because it is added on top of the Passion budget range, a high value can push a "
+                + "pawn's budget past either handle of that range.");
 
             Rect majorBiasLabelRect = rightHalf.LeftPart(0.52f);
             // Vertically centre the label against the range control.
@@ -377,11 +424,25 @@ namespace PawnVarianceMod
             TooltipHandler.TipRegion(rightHalf, "How often the budget is spent on a Major passion instead of a Minor one. Majors always go to the pawn's best skills first.");
 
             listing.Gap(ControlGap);
+            // Ceiling is MaxPassionPips (18 = 12 skills x 1.5), not a literal: it is the most the
+            // spend loop can ever place, and only at Major bias 1.0. It was 24 until 2026-08-05 --
+            // 12 x 2, derived correctly from the era when the caption below read "Major passion =
+            // 2". That string was fixed on 2026-08-04 and this bound was not, leaving 6 pips of
+            // range that could never buy anything. No preset was affected: the highest any of them
+            // reaches is Wildcard at 9.8, so nothing was ever calibrated against the old bound.
             LabeledFloatRange(listing, "Passion budget", PassionCountRangeId,
-                ref v.passionCountMin, ref v.passionCountMax, 0f, 24f, ToStringStyle.FloatOne,
-                "Minor passion = 1, Major passion = 1.5. Presets use fractional budgets, so this reads to one decimal.");
+                ref v.passionCountMin, ref v.passionCountMax, 0f, Constants.MaxPassionPips, ToStringStyle.FloatOne,
+                "Points spent on passions. Minor passion = 1, Major passion = 1.5. Presets use "
+                + "fractional budgets, so this reads to one decimal.\n\n"
+                + "A TARGET, NOT A LIMIT. Quality picks one point between the handles: the low "
+                + "handle is what the lowest-quality pawn aims for, the high handle the highest. "
+                + "Passion noise then varies each pawn around that point, and can carry them past "
+                + "either handle.\n\n"
+                + "A pawn has 12 skills and each holds at most one passion, so "
+                + Constants.MaxPassionPips.ToString("F0") + " is the most a budget can buy: every skill Major. "
+                + "Reaching it needs Major bias at maximum; at lower bias the budget runs out of skills sooner.");
             Caption(listing, v.passionCountMin > 0f
-                ? "Rolls vary around these target values, but every pawn receives at least one passion."
+                ? "Targets, not limits — Passion noise can carry a pawn outside them. Every pawn still gets at least one passion."
                 : "Minimum is 0, so pawns with no passions are possible.");
         }
 
@@ -402,7 +463,12 @@ namespace PawnVarianceMod
                 listing.Gap(ControlGap);
                 LabeledFloatRange(listing, "Child shift at 13", ChildSkillShiftRangeId,
                     ref v.childSkillShiftMin, ref v.childSkillShiftMax, -20f, 20f, ToStringStyle.FloatOne,
-                    "Hard limit per skill at the age-13 growth moment.");
+                    "Levels added to or taken from each skill at the age-13 growth moment.\n\n"
+                    + "A HARD LIMIT, unlike Skill shift above. Skill noise still varies each skill "
+                    + "inside these handles, but no skill can be carried past them.\n\n"
+                    + "The difference is deliberate. At generation the pawn's levels were just "
+                    + "rolled, so straying costs nothing. At 13 they are twelve years of play, so "
+                    + "a minimum of 0 has to genuinely mean \"never takes levels away\".");
                 Caption(listing, v.childSkillShiftMin >= 0f
                     ? "The minimum is at or above zero, so growing up can never cost a pawn skill levels."
                     : $"The minimum is below zero, so a low-quality pawn can lose up to {-v.childSkillShiftMin:F0} levels in a skill on their birthday.");
