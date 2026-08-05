@@ -40,18 +40,27 @@ namespace PawnVarianceMod
         public bool hasInitializedDefaultOverrides = false;
         public Dictionary<string, string> factionOverrides = new Dictionary<string, string>();
         public Dictionary<string, string> xenotypeOverrides = new Dictionary<string, string>();
+        // Keyed on ThingDef.defName (Human, Wolfein_Race, ...). Ships empty on purpose: unlike
+        // factions and xenotypes, the installed race list is mod-dependent, so there is nothing
+        // sensible to seed.
+        public Dictionary<string, string> raceOverrides = new Dictionary<string, string>();
         public Dictionary<string, OverridePriority> factionPriorities = new Dictionary<string, OverridePriority>();
         public Dictionary<string, OverridePriority> xenotypePriorities = new Dictionary<string, OverridePriority>();
+        public Dictionary<string, OverridePriority> racePriorities = new Dictionary<string, OverridePriority>();
 
         private List<string> factionOverrideKeys = new List<string>();
         private List<string> factionOverrideValues = new List<string>();
         private List<string> xenotypeOverrideKeys = new List<string>();
         private List<string> xenotypeOverrideValues = new List<string>();
+        private List<string> raceOverrideKeys = new List<string>();
+        private List<string> raceOverrideValues = new List<string>();
 
         private List<string> factionPriorityKeys = new List<string>();
         private List<int> factionPriorityValues = new List<int>();
         private List<string> xenotypePriorityKeys = new List<string>();
         private List<int> xenotypePriorityValues = new List<int>();
+        private List<string> racePriorityKeys = new List<string>();
+        private List<int> racePriorityValues = new List<int>();
 
         // Resolved values the appliers actually read. Two live sets now, not one, which is why the
         // Beta cache moved onto VarianceProfileValues — a shared cache would hand one profile's
@@ -133,8 +142,10 @@ namespace PawnVarianceMod
         {
             if (factionOverrides == null) factionOverrides = new Dictionary<string, string>();
             if (xenotypeOverrides == null) xenotypeOverrides = new Dictionary<string, string>();
+            if (raceOverrides == null) raceOverrides = new Dictionary<string, string>();
             if (factionPriorities == null) factionPriorities = new Dictionary<string, OverridePriority>();
             if (xenotypePriorities == null) xenotypePriorities = new Dictionary<string, OverridePriority>();
+            if (racePriorities == null) racePriorities = new Dictionary<string, OverridePriority>();
 
             if (hasInitializedDefaultOverrides && !force)
             {
@@ -335,6 +346,10 @@ namespace PawnVarianceMod
                 factionPriorityValues = factionPriorities.Values.Select(v => (int)v).ToList();
                 xenotypePriorityKeys = new List<string>(xenotypePriorities.Keys);
                 xenotypePriorityValues = xenotypePriorities.Values.Select(v => (int)v).ToList();
+                raceOverrideKeys = new List<string>(raceOverrides.Keys);
+                raceOverrideValues = new List<string>(raceOverrides.Values);
+                racePriorityKeys = new List<string>(racePriorities.Keys);
+                racePriorityValues = racePriorities.Values.Select(v => (int)v).ToList();
             }
 
             Scribe_Collections.Look(ref factionOverrideKeys, "factionOverrideKeys", LookMode.Value);
@@ -346,6 +361,10 @@ namespace PawnVarianceMod
             Scribe_Collections.Look(ref factionPriorityValues, "factionPriorityValues", LookMode.Value);
             Scribe_Collections.Look(ref xenotypePriorityKeys, "xenotypePriorityKeys", LookMode.Value);
             Scribe_Collections.Look(ref xenotypePriorityValues, "xenotypePriorityValues", LookMode.Value);
+            Scribe_Collections.Look(ref raceOverrideKeys, "raceOverrideKeys", LookMode.Value);
+            Scribe_Collections.Look(ref raceOverrideValues, "raceOverrideValues", LookMode.Value);
+            Scribe_Collections.Look(ref racePriorityKeys, "racePriorityKeys", LookMode.Value);
+            Scribe_Collections.Look(ref racePriorityValues, "racePriorityValues", LookMode.Value);
 
             if (Scribe.mode == LoadSaveMode.PostLoadInit)
             {
@@ -406,6 +425,26 @@ namespace PawnVarianceMod
                     }
                 }
 
+                raceOverrides = new Dictionary<string, string>();
+                if (raceOverrideKeys != null && raceOverrideValues != null
+                    && raceOverrideKeys.Count == raceOverrideValues.Count)
+                {
+                    for (int i = 0; i < raceOverrideKeys.Count; i++)
+                    {
+                        raceOverrides[raceOverrideKeys[i]] = raceOverrideValues[i];
+                    }
+                }
+
+                racePriorities = new Dictionary<string, OverridePriority>();
+                if (racePriorityKeys != null && racePriorityValues != null
+                    && racePriorityKeys.Count == racePriorityValues.Count)
+                {
+                    for (int i = 0; i < racePriorityKeys.Count; i++)
+                    {
+                        racePriorities[racePriorityKeys[i]] = (OverridePriority)racePriorityValues[i];
+                    }
+                }
+
                 PopulateDefaultOverrides();
                 RefreshResolved();
             }
@@ -443,8 +482,10 @@ namespace PawnVarianceMod
 
             factionOverrides = other.factionOverrides ?? new Dictionary<string, string>();
             xenotypeOverrides = other.xenotypeOverrides ?? new Dictionary<string, string>();
+            raceOverrides = other.raceOverrides ?? new Dictionary<string, string>();
             factionPriorities = other.factionPriorities ?? new Dictionary<string, OverridePriority>();
             xenotypePriorities = other.xenotypePriorities ?? new Dictionary<string, OverridePriority>();
+            racePriorities = other.racePriorities ?? new Dictionary<string, OverridePriority>();
 
             if (string.IsNullOrEmpty(activeProfileId)) activeProfileId = VarianceProfiles.FaithfulId;
             if (string.IsNullOrEmpty(hostileProfileId)) hostileProfileId = VarianceProfiles.DistinctId;
@@ -1024,8 +1065,10 @@ namespace PawnVarianceMod
             hasInitializedDefaultOverrides = false;
             factionOverrides.Clear();
             xenotypeOverrides.Clear();
+            raceOverrides.Clear();
             factionPriorities.Clear();
             xenotypePriorities.Clear();
+            racePriorities.Clear();
             PopulateDefaultOverrides(force: true);
             RefreshResolved();
 
