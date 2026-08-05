@@ -258,42 +258,49 @@ namespace PawnVarianceMod
                 if (faction == null && pawn.kindDef?.defaultFactionDef != null && Find.FactionManager != null)
                     faction = Find.FactionManager.FirstFactionOfDef(pawn.kindDef.defaultFactionDef);
 
-                string factionProfileId = null;
-                OverridePriority factionPrio = OverridePriority.Normal;
-                bool hasFactionOverride = false;
-                if (faction?.def != null && factionOverrides.TryGetValue(faction.def.defName, out factionProfileId))
-                {
-                    hasFactionOverride = true;
-                    if (factionPriorities.TryGetValue(faction.def.defName, out var p))
-                        factionPrio = p;
-                }
+                string bestProfileId = null;
+                OverridePriority bestPrio = OverridePriority.Lowest;
+                int bestRank = -1;
 
-                string xenoProfileId = null;
-                OverridePriority xenoPrio = OverridePriority.Normal;
-                bool hasXenoOverride = false;
-                if (ModsConfig.BiotechActive)
+                void Consider(string profileId, OverridePriority prio, OverrideSource source)
                 {
-                    string xenoDef = GetXenotypeDefName(pawn, request);
-                    if (xenoDef != null && xenotypeOverrides.TryGetValue(xenoDef, out xenoProfileId))
+                    int rank = RankOf(source);
+                    if (bestProfileId == null || prio > bestPrio || (prio == bestPrio && rank > bestRank))
                     {
-                        hasXenoOverride = true;
-                        if (xenotypePriorities.TryGetValue(xenoDef, out var p))
-                            xenoPrio = p;
+                        bestProfileId = profileId;
+                        bestPrio = prio;
+                        bestRank = rank;
                     }
                 }
 
-                if (hasFactionOverride && hasXenoOverride)
+                if (faction?.def != null
+                    && factionOverrides.TryGetValue(faction.def.defName, out var factionProfileId))
                 {
-                    if (factionPrio > xenoPrio) return Resolve(factionProfileId);
-                    if (xenoPrio > factionPrio) return Resolve(xenoProfileId);
-
-                    // Equal priority tie-break
-                    if (factionOverridesTakePrecedence) return Resolve(factionProfileId);
-                    return Resolve(xenoProfileId);
+                    OverridePriority prio = OverridePriority.Normal;
+                    if (factionPriorities.TryGetValue(faction.def.defName, out var fp)) prio = fp;
+                    Consider(factionProfileId, prio, OverrideSource.Faction);
                 }
 
-                if (hasFactionOverride) return Resolve(factionProfileId);
-                if (hasXenoOverride) return Resolve(xenoProfileId);
+                string raceDef = GetRaceDefName(pawn);
+                if (raceDef != null && raceOverrides.TryGetValue(raceDef, out var raceProfileId))
+                {
+                    OverridePriority prio = OverridePriority.Normal;
+                    if (racePriorities.TryGetValue(raceDef, out var rp)) prio = rp;
+                    Consider(raceProfileId, prio, OverrideSource.Race);
+                }
+
+                if (ModsConfig.BiotechActive)
+                {
+                    string xenoDef = GetXenotypeDefName(pawn, request);
+                    if (xenoDef != null && xenotypeOverrides.TryGetValue(xenoDef, out var xenoProfileId))
+                    {
+                        OverridePriority prio = OverridePriority.Normal;
+                        if (xenotypePriorities.TryGetValue(xenoDef, out var xp)) prio = xp;
+                        Consider(xenoProfileId, prio, OverrideSource.Xenotype);
+                    }
+                }
+
+                if (bestProfileId != null) return Resolve(bestProfileId);
             }
 
             Faction fHostile = pawn.Faction;
@@ -318,6 +325,33 @@ namespace PawnVarianceMod
             if (pawn.kindDef?.xenotypeSet != null && pawn.kindDef.xenotypeSet.Count > 0)
                 return pawn.kindDef.xenotypeSet[0]?.xenotype?.defName;
             return null;
+        }
+
+        private string GetRaceDefName(Pawn pawn)
+        {
+            // pawn.def is the species ThingDef -- Human, or Wolfein_Race / Milira_Race for HAR
+            // races. Deliberately NOT behind the Biotech check: HAR races exist without Biotech.
+            return pawn?.def?.defName;
+        }
+
+        // The three override sources, ranked. A total order rather than pairwise rules: pairwise
+        // comparisons across three sources can produce a cycle (faction > race > xeno > faction)
+        // with no winner, and a single ranking cannot. Higher rank wins an equal-priority tie.
+        private enum OverrideSource { Faction, Race, Xenotype }
+
+        private int RankOf(OverrideSource source)
+        {
+            if (factionOverridesTakePrecedence)
+            {
+                // Faction > Race > Xenotype
+                if (source == OverrideSource.Faction) return 2;
+                if (source == OverrideSource.Race) return 1;
+                return 0;
+            }
+            // Race > Xenotype > Faction
+            if (source == OverrideSource.Race) return 2;
+            if (source == OverrideSource.Xenotype) return 1;
+            return 0;
         }
 
         public override void ExposeData()
