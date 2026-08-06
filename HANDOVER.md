@@ -24,6 +24,98 @@ Branch: **`main`** (41 commits ahead of `origin/main`, **not pushed**)
 
 # ⚠️ CURRENT PRIORITIES & IN-PROGRESS TASKS
 
+## 1.8. 🟢 BEST-OF-N INTEGRATOR — TWO DEFECTS FOUND **IN-GAME** AND FIXED (2026-08-06)
+
+**The first session in this project's history where the mod was actually driven under
+automation.** RimWorld was launched via GABS, quicktest loaded, and both debug actions were run
+against the real assembly. The Best-of-N cross-check **failed, 16 of 32 comparisons** — and it was
+right to.
+
+### Defect A — the `n == 1` shortcut (`PawnVarianceSettings.cs`, `CalculateBestOfNScoreCore`)
+
+```csharp
+if (n == 1) return CalculateCompositeScore(v.averageQuality, v);   // REMOVED
+```
+
+Returned `composite(E[q])` instead of `E[composite(q)]`. Equal only while the composite is **linear
+in q**. Seven of eight presets are linear and matched the reference to six decimal places — which
+is exactly why this survived a per-task review, a whole-branch review and `envelope_check.py`.
+
+`Wildcard`'s `skillShiftMin = -8.7` drives `AssumedVanillaSkillBaseline + shift` below zero, so the
+`Mathf.Clamp` in `CalculateCompositeScore` puts a **kink at q = 0.2868**. Past it the function is
+convex, so by Jensen the shortcut understates: `0.197666` against the true `0.204709`.
+
+**User-visible consequence: `Wildcard`'s "Typical" readout displayed `-21%` when it should read
+`-18%`.** That was the only wrong figure on screen. All eight Best-of-25 figures were correct.
+
+Fixed by deleting the shortcut — the integral is already correct at n=1, since `Pow(cdf, 0) == 1`.
+Verified: the 1024-node integrator now returns `0.204709`, matching the 20000-node reference
+exactly.
+
+### Defect B — the gate was measuring the wrong quantity (`DebugActions.cs`)
+
+The check compared **raw scores** at 0.5% relative while its own comment claimed to be measuring
+displayed percentage points. Those are different things, and the difference is not academic:
+
+Both implementations share a **first-order-accurate right-edge CDF** — `envelope_check.py`'s
+`beta_grid` does `run += v * dq` *before* appending, and `CalculateBestOfNScoreCore` does the same.
+That scheme's error is proportional to `dq`, so **1024 nodes and 20000 nodes do not converge to the
+same raw number** (up to ~0.9% apart at N=50). That gap is real but **cancels in the ratio to
+Faithful**, so it moves no digit on screen.
+
+Result: 15 of the 16 failures were invisible-to-players numerical noise, and the one genuine defect
+was indistinguishable from it. The gate now checks the **displayed** quantity (deviation vs
+Faithful at the same N, 0.5**pp**) and keeps a deliberately wide 3% raw guard so gross divergence
+still fails.
+
+> [!IMPORTANT]
+> **The reference table was NOT regenerated and did not need to be.** `EnvelopeFigures.g.cs` is
+> generated *from* `envelope_check.py`, which was correct throughout. The C# was wrong; fixing it
+> moved the mod *toward* the reference. No recalc-and-repaste cycle was required.
+
+### Defect C — the verify action was invisible in-game (`DebugActions.cs`)
+
+```csharp
+allowedGameStates = AllowedGameStates.Entry | AllowedGameStates.Playing  // was — hidden on a map
+allowedGameStates = AllowedGameStates.PlayingOnMap                       // now
+```
+
+**The action did not appear in the debug menu whenever a colony was loaded** — the exact situation
+§1.6 instructs you to run it in. It was only ever reachable from the main menu. Found only because
+the bridge can execute hidden actions directly.
+
+> [!CAUTION]
+> **The visibility rule is the opposite of what it looks like, and it cost a wrong fix here before
+> being measured.** Observed live:
+>
+> | declared | current state | visible? |
+> |---|---|---|
+> | `Entry \| Playing` (3) | `PlayingOnMap` (6) | no |
+> | `Entry \| PlayingOnMap` (7) | `PlayingOnMap` (6) | no |
+> | `PlayingOnMap` (6) | `PlayingOnMap` (6) | **yes** |
+>
+> The gate is `(current & declared) == declared` — the declared set must be a **SUBSET** of the
+> current state. **ORing in another state makes an action LESS visible, not more**, and "visible at
+> the main menu AND on a map" cannot be expressed in a single attribute. If you add a debug action
+> and it never shows up, this is why. Declare the single state you actually need.
+
+### 🐞 The lesson, which is the same one as last time
+
+`.superpowers/sdd/progress.md` already records a Best-of-N defect that shipped because the plan's
+own snippet was wrong. This is the second. Both were invisible to `dotnet build`, to
+`envelope_check.py` (which never executes the C#), and to every static review. **The only thing
+that caught either was executing the real assembly.** Treat "reviewed and builds clean" as saying
+nothing about numerical code.
+
+### ⚠️ Carried, quantified, NOT fixed
+
+**The shared right-edge CDF is first-order accurate.** Both implementations have it, so they agree
+with each other on the displayed figures and nothing on screen is wrong. Making it midpoint-correct
+would be a genuine accuracy improvement (and would let 1024 nodes match 20000 to ~1e-6) but it
+**changes every N≥2 reference figure**, forcing a full regenerate-and-repaste of the table in "The
+skill ↔ passion exchange rate" and every Best-of-25 figure in this document. Deferred deliberately;
+raise it with the owner before starting, because it is a documentation cascade, not a code change.
+
 ## 1.7. 🟡 RACE OVERRIDES — BUILT, REVIEWED, **NEVER SEEN RUNNING** (2026-08-06)
 
 The newest batch and the top open gate. Full detail in
@@ -333,7 +425,10 @@ no code review and no in-game pass.** What it changes:
    - The header is now 162px; confirm no row overlaps the distribution curve.
    - The eight Best-of-25 figures on screen must match the envelope table's N=25 column:
      Faithful `baseline`, Distinct `+10%`, Wildcard `+17%`, Desperate `-21%`, Elite `+15%`,
-     Sovereign `+19%`, Specialist `+7%`, Scavenger `-13%`.
+     Sovereign `+19%`, Specialist `+7%`, Scavenger `-14%`.
+     *(Scavenger was listed as `-13%` until 2026-08-06. Both the tool and the live code give
+     -13.5%, and `"F0"` rounds half away from zero, so the screen reads **-14%**. The code was
+     always right; this line was wrong. Verified in-game via GABS.)*
    - Cycling the editor picker must leave the General tab's Active Colony Profile unchanged.
    - Settings export → import must still round-trip after the Share Settings caption move.
    - **Run both new debug actions** (`Varied Pawns` category — see "🧪 Verification harness").

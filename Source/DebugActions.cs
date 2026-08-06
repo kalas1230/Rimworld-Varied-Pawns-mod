@@ -36,19 +36,53 @@ namespace PawnVarianceMod
         // Desperate and Scavenger positive -- precisely inverting the fact the second anchor
         // exists to convey. It compiled, it looked plausible, and it shipped. This action is what
         // makes that class of divergence fail loudly instead of looking self-consistent.
+        // PlayingOnMap ALONE, and deliberately not `Entry | ...`. Verified empirically in-game
+        // 2026-08-06, because this is the opposite of what it looks like:
+        //
+        //   declared Entry|Playing     (3), current PlayingOnMap (6) -> HIDDEN
+        //   declared Entry|PlayingOnMap(7), current PlayingOnMap (6) -> HIDDEN
+        //   declared PlayingOnMap      (6), current PlayingOnMap (6) -> visible
+        //
+        // The gate is (current & declared) == declared: the declared set must be a SUBSET of the
+        // current state. So ORing in another state makes an action LESS visible, not more, and
+        // "visible at the main menu AND on a map" is not expressible in one attribute at all.
+        //
+        // This action was originally Entry|Playing and was therefore invisible in the debug menu
+        // whenever a colony was loaded -- the exact situation HANDOVER tells you to run it in. It
+        // was only ever reachable from the main menu. The map case is the one that matters, so it
+        // wins; the bridge can still execute it from Entry, where visibility does not apply.
         [DebugAction(Category, "Verify Best-of-N against envelope_check.py",
-            allowedGameStates = AllowedGameStates.Entry | AllowedGameStates.Playing)]
+            allowedGameStates = AllowedGameStates.PlayingOnMap)]
         private static void VerifyBestOfN()
         {
-            // 0.5pp is the meaningful threshold, not an arbitrary epsilon: the readout renders
-            // whole percents (FormatPowerPercent's "F0"), so a delta below half a point can never
-            // change a digit on screen, while anything at or above it can.
-            const float TolerancePp = 0.5f;
+            // Two thresholds, because there are two different questions here and conflating them
+            // is what let a real defect hide.
+            //
+            // The one that decides pass/fail is whether a DISPLAYED digit can move. The readout
+            // never shows a raw score -- it shows deviation from Faithful AT THE SAME N, rendered
+            // "F0" (FormatPowerPercent) -- so that is what gets the 0.5 percentage-POINT threshold,
+            // below which no digit on screen can change.
+            //
+            // Raw scores are still compared, but at a deliberately wide 3% relative. Both
+            // implementations share a first-order-accurate right-edge CDF -- envelope_check.py's
+            // beta_grid does `run += v * dq` before appending, and CalculateBestOfNScoreCore does
+            // the same -- and that scheme's error is proportional to dq. So the mod's 1024 nodes
+            // and the tool's 20000 do NOT converge to the same raw number; they differ by up to
+            // ~0.9% at N=50. That gap is real, but it CANCELS in the ratio to Faithful and moves no
+            // digit on screen.
+            //
+            // Gating the raw score at 0.5% (as this did originally, while its comment claimed to be
+            // measuring percentage points) failed 16 times: 15 on that invisible shared bias, and
+            // one on the genuine n == 1 shortcut defect in CalculateBestOfNScoreCore -- which was
+            // indistinguishable from the noise precisely because the noise was so loud.
+            const float DisplayTolerancePp = 0.5f;
+            const float RawToleranceRelPct = 3.0f;
 
             var sb = new StringBuilder();
             sb.AppendLine($"[PawnVarianceMod] Best-of-N cross-check vs {EnvelopeFigures.Tool}");
             sb.AppendLine($"  reference {EnvelopeFigures.ReferenceNodes} nodes, "
-                + $"live {Constants.BestOfNIntegrationNodes} nodes, tolerance {TolerancePp:F2}pp");
+                + $"live {Constants.BestOfNIntegrationNodes} nodes; "
+                + $"readout tolerance {DisplayTolerancePp:F2}pp, raw {RawToleranceRelPct:F2}%");
 
             int failures = 0;
 
@@ -76,7 +110,32 @@ namespace PawnVarianceMod
                     + "Source/EnvelopeFigures.g.cs before trusting anything below.");
             }
 
-            sb.AppendLine($"  {"profile",-12}{"N",4}{"reference",12}{"live",12}{"delta",10}");
+            // Every displayed figure is measured against Faithful at the same N, so without it
+            // there is nothing to compare and the run is meaningless rather than merely failing.
+            int faithfulIdx = Array.IndexOf(EnvelopeFigures.Profiles, "Faithful");
+            VarianceProfile faithfulPreset = VarianceProfiles.Presets
+                .FirstOrDefault(x => x.label == "Faithful");
+            if (faithfulIdx < 0 || faithfulPreset == null)
+            {
+                sb.AppendLine("  ABORT: Faithful is missing from the reference table or from "
+                    + "VarianceProfiles.Presets. Every readout is relative to it.");
+                Log.Error(sb.ToString().TrimEnd());
+                Messages.Message("Varied Pawns: Best-of-N cross-check could not run — see log.",
+                    MessageTypeDefOf.NegativeEvent, historical: false);
+                return;
+            }
+
+            // Precomputed rather than fetched inside the loop: CalculateBestOfNScore has a
+            // single-entry cache, so alternating between Faithful and the profile under test would
+            // evict on every call and never hit.
+            VarianceProfileValues faithfulValues = faithfulPreset.MakeValues();
+            var liveBaseline = new float[EnvelopeFigures.Batches.Length];
+            for (int b = 0; b < EnvelopeFigures.Batches.Length; b++)
+                liveBaseline[b] = PawnVarianceSettings.CalculateBestOfNScore(
+                    faithfulValues, EnvelopeFigures.Batches[b]);
+
+            sb.AppendLine($"  {"profile",-12}{"N",4}{"reference",12}{"live",12}"
+                + $"{"raw",9}{"ref%",9}{"live%",9}{"shown",9}");
 
             for (int p = 0; p < EnvelopeFigures.Profiles.Length; p++)
             {
@@ -101,15 +160,23 @@ namespace PawnVarianceMod
                     float expected = EnvelopeFigures.Scores[p][b];
                     float actual = PawnVarianceSettings.CalculateBestOfNScore(v, n);
 
-                    // Compared in percentage POINTS of the score, matching how the readout is
-                    // consumed -- an absolute delta on a 0.19 score and on a 0.42 score are not
-                    // equally significant to what the player sees.
-                    float deltaPp = Mathf.Abs(actual - expected) / expected * 100f;
-                    bool bad = deltaPp > TolerancePp;
-                    if (bad) failures++;
+                    float rawRelPct = Mathf.Abs(actual - expected) / expected * 100f;
+
+                    // The quantity the player actually reads, computed the same way on both sides.
+                    float refDev = (expected / EnvelopeFigures.Scores[faithfulIdx][b] - 1f) * 100f;
+                    float liveDev = (actual / liveBaseline[b] - 1f) * 100f;
+                    float shownPp = Mathf.Abs(liveDev - refDev);
+
+                    bool badShown = shownPp > DisplayTolerancePp;
+                    bool badRaw = rawRelPct > RawToleranceRelPct;
+                    if (badShown || badRaw) failures++;
+
+                    string flag = badShown ? "  *** READOUT MISMATCH ***"
+                        : badRaw ? "  *** RAW MISMATCH ***"
+                        : string.Empty;
 
                     sb.AppendLine($"  {label,-12}{n,4}{expected,12:F6}{actual,12:F6}"
-                        + $"{deltaPp,9:F2}pp{(bad ? "  *** MISMATCH ***" : string.Empty)}");
+                        + $"{rawRelPct,8:F2}%{refDev,8:F2}%{liveDev,8:F2}%{shownPp,7:F2}pp{flag}");
                 }
             }
 

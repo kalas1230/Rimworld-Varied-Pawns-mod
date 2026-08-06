@@ -1308,8 +1308,16 @@ namespace PawnVarianceMod
 
         private static float CalculateBestOfNScoreCore(VarianceProfileValues v, int n)
         {
-            if (n == 1) return CalculateCompositeScore(v.averageQuality, v);
-
+            // No n == 1 shortcut. Returning composite(averageQuality) here would be assuming
+            // E[composite(q)] == composite(E[q]), which holds only while composite is LINEAR in q.
+            // It is linear for every preset whose skill band keeps AssumedVanillaSkillBaseline +
+            // shift above zero -- but Wildcard's skillShiftMin of -8.7 drives it negative, and the
+            // Mathf.Clamp in CalculateCompositeScore puts a kink at q = 0.2868. Past that kink the
+            // function is convex, so by Jensen the shortcut UNDERSTATES the true expectation: it
+            // returned 0.197666 against the reference's 0.204709, moving Wildcard's displayed
+            // "Typical" figure from -18% to -21%. Seven of eight presets are linear and matched to
+            // six decimals, which is exactly why this survived review. The integral below is
+            // correct at n == 1 too -- Pow(cdf, 0) is 1, so it reduces to E[composite(q)].
             int nodes = Constants.BestOfNIntegrationNodes;
             if (betaDensityScratch == null || betaDensityScratch.Length != nodes)
                 betaDensityScratch = new float[nodes];
