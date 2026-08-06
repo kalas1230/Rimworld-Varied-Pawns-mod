@@ -52,7 +52,7 @@ Known surface to audit — treat as a starting list, not a complete one:
 
 | Location | What to verify |
 |---|---|
-| `Constants.cs:43` `MaxPassionPips = 18` | The `12 × 1.5` derivation. **Is 12 even right?** `pawn.skills.skills.Count` is used elsewhere, so a mod adding a `SkillDef` breaks the hardcoded 12 while the trace line adapts. Genuine inconsistency. |
+| `Constants.cs:43` `MaxPassionPips = 18` | The `12 × 1.5` derivation. ⬇️ **Assessed 2026-08-06 and DOWNGRADED — do not spend time here.** The hardcoded 12 does disagree with `pawn.skills.skills.Count`, but nothing depends on them agreeing: `passionCountMin`/`Max` are clamped to `MaxPassionPips` at both the slider *and* `VarianceProfile.cs:110-111`, so the budget can never exceed 18 whatever the skill count. A 13th skill raises capacity to 19.5 against a budget still capped at 18 — the surplus-discard path fires *less*, not more. Mild dilution, no wrong arithmetic, and few mods add skills. |
 | `PassionVarianceApplier.cs:61-64` | Major costs `1.5f`, Minor `1f`, both inline literals. Should they derive from a named constant? |
 | `GrowUpVariance.cs:103` | Re-derives existing pips with its own inline `1.5f`/`1f`. A third copy of the price list. |
 | `DebugActions.cs:602` | A fourth copy of `1.5f`. |
