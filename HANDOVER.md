@@ -120,8 +120,11 @@ race checks were meaningful rather than vacuous.
   uncommitted `580f` floor the body is `580px` in a `354px` viewport (`maxOffsetY=226`), so lower
   controls stay reachable.
 - **First observed dispersion figures** (`Roll pawns and dump distribution`, 200 colonists,
-  Faithful): per-skill level sd **3.55** against the tool's predicted **0.65** (noise term only),
-  passion budget sd **1.24** against predicted **1.19**, traits/pawn 2.57, 0 passionless pawns.
+  Faithful): per-skill level sd **3.55** against the tool's then-predicted **0.65** (noise term
+  only), passion budget sd **1.24** against then-predicted **1.19**, traits/pawn 2.57, 0
+  passionless pawns. ⚠️ **Both predictions are now 0.49 and 1.00** — the noise floors were dropped
+  on 2026-08-06 (decision 1). The *observed* figures above predate that change and were not
+  re-measured, so do not diff them against the current table; re-run the action to compare.
   Observed sits above predicted on both, which is the direction §"🧪 Verification harness"
   says is correct.
 
@@ -514,13 +517,72 @@ None of these are bugs in the "must fix" sense; each is a deliberate deferral aw
 
 | # | Decision | Notes |
 |---|---|---|
-| 1 | **Noise-slider floors** — disclose in tooltips, or drop `MinMagnitudeFloor`/`PassionBudgetSpreadMin` to `0f`? | See "Surprise 1" above. Dropping them changes generation (Rule 5) but moves **no** envelope figure — the composite reads neither constant. Leaning: disclose, since the floors look deliberate. |
-| 2 | **Wildcard realized-budget overshoot** | ~2.7σ rolls exceed the 18-pip capacity and the surplus is silently discarded. Independent of the slider cap fix. Clamping the realized budget to capacity is the minimal fix. Rule 5. |
+| 1 | ✅ **DECIDED 2026-08-06: drop both floors to `0f`.** | Owner's call, against the doc's own leaning. Shipped. **The consequence was larger than "zero now means zero"** — both are Lerp low endpoints, so every noise setting was rescaled and the quiet presets moved most. See the CAUTION under "Surprise 1". Envelope unaffected; dispersion tables updated. |
+| 2 | ⏸️ **Wildcard realized-budget overshoot — decided, then reopened by investigation.** | Owner chose "clamp realized budget to capacity", then asked how Wildcard could reach all-Major at all. **The investigation contradicts the fix.** See the block below this table. Not implemented. |
 | 3 | **Composite saturation mismatch** | Score saturates at budget 18/16/14.4 by Major bias; reality at 12/15/18. No shipped preset reaches it. Fixing it **would** move envelope figures → full recalc-and-repaste cycle. |
 | 4 | **Skill-shift downside floor** | The asymmetric-risk axis: a passion budget escaping upward is harmless, a skill shift escaping downward by up to 6 levels on an already-low-quality pawn is not. Raised by the design review as the one place a soft floor might genuinely be wanted. |
-| 5 | **`skillShiftMin` means two things** | Soft target in `Apply`, hard floor in `ApplyGrowUp`. Intentional and documented, but the design review called it the most likely future bug here. Fix is naming at the call sites, not unifying semantics. |
-| 6 | **User-facing derivation write-up** | Decided: no formula in the settings UI. If wanted, it belongs in the mod's About/description or `docs/`, not a tooltip. |
-| 7 | **Exposing the exchange rate `R` as a player setting** | Rejected. It would be a control that changes nothing (the score is display-only) while visibly breaking the ±35% envelope the mod advertises. Do not revisit without reading "⚖️ The skill ↔ passion exchange rate". |
+| 5 | ✅ **DECIDED 2026-08-06: split into two named methods.** | `SkillVarianceApplier.Shift` is now private and reached only through `ShiftAroundBand` (generation — soft band, noise escapes) and `ShiftWithinBounds` (age-13 — hard per-skill bound). The ambiguity no longer exists to be misread. Shipped. |
+
+### 🔬 Decision 2 reopened — the owner's question falsified the recommended fix
+
+The owner accepted "clamp realized budget to capacity", then asked: *how can Wildcard even reach
+full Major on all skills? That seems too strong.* Investigating that question broke the fix.
+
+**Answer to the question: it effectively cannot.** With `PassionBudgetSpreadMin = 0`, Wildcard's
+budget is `Lerp(1.2, 9.8, q) + clamp(N(0, 3.4), ±13.6)`, and the clamp window is exactly 4σ.
+
+- Below **q = 0.372** an 18-pip budget is **arithmetically impossible** — even a maxed 4σ roll
+  cannot reach it.
+- At q = 0.874 it needs a 2.73σ roll (**p ≈ 0.3%**) — this is where the doc's "~2.7σ" came from.
+  It is a *conditional* figure for an already-exceptional pawn, not a population rate.
+- Reaching q ≥ 0.874 at all, under `Beta(2.96, 5.04)` (mean 0.37, k=8), is itself ~3.1 sd out.
+- **And 18 pips still is not all-Major.** 12 Majors costs exactly 18, so every coin flip must come
+  up Major: `0.6¹² ≈ 0.2%`.
+
+Compounded, an all-Major Wildcard pawn is on the order of **1 in 10⁷**. The owner's instinct that
+it would be too strong is right; the premise that it happens is not.
+
+> [!CAUTION]
+> **The clamp is a nerf, not a cleanup — and it would fire far more often than the 2.7σ tail
+> suggests.** Capacity is `eligible.Count × 1.5`, and `eligible` excludes conflicting passions
+> (Brawler vs Shooting), TotallyDisabled skills and DropAll genes — so it is routinely well under
+> 12. For a pawn with 6 eligible skills capacity is 9 pips, which a mid-quality Wildcard roll
+> clears roughly **20%** of the time.
+>
+> And clamping is **not** outcome-neutral. The budget is converted to Major/Minor *counts* by the
+> spend loop before anything is handed out, and Majors are handed out first. Lowering the budget
+> lowers the Major count:
+>
+> | | budget | rolled | 6 eligible skills receive |
+> |---|---|---|---|
+> | today | 12 pips | ~5 Major + ~4 Minor | **5 Major + 1 Minor** |
+> | clamped | 9 pips | ~4 Major + ~3 Minor | **4 Major + 2 Minor** |
+>
+> So the surplus is not "silently discarded" in any sense that clamping recovers — discarding it
+> is what currently lets a restricted-skill pawn max out. **The doc's claim that clamping is "the
+> minimal fix" and that "nothing is silently lost" is wrong on both halves.**
+
+**Three real options, none of them the one that was chosen:**
+
+1. **Leave it.** Today's behaviour: a pawn with few eligible skills gets the best passions those
+   skills can hold. Defensible — arguably correct.
+2. **Clamp the rolled counts, not the budget** — `majorPassions = Min(majorPassions,
+   eligible.Count)` after the spend loop. **Genuinely outcome-neutral**; only tidies the trace.
+3. **Clamp the budget** (as originally chosen), accepting it as a deliberate nerf to
+   restricted-skill pawns across every profile, not a Wildcard tail fix.
+
+Implementation note if 2 or 3 is ever chosen: `budget` is rolled at `PassionVarianceApplier.cs:42`
+but `eligible` is not built until ~`:79`, so either needs a reorder.
+
+### ✅ Settled earlier — kept only so they are not relitigated
+
+These sat in the open table for weeks while their own text said "decided" and "rejected". They are
+**not** open questions.
+
+| # | Decision | Resolution |
+|---|---|---|
+| 6 | **User-facing derivation write-up** | **Decided: no.** No formula in the settings UI. If wanted, it belongs in the mod's About/description or `docs/`, not a tooltip. |
+| 7 | **Exposing the exchange rate `R` as a player setting** | **Rejected.** A control that changes nothing (the score is display-only) while visibly breaking the ±35% envelope the mod advertises. Do not revisit without reading "⚖️ The skill ↔ passion exchange rate". |
 
 ---
 
@@ -1014,20 +1076,38 @@ together. Do not "improve" this into a per-axis roll.
 | Passion budget | once per pawn |
 | Trait count jitter | once per pawn, ±0.25 |
 
-#### ⚠️ Surprise 1: neither noise slider can be turned off
+#### ✅ ~~Surprise 1: neither noise slider can be turned off~~ — RESOLVED 2026-08-06
 
 ```
-magnitude = Lerp(Constants.MinMagnitudeFloor, MaxMagnitude, skillNoise) = Lerp(0.5, 6, 0) = 0.5
-spread    = Lerp(PassionBudgetSpreadMin,      4f,           passionNoise) = 0.25
+magnitude = Lerp(Constants.MinMagnitudeFloor, MaxMagnitude, skillNoise) = Lerp(0, 6, 0) = 0
+spread    = Lerp(PassionBudgetSpreadMin,      4f,           passionNoise) = 0
 ```
 
-**`MinMagnitudeFloor = 0.5` and `PassionBudgetSpreadMin = 0.25` are floors, not zeros.** A slider
-reading `0.00` still delivers ±0.5 levels per skill, and still varies the passion budget by enough
-to change how many passions a pawn gets (a Minor costs exactly 1 pip, σ is 0.25). This is also the
-source of the 0.7% pin rate at `skillNoise = 0` in the clamp table above — it was the floor, not
-rounding error.
+**Both constants were floors, not zeros — `MinMagnitudeFloor = 0.5` and
+`PassionBudgetSpreadMin = 0.25`.** A slider reading `0.00` still delivered ±0.5 levels per skill
+and still varied the passion budget enough to change how many passions a pawn got (a Minor costs
+exactly 1 pip; σ was 0.25). That was also the source of the 0.7% pin rate at `skillNoise = 0` in
+the clamp table above — the floor, not rounding error.
 
-**No UI text says this**, including the tooltips rewritten 2026-08-05. Open decision below.
+**Open decision 1 was settled by the owner on 2026-08-06: drop both to `0f`.** The sliders now mean
+literally what they say.
+
+> [!CAUTION]
+> **This was not only a zero-point change, and that is the part to remember.** Both constants are
+> **Lerp low endpoints**, so moving them rescaled magnitude at *every* noise setting, not just at
+> zero — and proportionally hardest at the quiet end, where every preset except Wildcard lives:
+>
+> | `skillNoise` | magnitude before | after | change |
+> |---|---|---|---|
+> | 0.00 | 0.50 | 0.00 | −100% |
+> | 0.20 (`Faithful`) | 1.60 | 1.20 | −25% |
+> | 0.35 (`Distinct`) | 2.43 | 2.10 | −13% |
+> | 0.85 (`Wildcard`) | 5.18 | 5.10 | −1.4% |
+>
+> Net effect: absolute dispersion fell everywhere, but the *ratio* between profiles widened —
+> Wildcard went from 3.23× Faithful's per-skill sd to **4.25×**. `envelope_check.py` still passes
+> and `EnvelopeFigures.g.cs` is byte-unchanged, because the composite reads neither constant. The
+> dispersion tables in this document were updated; §1.9's *observed* figures were not re-measured.
 
 #### ⚠️ Surprise 2: the mod displaces vanilla's roll, it does not author the pawn
 
@@ -1055,15 +1135,22 @@ reads exactly six fields: `averageQuality`, `skillShiftMin/Max`, `passionCountMi
 table below responds to them.
 
 That is a real gap, not a rounding detail. `skillNoise` drives the per-skill excursion term in
-`SkillVarianceApplier.Shift` — `magnitude = Lerp(0.5, 6, skillNoise)`, so up to **±6 levels per
+`SkillVarianceApplier.Shift` — `magnitude = Lerp(0, 6, skillNoise)`, so up to **±6 levels per
 skill** (`Constants.MaxMagnitude`). Two profiles with identical percentages in the envelope table
 can produce visibly different populations. Concretely:
 
 | Profile | `skillNoise` | per-skill sd | vs `Faithful` |
 |---|---|---|---|
-| Faithful | 0.20 | 0.65 levels | 1.00× |
-| Distinct | 0.35 | 0.99 levels | 1.52× |
-| **Wildcard** | **0.85** | **2.11 levels** | **3.23×** |
+| Faithful | 0.20 | 0.49 levels | 1.00× |
+| Distinct | 0.35 | 0.86 levels | 1.75× |
+| **Wildcard** | **0.85** | **2.08 levels** | **4.25×** |
+
+> [!NOTE]
+> **These figures changed on 2026-08-06** when `MinMagnitudeFloor` went `0.5f → 0f` (open decision
+> 1). They were `0.65 / 0.99 / 2.11` at `1.00× / 1.52× / 3.23×`. The low endpoint moved, not the
+> high one, so **the spread between profiles widened**: Wildcard went from 3.23× Faithful to
+> 4.25×. Dropping the floor narrowed every profile in absolute terms but narrowed the quiet ones
+> proportionally more.
 
 (`sd = magnitude/√6`; the `TriangularSample()*2−1` term is triangular on [−1,1], variance 1/6.)
 
@@ -1170,14 +1257,14 @@ Tightest envelope margins:
 
 Within-pawn dispersion (REPORTED, NOT ENFORCED -- invisible to every % above):
   profile      skillNoise   per-skill sd  vs Faithful  passionNoise   budget sd
-  Faithful           0.20        0.65 lv        1.00x          0.25     1.19 pips
-  Distinct           0.35        0.99 lv        1.52x          0.35     1.56 pips
-  Wildcard           0.85        2.11 lv        3.23x          0.85     3.44 pips
-  Desperate          0.25        0.77 lv        1.17x          0.25     1.19 pips
-  Elite              0.22        0.70 lv        1.07x          0.25     1.19 pips
-  Sovereign          0.24        0.74 lv        1.14x          0.25     1.19 pips
-  Specialist         0.25        0.77 lv        1.17x          0.25     1.19 pips
-  Scavenger          0.25        0.77 lv        1.17x          0.25     1.19 pips
+  Faithful           0.20        0.49 lv        1.00x          0.25     1.00 pips
+  Distinct           0.35        0.86 lv        1.75x          0.35     1.40 pips
+  Wildcard           0.85        2.08 lv        4.25x          0.85     3.40 pips
+  Desperate          0.25        0.61 lv        1.25x          0.25     1.00 pips
+  Elite              0.22        0.54 lv        1.10x          0.25     1.00 pips
+  Sovereign          0.24        0.59 lv        1.20x          0.25     1.00 pips
+  Specialist         0.25        0.61 lv        1.25x          0.25     1.00 pips
+  Scavenger          0.25        0.61 lv        1.25x          0.25     1.00 pips
   A profile can be flat in the table above and 3x wider here. Wildcard is exactly
   that case: its 2026-08-04 retune narrowed skillShift (the mean band), not skillNoise.
 
