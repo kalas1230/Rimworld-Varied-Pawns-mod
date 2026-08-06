@@ -51,6 +51,73 @@ namespace PawnVarianceMod
         // whenever a colony was loaded -- the exact situation HANDOVER tells you to run it in. It
         // was only ever reachable from the main menu. The map case is the one that matters, so it
         // wins; the bridge can still execute it from Entry, where visibility does not apply.
+        // ------------------------------------------------------------------------------------
+        // 0. Dump the Race Overrides Add-menu contents.
+        // ------------------------------------------------------------------------------------
+        // The acceptance check for the race-overrides feature is "the Add menu lists exactly the
+        // installed humanlike races, with no mechanoid alien races in it". That cannot be checked
+        // through UI automation: the menu is a FloatMenu opened from Listing_Standard.ButtonText,
+        // and a synthetic click activates the button without the menu surviving to the next frame,
+        // so the bridge can never read its rows. Verified 2026-08-06 against the Faction Add button
+        // too, so it is a limit of the automation and not of this section.
+        //
+        // Calling PawnVarianceSettings.SelectableRaces() directly is the point: a reimplementation
+        // of the filter here would pass while the menu regressed. It also prints the mechanoid
+        // ThingDef_AlienRace count that the Humanlike filter is there to exclude, so a regression
+        // to something like AllDefs.Where(d => d.race != null) shows up as that count leaking in.
+        [DebugAction(Category, "Dump Add-menu race list",
+            allowedGameStates = AllowedGameStates.PlayingOnMap)]
+        private static void DumpSelectableRaces()
+        {
+            var races = PawnVarianceSettings.SelectableRaces().ToList();
+
+            int humanlikeRaceDefs = 0;
+            int nonHumanlikeAlienRaces = 0;
+            foreach (var d in DefDatabase<ThingDef>.AllDefs)
+            {
+                if (d.race == null) continue;
+                if (d.race.Humanlike) humanlikeRaceDefs++;
+                else if (d.GetType().Name == "ThingDef_AlienRace") nonHumanlikeAlienRaces++;
+            }
+
+            var sb = new StringBuilder();
+            sb.AppendLine("[PawnVarianceMod] Race Overrides -- Add menu contents");
+            sb.AppendLine($"  {races.Count} selectable race(s); the menu shows exactly these rows:");
+            foreach (var d in races)
+            {
+                sb.AppendLine($"    {d.LabelCap,-24} {d.defName}");
+            }
+            sb.AppendLine($"  filtered out: {humanlikeRaceDefs - races.Count} humanlike race def(s) " +
+                          "with no PawnKindDef referencing them, and " +
+                          $"{nonHumanlikeAlienRaces} non-humanlike alien race def(s) (mechanoids, drones, float units).");
+
+            // The excluded humanlike defs are printed because "which races are missing" is the
+            // half of this check that a PASS on the mechanoid filter says nothing about.
+            var excluded = DefDatabase<ThingDef>.AllDefs
+                .Where(d => d.race != null && d.race.Humanlike && !races.Contains(d))
+                .OrderBy(d => d.defName)
+                .ToList();
+            foreach (var d in excluded)
+            {
+                sb.AppendLine($"    excluded: {d.LabelCap,-24} {d.defName}");
+            }
+
+            var leaked = races.Where(d => d.defName.IndexOf("Mechanoid", StringComparison.OrdinalIgnoreCase) >= 0
+                                       || d.defName.IndexOf("Drone", StringComparison.OrdinalIgnoreCase) >= 0
+                                       || d.defName.IndexOf("FloatUnit", StringComparison.OrdinalIgnoreCase) >= 0)
+                              .ToList();
+            if (leaked.Count > 0)
+            {
+                sb.AppendLine($"  FAIL: {leaked.Count} mechanoid-looking def(s) reached the menu: " +
+                              string.Join(", ", leaked.Select(d => d.defName)));
+                Log.Warning(sb.ToString().TrimEnd());
+                return;
+            }
+
+            sb.Append("  PASS: no mechanoid, drone or float-unit def reached the menu.");
+            Log.Message(sb.ToString());
+        }
+
         [DebugAction(Category, "Verify Best-of-N against envelope_check.py",
             allowedGameStates = AllowedGameStates.PlayingOnMap)]
         private static void VerifyBestOfN()
@@ -216,6 +283,239 @@ namespace PawnVarianceMod
         //
         // Goes through PawnGenerator.GeneratePawn deliberately, so the real Harmony postfix,
         // ValuesFor override resolution and all three appliers run exactly as they do in play.
+        // ------------------------------------------------------------------------------------
+        // 3. Override resolution matrix — faction vs race vs xenotype, under both toggle states.
+        // ------------------------------------------------------------------------------------
+        // Nothing in this repo exercised override resolution at runtime. The Python mirror
+        // (zzz-Do-Not-Commit/test_race_resolution.py, 19 cases) validates the RULE TABLE but not
+        // the C# that implements it, and the UI path cannot be automated because adding an
+        // override goes through a FloatMenu the bridge cannot read.
+        //
+        // So this generates a REAL pawn per case and calls the REAL PawnVarianceSettings.ValuesFor
+        // with the same PawnGenerationRequest the Harmony postfix passes, then prints every
+        // candidate source with its priority next to the winner. It deliberately reports rather
+        // than asserts a recomputed expectation: re-deriving the expected winner here would be a
+        // second copy of the rule, and a copy agreeing with itself proves nothing.
+        //
+        // factionOverridesTakePrecedence is flipped in memory and restored in a finally. It is
+        // never persisted — no Mod.WriteSettings call happens on this path.
+        [DebugAction(Category, "Dump override resolution matrix",
+            allowedGameStates = AllowedGameStates.PlayingOnMap)]
+        private static void DumpOverrideResolution()
+        {
+            var settings = PawnVarianceMod.Settings;
+            var sb = new StringBuilder();
+            sb.AppendLine("[PawnVarianceMod] Override resolution matrix");
+            sb.AppendLine($"  enableOverrides={settings.enableOverrides}   " +
+                          $"factionOverridesTakePrecedence={settings.factionOverridesTakePrecedence} (live value)");
+            sb.AppendLine("  'winner' columns are what ValuesFor actually returned at each toggle state.");
+            sb.AppendLine();
+
+            Faction Fac(string defName)
+            {
+                FactionDef fd = DefDatabase<FactionDef>.GetNamedSilentFail(defName);
+                return fd == null || Find.FactionManager == null
+                    ? null
+                    : Find.FactionManager.FirstFactionOfDef(fd);
+            }
+
+            PawnKindDef KindForRace(string raceDefName) =>
+                DefDatabase<PawnKindDef>.AllDefs.FirstOrDefault(
+                    k => k.race != null && k.race.defName == raceDefName && k.RaceProps?.Humanlike == true);
+
+            XenotypeDef Xeno(string defName) =>
+                ModsConfig.BiotechActive ? DefDatabase<XenotypeDef>.GetNamedSilentFail(defName) : null;
+
+            // label, race def, faction def, forced xenotype
+            var cases = new List<(string label, string race, string faction, string xeno)>
+            {
+                ("player colonist, no xeno",        "Human",        null,     null),
+                ("faction Highest vs race Normal",  "Human",        "Empire", null),
+                ("faction Normal vs race Normal",   "Human",        "Pirate", null),
+                ("xeno Normal vs race Normal",      "Human",        null,     "Waster"),
+                ("xeno High vs race Normal",        "Human",        null,     "Hussar"),
+                ("all three, Highest faction",      "Human",        "Empire", "Waster"),
+                ("Milira race",                     "Milira_Race",  null,     null),
+                ("Wolfein race",                    "Wolfein_Race", null,     null),
+            };
+
+            bool toggleWas = settings.factionOverridesTakePrecedence;
+            bool verboseWas = settings.verboseLogging;
+            settings.verboseLogging = false;
+
+            try
+            {
+                foreach (var c in cases)
+                {
+                    PawnKindDef kind = KindForRace(c.race);
+                    if (kind == null)
+                    {
+                        sb.AppendLine($"  {c.label,-32} SKIPPED: no humanlike PawnKindDef for race {c.race}");
+                        continue;
+                    }
+
+                    Faction faction = c.faction == null ? Faction.OfPlayerSilentFail : Fac(c.faction);
+                    if (c.faction != null && faction == null)
+                    {
+                        sb.AppendLine($"  {c.label,-32} SKIPPED: faction {c.faction} not present in this world");
+                        continue;
+                    }
+
+                    XenotypeDef xeno = c.xeno == null ? null : Xeno(c.xeno);
+                    if (c.xeno != null && xeno == null)
+                    {
+                        sb.AppendLine($"  {c.label,-32} SKIPPED: xenotype {c.xeno} unavailable");
+                        continue;
+                    }
+
+                    Pawn pawn = null;
+                    try
+                    {
+                        var request = new PawnGenerationRequest(
+                            kind,
+                            faction,
+                            PawnGenerationContext.NonPlayer,
+                            forceGenerateNewPawn: true,
+                            canGeneratePawnRelations: false,
+                            allowDowned: true,
+                            mustBeCapableOfViolence: false,
+                            forcedXenotype: xeno);
+
+                        pawn = PawnGenerator.GeneratePawn(request);
+                        if (pawn == null)
+                        {
+                            sb.AppendLine($"  {c.label,-32} SKIPPED: pawn generation returned null");
+                            continue;
+                        }
+
+                        string raceKey = pawn.def?.defName;
+                        string facKey = (pawn.Faction ?? faction)?.def?.defName;
+                        string xenoKey = xeno?.defName ?? pawn.genes?.Xenotype?.defName;
+
+                        string Candidate(string kindLabel, string key,
+                            Dictionary<string, string> map, Dictionary<string, OverridePriority> prios)
+                        {
+                            if (key == null || !map.TryGetValue(key, out string pid)) return $"{kindLabel}: —";
+                            var prio = prios.TryGetValue(key, out var p) ? p : OverridePriority.Normal;
+                            return $"{kindLabel}: {settings.LabelFor(pid)}@{prio}";
+                        }
+
+                        settings.factionOverridesTakePrecedence = false;
+                        string winnerRaceFirst = settings.ValuesFor(pawn, request).profileLabel;
+                        settings.factionOverridesTakePrecedence = true;
+                        string winnerFactionFirst = settings.ValuesFor(pawn, request).profileLabel;
+
+                        sb.AppendLine($"  {c.label}");
+                        sb.AppendLine($"    keys      race={raceKey ?? "-"}  faction={facKey ?? "-"}  xenotype={xenoKey ?? "-"}");
+                        sb.AppendLine("    candidates " +
+                            Candidate("faction", facKey, settings.factionOverrides, settings.factionPriorities) + "   " +
+                            Candidate("race", raceKey, settings.raceOverrides, settings.racePriorities) + "   " +
+                            Candidate("xenotype", xenoKey, settings.xenotypeOverrides, settings.xenotypePriorities));
+                        sb.AppendLine($"    winner    takePrecedence=false -> {winnerRaceFirst,-12} " +
+                                      $"takePrecedence=true -> {winnerFactionFirst}");
+                    }
+                    finally
+                    {
+                        pawn?.Discard(true);
+                    }
+                }
+
+                // ----------------------------------------------------------------------------
+                // Priority sweep: race vs faction at Low / Normal / High against a fixed
+                // Normal-priority faction. The equal-priority row is the only one where the
+                // toggle can change the winner; the other two must be decided by priority alone
+                // and must therefore read the same in both columns.
+                //
+                // The faction is whichever one with an override actually exists in this world --
+                // the owner's Pirate rows do not exist in a quicktest map, and a SKIPPED row is
+                // not a passing test. Priorities are moved in memory and restored below.
+                // ----------------------------------------------------------------------------
+                PawnKindDef humanKind = KindForRace("Human");
+                string probeFaction = null;
+                Faction probeFac = null;
+                foreach (var key in settings.factionOverrides.Keys)
+                {
+                    Faction f = Fac(key);
+                    if (f != null) { probeFaction = key; probeFac = f; break; }
+                }
+
+                sb.AppendLine();
+                if (humanKind == null || probeFac == null)
+                {
+                    sb.AppendLine("  priority sweep SKIPPED: no overridden faction exists in this world");
+                }
+                else
+                {
+                    var facPrioWas = settings.factionPriorities.TryGetValue(probeFaction, out var fpw)
+                        ? (OverridePriority?)fpw : null;
+                    var racePrioWas = settings.racePriorities.TryGetValue("Human", out var rpw)
+                        ? (OverridePriority?)rpw : null;
+
+                    try
+                    {
+                        settings.factionPriorities[probeFaction] = OverridePriority.Normal;
+
+                        string raceLabel = settings.LabelFor(settings.raceOverrides["Human"]);
+                        string facLabel = settings.LabelFor(settings.factionOverrides[probeFaction]);
+                        sb.AppendLine($"  priority sweep — race Human ({raceLabel}) " +
+                                      $"vs faction {probeFaction} ({facLabel}) held at Normal");
+
+                        foreach (var racePrio in new[]
+                                 { OverridePriority.Low, OverridePriority.Normal, OverridePriority.High })
+                        {
+                            settings.racePriorities["Human"] = racePrio;
+
+                            Pawn p = null;
+                            try
+                            {
+                                // Baseliner is FORCED, and that is the whole point of this line.
+                                // Without it the pawn rolls its pawnkind's xenotypeSet -- Empire
+                                // kinds produce Genie and Hussar, both overridden at High -- and a
+                                // third candidate outranks the two Normals being compared. The
+                                // first run of this sweep returned Specialist for the tie row for
+                                // exactly that reason. Baseliner has no override, so race vs
+                                // faction is the only comparison left.
+                                var req = new PawnGenerationRequest(
+                                    humanKind, probeFac, PawnGenerationContext.NonPlayer,
+                                    forceGenerateNewPawn: true, canGeneratePawnRelations: false,
+                                    allowDowned: true, mustBeCapableOfViolence: false,
+                                    forcedXenotype: Xeno("Baseliner"));
+                                p = PawnGenerator.GeneratePawn(req);
+                                if (p == null) continue;
+
+                                settings.factionOverridesTakePrecedence = false;
+                                string wRace = settings.ValuesFor(p, req).profileLabel;
+                                settings.factionOverridesTakePrecedence = true;
+                                string wFac = settings.ValuesFor(p, req).profileLabel;
+
+                                sb.AppendLine($"    race@{racePrio,-6} vs faction@Normal   " +
+                                              $"takePrecedence=false -> {wRace,-12} takePrecedence=true -> {wFac}");
+                            }
+                            finally
+                            {
+                                p?.Discard(true);
+                            }
+                        }
+                    }
+                    finally
+                    {
+                        if (facPrioWas.HasValue) settings.factionPriorities[probeFaction] = facPrioWas.Value;
+                        else settings.factionPriorities.Remove(probeFaction);
+                        if (racePrioWas.HasValue) settings.racePriorities["Human"] = racePrioWas.Value;
+                        else settings.racePriorities.Remove("Human");
+                    }
+                }
+            }
+            finally
+            {
+                settings.factionOverridesTakePrecedence = toggleWas;
+                settings.verboseLogging = verboseWas;
+            }
+
+            sb.Append($"  toggle restored to {settings.factionOverridesTakePrecedence}; nothing was written to disk.");
+            Log.Message(sb.ToString());
+        }
+
         [DebugAction(Category, "Roll pawns and dump distribution",
             allowedGameStates = AllowedGameStates.PlayingOnMap)]
         private static void RollPawnDistribution()
