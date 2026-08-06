@@ -62,7 +62,7 @@ in this document must be regenerated together. The tool prints
 
 | Item | Why it is carried |
 |---|---|
-| **The shared right-edge CDF is first-order accurate.** Both `envelope_check.py`'s `beta_grid` and `CalculateBestOfNScoreCore` do `run += v * dq` *before* appending. Error ∝ `dq`, so 1024 and 20000 nodes differ by up to ~0.9% at N=50. | Both sides have it, so they agree with each other and **nothing on screen is wrong** (the gap cancels in the ratio to `Faithful`). Making it midpoint-correct is a genuine accuracy win but **changes every N≥2 reference figure** — a full regenerate-and-repaste cascade. Raise it with the owner before starting. |
+| **The shared right-edge CDF is first-order accurate.** Both `envelope_check.py`'s `beta_grid` and `CalculateBestOfNScoreCore` do `run += v * dq` *before* appending. Error ∝ `dq`, so 1024 and 20000 nodes differ by up to ~0.9% at N=50. | Both sides have it, so they agree with each other and **nothing on screen is wrong** (the gap cancels in the ratio to `Faithful`). **DECIDED 2026-08-07: carried permanently — do not raise it again.** See "Why the integration slip is carried" below for the argument and for what fixing it would cost. |
 | **Are Milians reachable by race override?** `Milian_Race` does not appear in the Add menu: its only def, `Milian_Base`, is `Abstract="True"` with zero concrete children, so no `PawnKindDef` spawns it and the traversal filter drops it. The filter is behaving as specified. | If Milians are spawned in code rather than through a `PawnKindDef`, they are unreachable by race override and the traversal needs a second source. Owner question. |
 | **Init-vs-`Scribe` default mismatch on skill and trait fields** — `skillNoise` 1.0 init vs 0.2 Scribe, `skillShift` −4/6 vs −3/3, `traitCount` 1/6 vs 2/3 on `VarianceProfileValues`. | Unreachable either way (every creation path passes explicit values), but they read as live defaults that contradict `Faithful`. The passion fields were aligned; the rest were left alone as out of scope. |
 | **`CopyFrom` does not validate imported profile ids** (T5-M1, Minor). | Belongs with the load-validation cluster, not worth fixing piecemeal. |
@@ -293,6 +293,35 @@ Source/EnvelopeFigures.g.cs: unchanged.
 PASS: Rule 1 and Rule 2 hold at every N for all enforced presets.
 If any number moved, update the table in HANDOVER.md "The skill <-> passion exchange rate".
 ```
+
+## Why the integration slip is carried — decided, do not reopen
+
+Stated plainly, because the technical one-liner in "Carried items" is opaque unless you already know
+what it means, and the decision was made on the plain version.
+
+**What `N` is.** The player does not keep the first pawn they are offered — they reroll starts, pick
+from quest pawns, accept or refuse captures. So `N` is simply **how many pawns were looked at before
+one was kept**. `N=1` is "took the first". `N=25` is "looked at 25, kept the best". Nothing more.
+
+**What the slip is.** To work out "the best of 25", both implementations chop the quality range into
+thin slices and add up their contributions. Each slice is counted as very slightly too big — half a
+slice too big. That is the whole defect.
+
+**Why it is harmless.** At `N=1` the slip does not enter the arithmetic at all, so the tightest
+figure in this project (`Sovereign` at N=1, the one with 6.6pp of headroom) is exact. For larger `N`
+the error compounds to at most ~0.9% at `N=50`. But `envelope_check.py` and the C# integrator make
+the **identical** slip, and every figure a player ever sees is a comparison against `Faithful`, which
+carries the same slip. It cancels. **Nothing displayed is wrong, and no decision has ever been made
+on a number this affects.**
+
+**What fixing it would cost.** Every raw `N≥2` figure shifts, so `EnvelopeFigures.g.cs` regenerates,
+every table pasted in this document is repasted, and the in-game gate is re-run — for a difference no
+player can observe.
+
+**The call (2026-08-07): leave it.** It was surfaced only because doing it *after* a retune would
+mean redoing numbers that had just been tuned. The owner's decision is to carry it indefinitely. A
+future agent that rediscovers the `run += v * dq` ordering has found a documented decision, not a
+bug.
 
 **Interpretation note on Rule 2:** an earlier wording ("even a Best-of-50 `Desperate` pawn must
 remain below `Faithful`") is ambiguous and, read strictly as *Best-of-50 of a lower tier < Best-of-1
@@ -618,6 +647,7 @@ but `eligible` is not built until ~`:79`, so either needs a reorder.
 |---|---|
 | User-facing derivation write-up in the settings UI | **No.** If wanted, it belongs in the mod's About/description or `docs/`, not a tooltip. |
 | Exposing the exchange rate `R` as a player setting | **Rejected.** A control that changes nothing (the score is display-only) while visibly breaking the ±35% envelope the mod advertises. |
+| Making the Best-of-N integration midpoint-correct | **Rejected — carried permanently.** Both implementations share the slip so it cancels in every displayed figure, `N=1` is exact, and fixing it repastes every table for a difference no player can see. Argument in full under "Why the integration slip is carried". |
 
 ---
 
