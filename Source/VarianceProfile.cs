@@ -278,7 +278,10 @@ namespace PawnVarianceMod
                 // Retuned 2026-08-04: narrowed to ~0.78x its previous dispersion, which pulls
                 // Best-of-25 from +27.1% to +17.3% and Best-of-50 from a near-breach +33.1% to
                 // +21.5%. Narrowing raises N=1 (-23.6% -> -18.1%) and lowers N=25 at the same
-                // time, so it buys headroom at both ends. Still by far the widest preset -- it is
+                // time, so it buys headroom at both ends. (Those five figures were MEASURED UNDER
+                // wP = 1.4 AND THE PRE-2026-08-06 PASSION AXIS. They record why the band is what it
+                // is; do not compare them against the current table, which reads -20.8% at N=1 and
+                // +19.3% at N=50. Re-measure, do not diff against these.) Still the widest preset -- it is
                 // a variance preset, not a power tier, so it legitimately crosses Faithful as N
                 // rises; it just may not leave the +-35% band.
                 skillShiftMin = -8.7f,

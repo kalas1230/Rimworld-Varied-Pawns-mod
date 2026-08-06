@@ -101,7 +101,7 @@ namespace PawnVarianceMod
         // axes, making the reference score exactly 0.2500. That 4.5 was not Faithful's budget —
         // its budget at q=0.50 is 4.0. The extra 0.5 came entirely from the `(1 + 0.25 * majorBias)`
         // factor CalculateCompositeScore applied to the budget, which was a 24-pip-era unit error
-        // (see the note on that line) and was removed 2026-08-06. The baseline is now 0.2237 and
+        // (see the note on that line) and was removed 2026-08-06. The baseline is now 0.2231 and
         // the two axes no longer coincide. Restoring the coincidence is a PRESET question, not a
         // constants one: with the pip-efficiency term in place it needs a Faithful budget band
         // whose q=0.50 midpoint is 4.79 pips (0.25 x 18 / 0.9391), against 4.0 today. Vanilla's
@@ -119,21 +119,44 @@ namespace PawnVarianceMod
         // three times over. Do not reintroduce it.
 
         // Composite-score axis weights. The exchange rate they encode is
-        //     R = (AssumedMaxSkillLevel / MaxPassionPips) * (CompositePassionWeight / CompositeSkillWeight)
-        //       = (20/18) * (1.4/0.8) = 1.94 skill levels per passion pip.
+        //     R(bias) = (AssumedMaxSkillLevel / MaxPassionPips)
+        //             * (CompositePassionWeight / CompositeSkillWeight)
+        //             * PassionPipEfficiency(bias)
+        //             = (20/18) * (1.5/0.8) * eff(bias) skill levels per passion pip.
+        //
+        // R IS NOT A SCALAR. The pip-efficiency term added 2026-08-06 made it a function of the
+        // profile's passionMajorBias, and above the capacity cap it is piecewise: the marginal pip
+        // is worth ZERO there. Quoted figures in this file and in HANDOVER.md are anchored at
+        // VANILLA'S 0.5 bias unless they say otherwise:
+        //
+        //     bias 0.00 -> eff 0.848 -> R = 1.77      bias 0.50 -> eff 0.939 -> R = 1.96
+        //     bias 0.70 -> eff 0.966 -> R = 2.01      bias 1.00 -> eff 1.000 -> R = 2.08
+        //
         // Set 2026-08-03 after a four-agent review (2 Claude, 2 Gemini). Passion is an XP-RATE
         // multiplier (None 0.35x / Minor 1.0x / Major 1.5x), not an additive gift, so its value in
         // skill-levels is time-dependent: ~0 on day 1, peaking near 4.8 around day 30, saturating
         // near 3.2 once skill decay reaches equilibrium. A generation-time score has no time axis
         // and can only carry a colony-lifetime average; ~2.0 is that average after discounting for
         // the ~40-60% chance a passion lands on a skill the colony never assigns.
-        // NOTE: R depends on MaxPassionPips as much as on these weights. Changing either without
-        // the other silently moves the exchange rate — recompute R before touching them.
+        //
+        // CompositePassionWeight went 1.4 -> 1.5 on 2026-08-07. It is not a retarget of the review's
+        // conclusion — it RESTORES it. The efficiency term rescaled the passion axis downward, which
+        // silently dragged the realised rate to 1.83 at vanilla bias while the comment here still
+        // claimed 1.94; 1.5 puts it back at 1.96, i.e. the ~2.0 that was actually decided. Measured,
+        // not assumed: envelope headroom IMPROVED (Sovereign @ N=1, 6.6pp -> 7.0pp), because the
+        // power tiers differ from Faithful mostly in SKILL, so weighting passion higher pulls them
+        // toward the reference. Wildcard is the one preset that genuinely moves (+18.3% -> +19.3% at
+        // N=50), being the profile with the wide passion budget.
+        //
+        // NOTE: R depends on MaxPassionPips and on PassionPipEfficiency as much as on these weights.
+        // Rule 7 in HANDOVER.md used to say "recompute R before touching any of the three" and that
+        // was wrong from the moment the efficiency term landed: changing a PRESET's passionMajorBias
+        // — an ordinary retune move that touches none of the three — moves R too.
         public const float CompositeSkillWeight = 0.8f;
-        public const float CompositePassionWeight = 1.4f;
+        public const float CompositePassionWeight = 1.5f;
 
         // The Profile Editor shows power at two anchors: the typical pawn (N=1) and the best of
-        // N rerolls. 25 rather than 50: at 50 Wildcard would display +21.5%, and a UI that
+        // N rerolls. 25 rather than 50: at 50 Wildcard would display +19.3%, and a UI that
         // advertises how close a preset sits to the +-35% envelope invites players to treat the
         // limit as a target.
         public const int BestOfNSampleCount = 25;

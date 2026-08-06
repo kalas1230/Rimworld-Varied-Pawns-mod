@@ -42,11 +42,13 @@ Constraints that are already settled — tuning without knowing them will fight 
 - **No passion-budget clamp.** A rolled budget above what the pawn's eligible skills can hold is
   discarded, and that is what lets restricted-skill pawns max out. Widening `passionCountMax` past
   ~12 buys progressively less. See "Why the budget is not clamped".
-- **The `Faithful` baseline is `0.2237`, not `0.2500`.** Whether to restore an exactly-`0.2500`
+- **The `Faithful` baseline is `0.2231`, not `0.2500`.** Whether to restore an exactly-`0.2500`
   baseline is a *retune* decision and belongs here, not in `Constants.cs`: it needs `Faithful`'s
-  budget band to have a q=0.50 midpoint of 4.5 pips (it is 4.0 — e.g. `2.0–7.0` instead of
-  `2.0–6.0`). Worth considering on its own merits regardless of the round number, since **vanilla's
-  flat budget is 5 pips** and `Faithful` is the vanilla-like preset.
+  budget band to have a q=0.50 midpoint of **4.79** pips (`0.25 × 18 / 0.9391`), against 4.0 today.
+  **Not 4.5** — that figure predates the pip-efficiency term and is what the budget would have to be
+  if a pip were worth its face value. Worth considering on its own merits regardless of the round
+  number, since **vanilla's flat budget is 5 pips** (which lands the axis at `0.2609`) and
+  `Faithful` is the vanilla-like preset.
 
 **Two hard gates on any retune:** `envelope_check.py` must still PASS Rule 1 and Rule 2 at
 N = 1, 5, 25, 50; and if any figure moves, `Source/EnvelopeFigures.g.cs` **and** every pasted table
@@ -98,11 +100,16 @@ in this document must be regenerated together. The tool prints
    `Source/EnvelopeFigures.g.cs` if the run rewrote it, and run the in-game verify action. The
    weights are shared across all eight presets, so one constant moves every profile at once. Never
    hand-edit the percentages.
-7. **`R` depends on the normalizer, not just the weights** —
-   `R = (AssumedMaxSkillLevel / MaxPassionPips) · (wP / wS)`. Changing `MaxPassionPips` alone
-   silently moves the exchange rate with no weight touched. This nearly reverted the retune once:
-   `/12 → /18` on its own would have cut `R` from 1.94 to 1.33, *below* the 1.389 it replaced.
-   Recompute `R` before and after touching any of the three.
+7. **`R` depends on the normalizer and on the pip-efficiency term, not just the weights** —
+   `R(bias) = (AssumedMaxSkillLevel / MaxPassionPips) · (wP / wS) · PassionPipEfficiency(bias)`.
+   Changing `MaxPassionPips` alone silently moves the exchange rate with no weight touched. This
+   nearly reverted the retune once: `/12 → /18` on its own would have cut `R` from 1.94 to 1.33,
+   *below* the 1.389 it replaced.
+   **This rule used to name three inputs and say "recompute `R` before touching any of the three."
+   That was wrong from the moment the efficiency term landed** — a retuner who changes a preset's
+   `passionMajorBias` touches none of the three, moves `R` anyway, and was told by a mandatory rule
+   that they were safe. There are four inputs, one of them per-profile, and the recalculate-trigger
+   list under "The verified envelope" is the authoritative one.
 8. **Protection of reviewed code.** Do not modify, refactor or rewrite any file marked
    `DONE (REVIEWED)` in "Code review status" without presenting the rationale and getting explicit
    permission.
@@ -189,8 +196,10 @@ Both implementations carry the term (`PawnVarianceSettings.PassionPipEfficiency`
 `make_composite` in `envelope_check.py`), the three `LearnRateFactor` values are drift-checked
 scoring constants in `EnvelopeFigures.g.cs`, and the disabled-passion-axis fallback runs through the
 same term at vanilla's own 50/50 bias so it cannot sit on a different scale. That fallback is
-`Constants.VanillaPassionBudget / MaxPassionPips` = 0.2778 — **not** the skill axis's 0.25 baseline,
-which is a different quantity that was once copied across by mistake.
+`Constants.VanillaPassionBudget · PassionPipEfficiency(0.5) / MaxPassionPips` =
+`5 × 0.9391 / 18` = **0.2609** — **not** the skill axis's 0.25 baseline, which is a different quantity
+that was once copied across by mistake, and **not** the `0.2778` this line read until 2026-08-07,
+which was `5/18` computed before the efficiency term existed.
 
 > [!IMPORTANT]
 > ## Where the `24` comes from — vanilla has TWO passion scales
@@ -222,9 +231,28 @@ not more. Mild dilution, no wrong arithmetic. The in-game verify action prints t
 
 ## The skill ↔ passion exchange rate (`R`)
 
-**`R = (20 / MaxPassionPips) · (wP / wS) = (20/18) · (1.4/0.8) = 1.94` skill levels per passion
-pip.** All three numbers live in `Constants.cs`. Decided after a four-agent review (2 Claude,
-2 Gemini). What that review established:
+**`R(bias) = (20 / MaxPassionPips) · (wP / wS) · PassionPipEfficiency(bias)`
+`= (20/18) · (1.5/0.8) · eff(bias)` skill levels per passion pip.**
+
+> [!IMPORTANT]
+> **`R` is a function, not a scalar, and every quoted figure is anchored at vanilla's 0.5 bias.**
+> The pip-efficiency term made it bias-dependent; above the capacity cap it is also piecewise, since
+> the marginal pip there is worth **zero**. The cap binds no shipped preset but is reachable on
+> custom profiles — which is exactly where a live `R` would be used.
+>
+> | Major bias | 0.00 | 0.50 (vanilla, `Faithful`) | 0.70 (`Sovereign`) | 1.00 |
+> |---|---|---|---|---|
+> | `R` | 1.77 | **1.96** | 2.01 | 2.08 |
+
+Decided after a four-agent review (2 Claude, 2 Gemini) that landed on **≈2.0**. `wP` moved `1.4 → 1.5`
+on 2026-08-07 to **restore** that conclusion rather than to change it: the efficiency term had
+rescaled the passion axis downward, dragging the realised rate to `1.83` at vanilla bias while every
+statement of it still read `1.94`. Measured rather than assumed — envelope headroom *improved*
+(`Sovereign` @ N=1, 6.6pp → 7.0pp), because the power tiers differ from `Faithful` mostly in **skill**,
+so weighting passion higher pulls them toward the reference. `Wildcard` is the one preset that
+genuinely moves, being the profile with the wide passion budget.
+
+What that review established:
 
 - Passion is an **XP-rate multiplier**, not an additive gift. A Minor pip is a 2.86× learning-rate
   advantage over no passion.
@@ -250,30 +278,31 @@ Verbatim output of `python docs/tools/envelope_check.py` (deterministic integrat
 Pasted, not hand-edited — Rule 6.
 
 ```
-wS=0.8  wP=1.4  pips/18  skill/20  K=8
-Exchange rate R = (20/18) * (1.4/0.8) = 1.94 skill levels per passion pip
-Faithful baseline @ q=0.50: 0.2237
+wS=0.8  wP=1.5  pips/18  skill/20  K=8
+Exchange rate R(bias) = (20/18) * (1.5/0.8) * eff(bias)
+  R = 1.96 skill levels per passion pip at vanilla bias 0.5   (range 1.77 at bias 0 .. 2.08 at bias 1)
+Faithful baseline @ q=0.50: 0.2231
 
 profile                     N=1                N=5               N=25               N=50
-Faithful        0.2237   +0.0%     0.2708   +0.0%     0.2989   +0.0%     0.3071   +0.0% 
-Distinct        0.2005  -10.4%     0.2732   +0.9%     0.3263   +9.2%     0.3438  +12.0%   (variance)
-Wildcard        0.1742  -22.1%     0.2698   -0.4%     0.3406  +14.0%     0.3632  +18.3%   (variance)
-Desperate       0.1711  -23.5%     0.2114  -21.9%     0.2392  -20.0%     0.2480  -19.2% 
-Elite           0.2774  +24.0%     0.3183  +17.5%     0.3419  +14.4%     0.3486  +13.5% 
-Sovereign       0.2872  +28.4%     0.3292  +21.5%     0.3527  +18.0%     0.3593  +17.0% 
-Specialist      0.2463  +10.1%     0.2921   +7.8%     0.3193   +6.8%     0.3273   +6.6% 
-Scavenger       0.1900  -15.1%     0.2325  -14.2%     0.2599  -13.0%     0.2683  -12.6% 
+Faithful        0.2231   +0.0%     0.2699   +0.0%     0.2978   +0.0%     0.3059   +0.0% 
+Distinct        0.1995  -10.6%     0.2717   +0.7%     0.3244   +8.9%     0.3418  +11.7%   (variance)
+Wildcard        0.1767  -20.8%     0.2721   +0.8%     0.3424  +15.0%     0.3649  +19.3%   (variance)
+Desperate       0.1704  -23.6%     0.2105  -22.0%     0.2381  -20.0%     0.2469  -19.3% 
+Elite           0.2759  +23.7%     0.3167  +17.4%     0.3402  +14.2%     0.3469  +13.4% 
+Sovereign       0.2855  +28.0%     0.3276  +21.4%     0.3512  +17.9%     0.3579  +17.0% 
+Specialist      0.2451   +9.9%     0.2906   +7.7%     0.3177   +6.7%     0.3257   +6.4% 
+Scavenger       0.1892  -15.2%     0.2314  -14.3%     0.2586  -13.2%     0.2669  -12.8% 
 
 Rule 2 - power-tier ordering at the same N:
-  N=1   Desperate(0.171) < Scavenger(0.190) < Faithful(0.224) < Specialist(0.246) < Elite(0.277) < Sovereign(0.287)   OK
-  N=5   Desperate(0.211) < Scavenger(0.232) < Faithful(0.271) < Specialist(0.292) < Elite(0.318) < Sovereign(0.329)   OK
-  N=25  Desperate(0.239) < Scavenger(0.260) < Faithful(0.299) < Specialist(0.319) < Elite(0.342) < Sovereign(0.353)   OK
-  N=50  Desperate(0.248) < Scavenger(0.268) < Faithful(0.307) < Specialist(0.327) < Elite(0.349) < Sovereign(0.359)   OK
+  N=1   Desperate(0.170) < Scavenger(0.189) < Faithful(0.223) < Specialist(0.245) < Elite(0.276) < Sovereign(0.286)   OK
+  N=5   Desperate(0.210) < Scavenger(0.231) < Faithful(0.270) < Specialist(0.291) < Elite(0.317) < Sovereign(0.328)   OK
+  N=25  Desperate(0.238) < Scavenger(0.259) < Faithful(0.298) < Specialist(0.318) < Elite(0.340) < Sovereign(0.351)   OK
+  N=50  Desperate(0.247) < Scavenger(0.267) < Faithful(0.306) < Specialist(0.326) < Elite(0.347) < Sovereign(0.358)   OK
 
 Tightest envelope margins:
-  Sovereign @ N=1: +28.4%  (6.6pp of headroom)
-  Elite @ N=1: +24.0%  (11.0pp of headroom)
-  Desperate @ N=1: -23.5%  (11.5pp of headroom)
+  Sovereign @ N=1: +28.0%  (7.0pp of headroom)
+  Elite @ N=1: +23.7%  (11.3pp of headroom)
+  Desperate @ N=1: -23.6%  (11.4pp of headroom)
 
 Within-pawn dispersion (REPORTED, NOT ENFORCED -- invisible to every % above):
   profile      skillNoise   per-skill sd  vs Faithful  passionNoise   budget sd
@@ -308,7 +337,7 @@ thin slices and add up their contributions. Each slice is counted as very slight
 slice too big. That is the whole defect.
 
 **Why it is harmless.** At `N=1` the slip does not enter the arithmetic at all, so the tightest
-figure in this project (`Sovereign` at N=1, the one with 6.6pp of headroom) is exact. For larger `N`
+figure in this project (`Sovereign` at N=1, the one with 7.0pp of headroom) is exact. For larger `N`
 the error compounds to at most ~0.9% at `N=50`. But `envelope_check.py` and the C# integrator make
 the **identical** slip, and every figure a player ever sees is a comparison against `Faithful`, which
 carries the same slip. It cancels. **Nothing displayed is wrong, and no decision has ever been made
@@ -352,7 +381,7 @@ satisfy for any profile with real dispersion. **The enforceable reading is same-
 > hand-edited). If `git status` shows that file dirty after a run, the shipped figures were stale —
 > commit it.
 >
-> **Why this matters more than it looks:** the tightest preset has **6.6pp** of headroom. A change
+> **Why this matters more than it looks:** the tightest preset has **7.0pp** of headroom. A change
 > that *feels* cosmetic — nudging one preset's `averageQuality` by 0.02, or "tidying" a normalizer —
 > can breach the envelope without touching the preset that breaks, because the weights are shared.
 

@@ -91,6 +91,9 @@ def parse_constants(src):
                 # Passion capacity and pip-efficiency terms (see make_composite).
                 "MajorPassionCost", "MinorPassionCost",
                 "PassionLearnRateNone", "PassionLearnRateMinor", "PassionLearnRateMajor",
+                # Only used to anchor the printed exchange rate. R is bias-dependent, so a single
+                # quoted figure has to say which bias it is at, and vanilla's 50/50 is the anchor.
+                "VanillaMajorBias",
                 # Spread columns only -- these never enter the composite score.
                 "MinMagnitudeFloor", "MaxMagnitude",
                 "PassionBudgetSpreadMin", "PassionBudgetSpreadMax"]
@@ -126,6 +129,28 @@ def parse_profiles(src):
     return out
 
 
+def make_efficiency(C):
+    """Mirror of PawnVarianceSettings.PassionPipEfficiency. A Major costs 1.5 pips but is worth
+    1.769 Minors in XP-rate increment over having no passion, so pips bought at a low Major bias
+    are worth less. Normalised at bias 1.0 so that 18 all-Major pips stay exactly a saturated
+    axis. Read the C# comment before changing anything here.
+
+    Module-level rather than nested in make_composite because main() needs it too: the exchange
+    rate R carries this factor, so printing R without it reproduces exactly the stale-figure defect
+    (audit P-03) where R was quoted as a scalar built from three constants.
+    """
+    minor, major = C["MinorPassionCost"], C["MajorPassionCost"]
+    minor_gain = C["PassionLearnRateMinor"] - C["PassionLearnRateNone"]
+    major_gain = C["PassionLearnRateMajor"] - C["PassionLearnRateNone"]
+
+    def efficiency(bias):
+        price = minor + (major - minor) * bias
+        gain = minor_gain + (major_gain - minor_gain) * bias
+        return (gain / price) / (major_gain / major)
+
+    return efficiency
+
+
 def make_composite(C):
     """Mirror of PawnVarianceSettings.CalculateCompositeScore. Presets all enable both axes."""
     wS, wP = C["CompositeSkillWeight"], C["CompositePassionWeight"]
@@ -136,17 +161,7 @@ def make_composite(C):
     # back out gives the skill count and cannot drift out of step with the ceiling.
     skills = pdiv / major
 
-    # Mirror of PawnVarianceSettings.PassionPipEfficiency. A Major costs 1.5 pips but is worth
-    # 1.769 Minors in XP-rate increment over having no passion, so pips bought at a low Major bias
-    # are worth less. Normalised at bias 1.0 so that 18 all-Major pips stay exactly a saturated
-    # axis. Read the C# comment before changing anything here.
-    minor_gain = C["PassionLearnRateMinor"] - C["PassionLearnRateNone"]
-    major_gain = C["PassionLearnRateMajor"] - C["PassionLearnRateNone"]
-
-    def efficiency(bias):
-        price = minor + (major - minor) * bias
-        gain = minor_gain + (major_gain - minor_gain) * bias
-        return (gain / price) / (major_gain / major)
+    efficiency = make_efficiency(C)
 
     def composite(q, p):
         shift = p["skillShiftMin"] + (p["skillShiftMax"] - p["skillShiftMin"]) * q
@@ -299,14 +314,22 @@ def main():
     grids = {n: beta_grid(p["averageQuality"], C["BetaConcentrationK"], C["QualityClampEpsilon"])
              for n, p in P.items()}
 
-    R = (C["AssumedMaxSkillLevel"] / C["MaxPassionPips"]) * \
+    # R carries the pip-efficiency factor, so it is a FUNCTION of the profile's Major bias, not a
+    # scalar. Printing the bare weight ratio is what audit P-03 was: a figure that is only true for
+    # an all-Major profile, quoted as though it were the general rate. Anchor it at vanilla's bias
+    # and print the span so the bias-dependence is visible rather than implied.
+    eff = make_efficiency(C)
+    ratio = (C["AssumedMaxSkillLevel"] / C["MaxPassionPips"]) * \
         (C["CompositePassionWeight"] / C["CompositeSkillWeight"])
+    anchor = C["VanillaMajorBias"]
     print(f"wS={C['CompositeSkillWeight']:g}  wP={C['CompositePassionWeight']:g}  "
           f"pips/{C['MaxPassionPips']:g}  skill/{C['AssumedMaxSkillLevel']:g}  "
           f"K={C['BetaConcentrationK']:g}")
-    print(f"Exchange rate R = ({C['AssumedMaxSkillLevel']:g}/{C['MaxPassionPips']:g}) * "
-          f"({C['CompositePassionWeight']:g}/{C['CompositeSkillWeight']:g}) = "
-          f"{R:.2f} skill levels per passion pip")
+    print(f"Exchange rate R(bias) = ({C['AssumedMaxSkillLevel']:g}/{C['MaxPassionPips']:g}) * "
+          f"({C['CompositePassionWeight']:g}/{C['CompositeSkillWeight']:g}) * eff(bias)")
+    print(f"  R = {ratio * eff(anchor):.2f} skill levels per passion pip at vanilla bias "
+          f"{anchor:g}   (range {ratio * eff(0.0):.2f} at bias 0 .. "
+          f"{ratio * eff(1.0):.2f} at bias 1)")
     print(f"Faithful baseline @ q=0.50: {composite(0.50, P['Faithful']):.4f}\n")
 
     score = {(n, N): expected_best_of_n(P[n], N, grids[n], composite)

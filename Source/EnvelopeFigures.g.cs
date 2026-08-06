@@ -27,7 +27,7 @@ namespace PawnVarianceMod
         // Constants.cs values these figures were generated from. Mismatch against the live
         // Constants means this file is stale -- re-run the tool, do not adjust these.
         public const float GenCompositeSkillWeight = 0.8f;
-        public const float GenCompositePassionWeight = 1.4f;
+        public const float GenCompositePassionWeight = 1.5f;
         public const float GenMaxPassionPips = 18f;
         public const float GenAssumedVanillaSkillBaseline = 5f;
         public const float GenAssumedMaxSkillLevel = 20f;
@@ -56,14 +56,14 @@ namespace PawnVarianceMod
 
         public static readonly float[][] Scores =
         {
-            new[] { 0.223715f, 0.270824f, 0.298879f, 0.307099f },
-            new[] { 0.200536f, 0.273227f, 0.326339f, 0.343839f },
-            new[] { 0.174217f, 0.269832f, 0.340586f, 0.363185f },
-            new[] { 0.171132f, 0.211401f, 0.239175f, 0.248045f },
-            new[] { 0.277384f, 0.318341f, 0.341884f, 0.348633f },
-            new[] { 0.287219f, 0.329172f, 0.352699f, 0.359339f },
-            new[] { 0.246344f, 0.292074f, 0.319311f, 0.327292f },
-            new[] { 0.190042f, 0.232499f, 0.259880f, 0.268297f }
+            new[] { 0.223062f, 0.269890f, 0.297777f, 0.305949f },
+            new[] { 0.199511f, 0.271672f, 0.324396f, 0.341768f },
+            new[] { 0.176731f, 0.272065f, 0.342416f, 0.364886f },
+            new[] { 0.170399f, 0.210477f, 0.238118f, 0.246946f },
+            new[] { 0.275898f, 0.316725f, 0.340193f, 0.346921f },
+            new[] { 0.285513f, 0.327597f, 0.351198f, 0.357858f },
+            new[] { 0.245073f, 0.290609f, 0.317729f, 0.325677f },
+            new[] { 0.189217f, 0.231381f, 0.258574f, 0.266933f }
         };
     }
 }
