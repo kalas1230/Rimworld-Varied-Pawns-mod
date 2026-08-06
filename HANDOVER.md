@@ -343,9 +343,23 @@ the **identical** slip, and every figure a player ever sees is a comparison agai
 carries the same slip. It cancels. **Nothing displayed is wrong, and no decision has ever been made
 on a number this affects.**
 
-**What fixing it would cost.** Every raw `N≥2` figure shifts, so `EnvelopeFigures.g.cs` regenerates,
-every table pasted in this document is repasted, and the in-game gate is re-run — for a difference no
-player can observe.
+**What fixing it would cost — measured 2026-08-07, not estimated.** The midpoint correction was
+applied to `beta_grid` and the tool re-run, then reverted. Every raw `N≥2` figure shifts, so
+`EnvelopeFigures.g.cs` regenerates and every pasted table is repasted — but the shift is **one digit**:
+`Faithful` N=50 goes `0.3059 → 0.3058`, and exactly one displayed percentage moves at all
+(`Scavenger` N=50, `−12.8% → −12.7%`). `N=1` is bit-identical.
+
+**Do not confuse that with the ~0.9% figure in "Carried items".** They are different quantities. The
+0.9% is the gap between the 20000-node reference and the mod's 1024-node integrator; it is dominated
+by this same slip, but the slip is ~20× larger there because the slices are ~20× fatter. The
+reference is already nearly exact — **the shipped C# carries the visible share of the error**, not the
+tool.
+
+> [!CAUTION]
+> **If it is ever fixed, fix BOTH sides in the same edit.** The in-game gate's tolerance is 0.5pp on
+> the displayed quantity and the effect is ~0.1pp, so the gate would **not** catch the two
+> implementations diverging in method. That is the one genuinely dangerous way to touch this: a
+> silent breach of the "two implementations of one integral" contract, with a green light.
 
 **The call (2026-08-07): leave it.** It was surfaced only because doing it *after* a retune would
 mean redoing numbers that had just been tuned. The owner's decision is to carry it indefinitely. A
