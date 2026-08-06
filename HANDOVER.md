@@ -28,6 +28,35 @@ Confirm with `git status` rather than trusting this line.
 
 # ⚠️ CURRENT PRIORITIES & IN-PROGRESS TASKS
 
+## 1.11. 🔜 NEXT UP — THE OWNER IS RETUNING EVERY PRESET (stated 2026-08-06)
+
+Not started. Recorded here because **four decisions settled on 2026-08-06 were settled partly
+*because* of it**, and a retune done without knowing them will fight the code:
+
+- **Decision 4 — no downside floor.** Deliberately rejected so the retune isn't fighting a global
+  clamp. `skillShiftMin` (how low the band goes) and `skillNoise` (how far noise escapes it) are
+  now **the only downside controls**. Nothing else protects a pawn from a deep negative roll.
+- **Decision 1 — noise floors dropped to `0f`.** Every preset's dispersion already moved, hardest
+  at the quiet end (`Faithful` −25%). **Re-read the dispersion table before picking targets; the
+  pre-2026-08-06 figures are dead.**
+- **`countProtectedTraits` stays `true`.** `traitCountMin`/`Max` bound the pawn's **total** traits,
+  including xenotype and scenario-forced ones — not the number this mod adds. Tune as totals.
+- **Decision 2 — no budget clamp.** A rolled passion budget above what the pawn's eligible skills
+  can hold is still discarded, which is what lets restricted-skill pawns max out. Widening
+  `passionCountMax` past ~12 buys progressively less.
+
+**The two hard gates on any retune** (see "MANDATORY ARCHITECTURAL RULES"): `envelope_check.py`
+must still PASS Rule 1 and Rule 2 at N = 1, 5, 25, 50, and if any figure moves,
+`Source/EnvelopeFigures.g.cs` **and** every pasted table in this document must be regenerated
+together. The tool prints `Source/EnvelopeFigures.g.cs: unchanged` when nothing moved — trust that
+line, not memory.
+
+> [!CAUTION]
+> **Retuning is exactly where this project has shipped its worst defects.** Both Best-of-N bugs
+> (§1.8) and the ~36pp Best-of-25 inversion were introduced during retune-adjacent work and
+> survived clean builds and static review. Run the `Verify Best-of-N` debug action in-game
+> afterwards; it is mechanical and takes seconds.
+
 ## 1.10. 🟢 THE MISSING WHOLE-BRANCH REVIEW — RUN LATE, AFTER THE PUSH (2026-08-06)
 
 The 2026-08-04 batch's final cross-task review was never dispatched. It has now run, against
@@ -151,10 +180,12 @@ excluded: Milian         Milian_Race        (+ 5 corpse defs)
   Open question for the owner: if Milians are spawned in code rather than through a PawnKindDef,
   they are unreachable by race override and the traversal needs a second source.
 - **`CreepJoiner` (Anomaly) also reaches the menu, labelled "Human".** Two rows would read
-  "Human" — which is exactly what the **uncommitted** `PawnVarianceSettings.cs` duplicate-label
-  change fixes, rendering them `Human (Human)` and `Human (CreepJoiner)`. **That uncommitted
-  change is load-bearing, not cosmetic.** Whether `CreepJoiner` belongs in the menu at all is a
-  decision, not a bug.
+  "Human" — fixed by the duplicate-label change (committed in `b1e4b2d`), which renders them
+  `Human (Human)` and `Human (CreepJoiner)`. **That change is load-bearing, not cosmetic.**
+  ✅ **DECIDED 2026-08-06: leave `CreepJoiner` in the menu.** The filter rule is "humanlike races
+  something spawns" and it qualifies; excluding it would mean a hardcoded defName special case
+  that every future DLC would need extending. Overriding variance for creepjoiners is a legitimate
+  thing to want.
 - ✅ **Zero mechanoid, drone or float-unit defs reached the menu** — the `Humanlike` filter holds.
   That was the acceptance check and it passes.
 
@@ -190,13 +221,17 @@ would be a second copy of the rule, and a copy agreeing with itself proves nothi
 - ✅ **Race overrides reach HAR races.** Milira and Wolfein pawns resolve to Sovereign — the
   feature does the thing it was built for.
 
-> [!CAUTION]
-> **A Human race override at Normal silently supersedes the Active Colony Profile.** The owner's
-> General tab reads `Faithful`, but a plain player colonist now resolves to **Sovereign**, because
-> the player faction has no override and the race one is the only match. That is the documented
-> design (any override beats Active), but "Active Colony Profile" now names a value that never
-> applies to human colonists. Worth a caption, or worth knowing before wondering why colonists got
-> stronger.
+> [!NOTE]
+> ~~**A Human race override at Normal silently supersedes the Active Colony Profile.**~~
+> ✅ **CAPTIONED 2026-08-06.** The owner's General tab read `Faithful` while a plain player
+> colonist resolved to **Sovereign**, because the player faction has no override and the race one
+> was then the only match. Correct by design (any override beats Active) but invisible, so
+> "Active Colony Profile" named a value that never applied to a human colonist.
+>
+> The General tab now carries a caption under the picker: *"Overrides on a pawn's faction, race or
+> xenotype take precedence over this."* Behaviour unchanged — the discrepancy is now disclosed
+> rather than discovered. Considered and rejected: computing and displaying what a colonist
+> *actually* resolves to, which is more useful but has to stay correct as `ValuesFor` evolves.
 
 > [!NOTE]
 > **The first sweep run returned `Specialist` on the tie row** — neither candidate. The Empire
@@ -511,21 +546,24 @@ situation recurs:
 verification but **decisions**, listed immediately below and in §5's `countProtectedTraits`
 caution.
 
-### 🔓 Open decisions — raised, analysed, NOT decided
+### 🔓 Decisions — four of five settled 2026-08-06; only #3 is still open
 
-None of these are bugs in the "must fix" sense; each is a deliberate deferral awaiting the owner.
+None of these are bugs in the "must fix" sense. **Decisions 1, 2, 4 and 5 were settled by the
+owner on 2026-08-06** and are marked below with what was chosen and why. **Only #3 remains open**,
+and it is the expensive one — see the note under it.
 
 | # | Decision | Notes |
 |---|---|---|
 | 1 | ✅ **DECIDED 2026-08-06: drop both floors to `0f`.** | Owner's call, against the doc's own leaning. Shipped. **The consequence was larger than "zero now means zero"** — both are Lerp low endpoints, so every noise setting was rescaled and the quiet presets moved most. See the CAUTION under "Surprise 1". Envelope unaffected; dispersion tables updated. |
-| 2 | ⏸️ **Wildcard realized-budget overshoot — decided, then reopened by investigation.** | Owner chose "clamp realized budget to capacity", then asked how Wildcard could reach all-Major at all. **The investigation contradicts the fix.** See the block below this table. Not implemented. |
-| 3 | **Composite saturation mismatch** | Score saturates at budget 18/16/14.4 by Major bias; reality at 12/15/18. No shipped preset reaches it. Fixing it **would** move envelope figures → full recalc-and-repaste cycle. |
-| 4 | **Skill-shift downside floor** | The asymmetric-risk axis: a passion budget escaping upward is harmless, a skill shift escaping downward by up to 6 levels on an already-low-quality pawn is not. Raised by the design review as the one place a soft floor might genuinely be wanted. |
+| 2 | ✅ **DECIDED 2026-08-06: leave it. No clamp.** | Reached the right answer by the wrong route: the owner approved clamping, then asked how Wildcard could reach all-Major at all. Investigating that showed the clamp is a **nerf to restricted-skill pawns across every profile**, not a Wildcard-tail cleanup. Decision reversed on the evidence. Full working below — **read it before anyone proposes clamping again.** |
+| 3 | 🔓 **STILL OPEN — composite saturation mismatch** | Score saturates at budget 18/16/14.4 by Major bias; reality at 12/15/18. No shipped preset reaches it. Fixing it **would** move envelope figures → full recalc-and-repaste cycle. **Pair it with the first-order CDF item in §1.8 "Carried, quantified, NOT fixed"** — both force the same regenerate-and-repaste cascade, so paying that cost twice would be wasteful. Neither is urgent; nothing on screen is wrong today. |
+| 4 | ✅ **DECIDED 2026-08-06: no floor. Control the downside per-profile instead.** | The asymmetric risk is real — a passion budget escaping upward is harmless, a skill shift escaping downward is not — but the owner is retuning every preset, and a global floor would fight that tuning. `skillShiftMin` sets how low the band goes and `skillNoise` sets how far noise escapes it; **those two are now the only downside controls, so tune them deliberately.** Wildcard stays intentionally brutal. |
 | 5 | ✅ **DECIDED 2026-08-06: split into two named methods.** | `SkillVarianceApplier.Shift` is now private and reached only through `ShiftAroundBand` (generation — soft band, noise escapes) and `ShiftWithinBounds` (age-13 — hard per-skill bound). The ambiguity no longer exists to be misread. Shipped. |
 
-### 🔬 Decision 2 reopened — the owner's question falsified the recommended fix
+### 🔬 Why decision 2 came out "leave it" — the working, so nobody re-proposes the clamp
 
-The owner accepted "clamp realized budget to capacity", then asked: *how can Wildcard even reach
+**Resolved: leave it.** The owner first accepted "clamp realized budget to capacity", then asked:
+*how can Wildcard even reach
 full Major on all skills? That seems too strong.* Investigating that question broke the fix.
 
 **Answer to the question: it effectively cannot.** With `PassionBudgetSpreadMin = 0`, Wildcard's
@@ -562,16 +600,17 @@ it would be too strong is right; the premise that it happens is not.
 > is what currently lets a restricted-skill pawn max out. **The doc's claim that clamping is "the
 > minimal fix" and that "nothing is silently lost" is wrong on both halves.**
 
-**Three real options, none of them the one that was chosen:**
+**The three options, and the call:**
 
-1. **Leave it.** Today's behaviour: a pawn with few eligible skills gets the best passions those
-   skills can hold. Defensible — arguably correct.
+1. ✅ **CHOSEN — leave it.** A pawn with few eligible skills gets the best passions those skills
+   can hold. Defensible on its own terms, and the "problem" it was going to fix is a 1-in-10⁷ event.
 2. **Clamp the rolled counts, not the budget** — `majorPassions = Min(majorPassions,
    eligible.Count)` after the spend loop. **Genuinely outcome-neutral**; only tidies the trace.
-3. **Clamp the budget** (as originally chosen), accepting it as a deliberate nerf to
-   restricted-skill pawns across every profile, not a Wildcard tail fix.
+   Available if the unspent-pip trace line ever becomes annoying.
+3. **Clamp the budget** (originally chosen, then rejected) — a deliberate nerf to restricted-skill
+   pawns across every profile. Not a Wildcard tail fix. **Do not do this by accident.**
 
-Implementation note if 2 or 3 is ever chosen: `budget` is rolled at `PassionVarianceApplier.cs:42`
+Implementation note if 2 or 3 is ever revisited: `budget` is rolled at `PassionVarianceApplier.cs:42`
 but `eligible` is not built until ~`:79`, so either needs a reorder.
 
 ### ✅ Settled earlier — kept only so they are not relitigated
@@ -929,8 +968,18 @@ Plan: [`docs/superpowers/plans/2026-08-03-profile-editor-layout.md`](file:///C:/
   + Scribe_Values.Look(ref countProtectedTraits, "countProtectedTraits", true);
   ```
 
+  > [!NOTE]
+  > ✅ **DECIDED 2026-08-06: keep `true`.** Trait count means **total traits on the pawn**, not
+  > traits this mod adds. A Hussar with 2 forced traits on a 2–4 profile rolls ~1 extra and lands
+  > at 3, the same total as a Baseliner on that profile. The cost is accepted: forced-trait pawns
+  > get less rolled personality. **This is now load-bearing for the preset retune — `traitCountMin`
+  > and `traitCountMax` are a ceiling on the finished pawn, so tune them as totals.**
+  >
+  > The caution below is kept for the mechanism, which still explains why the flip was invisible.
+
   > [!CAUTION]
-  > **Silent behaviour change for existing settings — and it has now SHIPPED undecided.**
+  > **Silent behaviour change for existing settings — and it SHIPPED undecided before the ruling
+  > above.**
   > `Scribe_Values.Look` omits a value from the written XML when it equals the default. Any
   > settings file saved while the default was `false`, by a user who had it `false`, therefore has
   > **no `countProtectedTraits` key at all** — and now loads as `true`, flipping `Trait count`
