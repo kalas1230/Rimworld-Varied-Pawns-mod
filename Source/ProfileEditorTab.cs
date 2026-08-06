@@ -90,7 +90,7 @@ namespace PawnVarianceMod
                 outRect.width,
                 outRect.height - HeaderHeight - HeaderGutter);
 
-            float viewHeight = Math.Max(profileEditorViewHeight, 750f);
+            float viewHeight = Math.Max(profileEditorViewHeight, 580f);
             var viewRect = new Rect(0f, 0f, bodyRect.width - 24f, viewHeight);
 
             Widgets.BeginScrollView(bodyRect, ref profileEditorScrollPos, viewRect);
@@ -102,7 +102,7 @@ namespace PawnVarianceMod
             DrawGenerationSettings(listing);
             GUI.enabled = wasEnabled;
 
-            profileEditorViewHeight = Math.Max(listing.CurHeight + 40f, 750f);
+            profileEditorViewHeight = listing.CurHeight + 40f;
             listing.End();
             Widgets.EndScrollView();
         }

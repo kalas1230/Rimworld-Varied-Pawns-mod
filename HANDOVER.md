@@ -2,8 +2,10 @@
 
 Date: 2026-08-06
 Repo: `C:\Users\gokal\Desktop\Rimworld-mod\Rimworld-Pawn-variance-mod`
-Branch: **`main`** (41 commits ahead of `origin/main`, **not pushed**)
-`HEAD`: `cfb1df8` — one uncommitted file, `Source/ProfileEditorTab.cs` (the owner's, see below).
+Branch: **`main`** (~49 commits ahead of `origin/main`, **not pushed** — run `git rev-list --count
+origin/main..main` rather than trusting this number; a docs commit moves it).
+Last code commit: **`546183d`**. One uncommitted file, `Source/ProfileEditorTab.cs` (the owner's,
+see below).
 
 > [!IMPORTANT]
 > **`feature/profile-editor-layout` was merged into `main` and deleted on 2026-08-06.** The
@@ -11,14 +13,17 @@ Branch: **`main`** (41 commits ahead of `origin/main`, **not pushed**)
 > `main` unchanged and no merge commit exists. Nothing was pushed — `origin/main` is still at
 > the pre-merge state.
 >
-> **Merging did not verify anything.** The in-game gate in §1.6 and §5 is still open; it was a
-> merge gate and is now simply an open gate on `main`. Read those warnings as they stand.
->
-> **The race-overrides batch (§1.7) was also built directly on `main`,** at the owner's
-> instruction — `feature/race-overrides` was created, fast-forwarded in and deleted. So `main`
-> now carries **two** batches that have never been seen running. They are independent: §1.7
-> touches override resolution and the Overrides tab, the 2026-08-04 batch touches the Profile
-> Editor tab and the composite maths. One in-game session can clear both.
+> **Both open batches have now been seen running.** The race-overrides batch (§1.7) was also
+> built directly on `main` at the owner's instruction. Two GABS sessions on 2026-08-06 —
+> recorded in §1.8 and §1.9 — drove the real assembly and closed the in-game gates on both
+> batches, finding and fixing three defects in the process. **Merging still verified nothing;
+> the sessions did.** Read §1.8 and §1.9 for what was actually observed, and treat any
+> remaining warning banner below as scoped to the specific item it names.
+
+> [!NOTE]
+> **Everything the 2026-08-06 sessions produced is committed as of `546183d`.** The one dirty
+> file is the owner's in-flight `ProfileEditorTab.cs` scroll-height change, deliberately left
+> out of every commit. See "UNCOMMITTED WORK IN THE TREE" below.
 
 ---
 
@@ -143,10 +148,10 @@ unblocked everything above.)
 
 Both were closed **by the owner, by hand, on 2026-08-06**:
 
-1. ✅ **The stale scrub.** Owner-verified. Still worth extracting the carried
-   `ScrubStaleOverrides(overrides, priorities, deletedId)` helper: the scrub is inline in the
-   Delete button's lambda in `ProfileEditorTab.cs`, so no debug action can reach it without
-   testing a *copy* of it, which is why this one could not be automated.
+1. ✅ **The stale scrub.** Owner-verified. **The `ScrubStaleOverrides(overrides, priorities,
+   deletedId)` helper was extracted in `546183d`** and lives in `PawnVarianceSettings.cs` as
+   `internal`, so a future debug action can call the real scrub instead of a copy of it. The
+   automation gap that made this owner-only is now closed for next time.
 2. ✅ **Race section is not Biotech-gated.** Owner-verified by launching with Biotech disabled.
    The startup log for that run contains **no `[PawnVarianceMod]` line at all** and no Harmony
    patch failure — and since this mod logs nothing at startup by design, a silent load is the
@@ -319,10 +324,14 @@ against the Normal-tier xenotypes.
    entire feature for the users it was built for. This was the single highest-risk requirement
    in the batch and is worth re-checking after any edit to `ValuesFor` or the Overrides tab.
 
-## 1. 🟡 IN-GAME VERIFICATION OF THE PROFILE EDITOR REDESIGN — **IN PROGRESS (VERIFIED VIA GABS)**
+## 1. 🟢 IN-GAME VERIFICATION OF THE PROFILE EDITOR REDESIGN — **COMPLETE**
 
 > [!NOTE]
-> **GABS In-Game Inspection Completed (2026-08-04).** The profile editor redesign was loaded in RimWorld via GABS, and core layout metrics were verified live.
+> **All twelve checks below are closed.** The redesign was inspected live via GABS on
+> 2026-08-04 (core layout metrics) and again on 2026-08-06 (§1.9 — header/body split, row 3
+> geometry, the Best-of-25 anchor, and the scroll view under the owner's `580f` floor). The
+> remaining items were verified by the owner by hand. §5's warning banner has been retired
+> accordingly.
 
 Deploy first:
 
@@ -347,9 +356,10 @@ Then Mod Settings → Varied Pawns → Profile Editor status:
 - [x] **1k. UI scale rendering** *(User verified working)*
 - [x] **Zero Default Custom Profiles** *(Fixed: removed pre-populated `custom_1` profile from default state in `PawnVarianceSettings.cs` and enabled `Delete` for single custom profiles)*
 
-**If everything passes:** §5's warning banner should be replaced with a normal completion note.
-(The branch itself was already merged on 2026-08-06 — see the header. The remaining checks now
-gate *pushing* and calling the work verified, not merging.)
+**Everything passed**, so §5's warning banner has been replaced with a completion note. The
+branch was already merged on 2026-08-06 (see the header); nothing here gates pushing any more.
+The one item still gating a push is the `countProtectedTraits` default flip in §5 — a decision,
+not a check.
 
 ## 1.5. 🟢 COMPOSITE-SCORE RETUNE — **VERIFIED IN-GAME VIA GABS & SCRIPT** (2026-08-04)
 
@@ -393,14 +403,22 @@ All three live in `Constants.cs`. `docs/tools/envelope_check.py` ran and confirm
 
 > [!NOTE]
 > **This section used to list the whole 2026-08-05/06 working tree. That work is now committed**
-> — it went in as `f2e44d4` at merge time (see the batch table below). The list that was here is
+> — it went in as `f2e44d4` at merge time (see the batch table below), and the §1.9 session's
+> output went in as `b1e4b2d` / `e5fe80e` / `b917327` on 2026-08-06. The list that was here is
 > preserved in git history at `f2e44d4:HANDOVER.md`.
 
-Only one file is uncommitted:
+Only one file is uncommitted, and it is the same one as before:
 
 | File | State |
 |---|---|
 | `Source/ProfileEditorTab.cs` | **The owner's, in flight.** Profile-editor scroll height: floor `750f → 580f`, and `profileEditorViewHeight` now takes `listing.CurHeight + 40f` without the `Math.Max(..., 750f)` clamp. Iterated twice during the 2026-08-06 session. Not agent-authored; left uncommitted deliberately. |
+
+> [!IMPORTANT]
+> **This file was committed *partially* in `546183d`, on purpose.** The `ScrubStaleOverrides`
+> refactor touches the same file, so only that hunk was staged (via `git apply --cached` of a
+> filtered patch — the working tree was never rewritten). The two scroll-height lines above are
+> still the only diff against `HEAD`. If you `git diff` this file and see exactly two changed
+> lines, that is correct and expected, not a lost refactor.
 
 > [!CAUTION]
 > **The owner edits this file while agents run.** During the race-overrides batch, three files
@@ -410,11 +428,12 @@ Only one file is uncommitted:
 > any `stash`/`checkout`/`reset`, not from a snapshot taken earlier in the session.** A `git status`
 > from the top of a long session is not evidence about the tree now.
 
-**Verified state at `cfb1df8`:** `dotnet build` → `0 Error(s), 0 Warning(s)`.
+**Verified state at `546183d`:** `dotnet build` → `0 Error(s), 0 Warning(s)`.
 `python zzz-Do-Not-Commit/test_race_resolution.py` → **PASS, 19/19**.
 
-**Not verified:** neither open batch has been seen running. See §1.7 and the two
-"WHERE THIS LEFT OFF" sections.
+**Both batches have now been seen running** — §1.8 and §1.9. What remains open is not
+verification but **decisions**, listed immediately below and in §5's `countProtectedTraits`
+caution.
 
 ### 🔓 Open decisions — raised, analysed, NOT decided
 
@@ -435,7 +454,7 @@ None of these are bugs in the "must fix" sense; each is a deliberate deferral aw
 # 🚧 WHERE THIS LEFT OFF — THE 2026-08-06 RACE OVERRIDES BATCH
 
 **Newest batch. Built directly on `main` at the owner's instruction. Fully implemented,
-per-task reviewed and final-reviewed — but nothing has been seen running.**
+per-task reviewed, final-reviewed — and, as of 2026-08-06, verified in-game (§1.9).**
 
 Plan: [`docs/superpowers/plans/2026-08-06-race-overrides.md`](docs/superpowers/plans/2026-08-06-race-overrides.md).
 Per-task findings, review adjudications and the carried Minor list are in
@@ -469,26 +488,26 @@ out and `CreepJoiner` is not. See §1.9.** If someone "simplifies" this to
 
 ### ⛔ What is NOT done
 
-1. **THE OWNER'S IN-GAME PASS — the only gate that can call this verified.** No subagent can
-   launch RimWorld, so every in-game check was deferred. In priority order:
-   - **The Add menu contents.** Must list exactly Human / Wolfein / Milira / Milian, with no
-     `*_Mechanoid_*` or `*_FloatUnit_*` entries. Mechanoids appearing = the `Humanlike` filter
-     regressed. *This is the acceptance check for the whole feature.*
-   - **The Task 3 refactor regression check.** The Faction and Xenotype sections must render
-     **exactly** as before — Task 3 rewrote the row-drawing loop both of them use. There is no
-     automated gate in this repo that can see an IMGUI regression. This is the highest-risk item
-     in the batch precisely because it touches code that already worked.
-   - **Priority beats source.** Wolfein race override at High vs. its faction override at Normal
-     → the race profile wins. Drop race to Low → the faction profile wins.
-   - **The precedence toggle flips the winner** for an equal-priority race + faction pair. In
-     neither toggle state may Xenotype beat Race at equal priority.
-   - **The stale scrub.** Assign a custom profile to a race override, delete that profile in the
-     Profile Editor tab, confirm the row disappears rather than showing a raw guid.
-   - **Assembled tab geometry.** Three sections stack where two did. Populate all three with
-     several rows and scroll — no overlap, no clipping, especially on the frame right after
-     adding a row.
+1. ~~**THE OWNER'S IN-GAME PASS**~~ — ✅ **DONE 2026-08-06. Every item below closed; full
+   results in §1.9.** Kept as the record of what was checked:
+   - ~~**The Add menu contents.**~~ ✅ Passed on the part that mattered — **zero** `*_Mechanoid_*`
+     or `*_FloatUnit_*` entries, so the `Humanlike` filter holds. ⚠️ But the *expected contents*
+     written here were wrong: it yields Human / **CreepJoiner** / Milira / Wolfein, **not**
+     Milian. See §1.9.
+   - ~~**The Task 3 refactor regression check.**~~ ✅ Clean. Faction and Xenotype render at
+     *identical* geometry through the shared renderer — measured column by column.
+   - ~~**Priority beats source.**~~ ✅ Low → faction wins, High → race wins, in both toggle states.
+   - ~~**The precedence toggle flips the winner**~~ ✅ and only on the exact-tie row. Xenotype never
+     beat Race at equal priority in either state.
+   - ~~**The stale scrub.**~~ ✅ Owner-verified. The helper has since been extracted (`546183d`).
+   - ~~**Assembled tab geometry.**~~ ✅ Three sections stack at y=94 / 581 / 728, no overlapping
+     rects, `1227px` of content in a `524px` viewport.
 
-2. **Nothing is pushed.** `origin/main` is 41 commits behind.
+   **The one thing that could not be checked:** adding a race override *through the UI*. The Add
+   button's `FloatMenu` does not survive to the next frame for the bridge to read — a limit of the
+   automation, confirmed against the Faction button too. The owner added the rows by hand.
+
+2. **Nothing is pushed.** `origin/main` is 48 commits behind.
 
 ### ✅ What IS solid
 
@@ -509,19 +528,23 @@ green and not watching. All five added assertions passed on the first run, so th
 already correct, but **a passing test suite said nothing about the requirement it was built to
 protect.** Now 19/19.
 
-### 🔀 Carried, not fixed
+### 🔀 Carried — the two that mattered are now FIXED (`546183d`)
 
 Seven Minor findings were triaged as carry by the final review; all are in the ledger. The two
-worth knowing:
+worth knowing were both closed on 2026-08-06:
 
-- **`Def.LabelCap` is called without a null-`label` guard** in all three override sections. A
-  third-party def shipping no `<label>` would throw. Pre-existing, symmetric across faction,
-  race and xenotype — a single `string.IsNullOrEmpty(d.label) ? d.defName : ...` fallback hardens
-  all three.
-- **`ProfileEditorTab.cs` now has three near-identical 9-line scrub blocks.** Same duplication
-  the owner chose to remove in Task 3, one layer up. A `ScrubStaleOverrides(overrides,
-  priorities, deletedId)` helper would collapse them and stop a future fourth axis forgetting one
-  of its two dictionaries.
+- ✅ **`Def.LabelCap` called without a null-`label` guard** in all three override sections. A
+  third-party def shipping no `<label>` would have thrown and taken down the Overrides tab.
+  Now routed through `LabelOf(Def)`, which falls back to `defName`. All six call sites across
+  faction, race and xenotype use it — including the race section's duplicate-label grouping,
+  which would otherwise have keyed on a throwing property.
+- ✅ **Three near-identical 9-line scrub blocks in `ProfileEditorTab.cs`.** Collapsed to
+  `ScrubStaleOverrides(overrides, priorities, deletedId)`, which lives in
+  `PawnVarianceSettings.cs` as `internal`. The real hazard was never the duplication — it was a
+  future fourth override axis remembering one of its two parallel dictionaries and not the
+  other. Behaviour is unchanged; `test_race_resolution.py` still passes 19/19.
+
+**The remaining five Minor findings are untouched and still in `.superpowers/sdd/progress.md`.**
 
 ---
 
@@ -579,31 +602,38 @@ no code review and no in-game pass.** What it changes:
 
 ### ⛔ What is NOT done
 
-1. **THE OWNER'S IN-GAME PASS — the only remaining gate.** Nothing in this batch has been seen
-   running. Subagents cannot launch RimWorld, so every in-game check across all 7 tasks was
-   deferred to a single owner-run pass. The full deferred list is in §1.6's warning block.
-   **Highest-risk items, because no static analysis can settle them:**
-   - Row 3's readout gained the word "Typical" — confirm it does not clip at `RightPart(0.34f)`
-     with real `GameFont` metrics, at default **and** non-default UI scale.
-   - The header is now 162px; confirm no row overlaps the distribution curve.
-   - The eight Best-of-25 figures on screen must match the envelope table's N=25 column:
+1. ~~**THE OWNER'S IN-GAME PASS**~~ — ✅ **DONE 2026-08-06 (§1.8, §1.9).** It found two real
+   defects in the Best-of-N integrator that clean build, `envelope_check.py` and three rounds of
+   static review had all missed. Both fixed. The checks are struck through below and kept as the
+   record of what was asked for:
+   - ~~Row 3's readout gained the word "Typical" — confirm it does not clip at `RightPart(0.34f)`~~
+     ✅ Splits cleanly: the read-only figure ends at x=280, the arrow starts at x=567.
+   - ~~The header is now 162px; confirm no row overlaps the distribution curve.~~ ✅ Header ends at
+     y=260, body scroll view starts there.
+   - ~~The eight Best-of-25 figures on screen must match the envelope table's N=25 column~~
+     ✅ Settled mechanically at **32/32** by the `Verify Best-of-N` action, not by eye. Target
+     figures kept for reference:
      Faithful `baseline`, Distinct `+10%`, Wildcard `+17%`, Desperate `-21%`, Elite `+15%`,
      Sovereign `+19%`, Specialist `+7%`, Scavenger `-14%`.
      *(Scavenger was listed as `-13%` until 2026-08-06. Both the tool and the live code give
      -13.5%, and `"F0"` rounds half away from zero, so the screen reads **-14%**. The code was
      always right; this line was wrong. Verified in-game via GABS.)*
-   - Cycling the editor picker must leave the General tab's Active Colony Profile unchanged.
-   - Settings export → import must still round-trip after the Share Settings caption move.
-   - **Run both new debug actions** (`Varied Pawns` category — see "🧪 Verification harness").
-     `Verify Best-of-N against envelope_check.py` should PASS, and it settles the eight
-     Best-of-25 figures above mechanically instead of by eye. `Roll pawns and dump distribution`
-     at 200 gives the first *observed* dispersion numbers this project has ever had.
+   - ~~Cycling the editor picker must leave the Active Colony Profile unchanged.~~ ✅ Owner-verified
+     (§1 items 1h–1k, which also cover export/import round-trip and non-default UI scale).
+   - ~~**Run both new debug actions.**~~ ✅ Both run. `Verify Best-of-N` **PASSES 32/32** after the
+     §1.8 fixes — it *failed 16/32* first, which is how the defects were found. `Roll pawns and
+     dump distribution` at 200 gave the project's first observed dispersion figures: per-skill
+     level sd **3.55**, passion budget sd **1.24**, 2.57 traits/pawn, 0 passionless pawns.
 
-2. **The final whole-branch review was never dispatched.** Per-task reviews all passed, but the
-   broad cross-task review — the one that catches assembled-geometry defects only visible with
-   the whole branch in view — has not run. The previous branch's final review found exactly such
-   a defect, so **do not skip this**. Point it at the Minor findings list in the ledger so it can
-   triage which must be fixed before merge.
+2. ⚠️ **The final whole-branch review for THIS batch was never dispatched — still true.** Per-task
+   reviews all passed, but the broad cross-task review has not run *for the 2026-08-04 work*. The
+   race-overrides batch got one (it returned SOUND), and that review traced both composite paths
+   end to end, so the overlap is partial — **it is not a substitute**. The previous branch's final
+   review found an assembled-geometry defect that only the whole-branch view could see. Point any
+   such review at the five remaining Minor findings in the ledger.
+
+   *Note the in-game pass is no longer the argument for skipping this: §1.8 showed static review
+   and live execution catch different classes of defect. Neither replaces the other.*
 
 ### ✅ What IS solid
 
@@ -643,15 +673,17 @@ touch `FormatPowerPercent`, the baseline must be measured at the same N as the s
 - **Override columns labelled**, and the overlapping prose blocks moved to tooltips.
 - **Neanderthal stays `Distinct`** — reviewed 2026-08-04 and deliberately left alone.
 
-> [!WARNING]
-> **None of this batch has been seen running.** Every task in §1.6 — the cursor fix, the
-> Best-of-25 readout, the seven-preset retune, `Gifted`'s removal, and the override/tooltip
-> cleanup — was verified by clean build, `envelope_check.py`, and static review only.
-> Subagents cannot launch RimWorld. All six in-game checks (cursor independence across reset
-> and import, delete leaving no dangling id, the 162px header rendering without overlap at
-> default and non-default UI scale, export/import round-trip after the caption move, and the
-> UI figures matching the tool's N=25 column) are deferred to a single owner-run pass. Do not
-> mark this batch verified or the branch ready to merge until that pass happens.
+> [!NOTE]
+> **This batch has now been seen running (2026-08-06, §1.8 and §1.9).** It shipped on clean
+> build, `envelope_check.py` and static review — and the in-game pass then found **two real
+> defects in the Best-of-N integrator** that all three of those had missed (§1.8). Both are
+> fixed in the shipped assembly.
+>
+> Of the six deferred checks: the header renders without overlapping the curve, and the
+> Best-of-25 figures match the tool's N=25 column — both confirmed mechanically by the
+> `Verify Best-of-N` debug action at **32/32**, not by eye. Cursor independence,
+> delete-leaves-no-dangling-id, export/import round-trip and non-default UI scale were verified
+> by the owner (§1 items 1h–1k). **Nothing in this batch is still waiting on an in-game pass.**
 
 ## 2. User File-by-File Code Review (IN PROGRESS)
 - [x] [`Source/VarianceProfile.cs`](file:///C:/Users/gokal/Desktop/Rimworld-mod/Rimworld-Pawn-variance-mod/Source/VarianceProfile.cs) — **DONE (REVIEWED)** (Legacy enum/comment cleanup, `IExposable` parameterless `ExposeData()`, `distributionParamsDirty` cache, `MakeValues()`, `?`/`??` operators).
@@ -720,20 +752,23 @@ touch `FormatPowerPercent`, the baseline must be measured at the same N as the s
   - **Percentage Offset Power Readout**: Replaced legacy 4-tier text (`TierForQuality`) with real-time percentage offset readout relative to `Faithful` baseline (e.g., `+32% vs Faithful (0.41)`).
   - **Strict Read-Only Preset Protections**: Guarded all section headers, checkboxes, sliders, and float ranges so built-in presets (`Faithful`, `Elite`, `Sovereign`, etc.) can never be mutated in static RAM, guaranteeing `Reset` functionality works cleanly.
 
-## 5. Profile Editor Tab Layout Redesign — ⚠️ BUILT, NOT YET VISUALLY VERIFIED (2026-08-03)
+## 5. Profile Editor Tab Layout Redesign — ✅ VISUALLY VERIFIED (2026-08-03, confirmed 2026-08-06)
 
-Merged to `main` 2026-08-06. **Still gated on §1's checklist — merging verified nothing.**
+Merged to `main` 2026-08-06. **§1's checklist is closed** — see §1 and §1.9.
 Spec: [`docs/superpowers/specs/2026-08-03-profile-editor-layout-design.md`](file:///C:/Users/gokal/Desktop/Rimworld-mod/Rimworld-Pawn-variance-mod/docs/superpowers/specs/2026-08-03-profile-editor-layout-design.md)
 Plan: [`docs/superpowers/plans/2026-08-03-profile-editor-layout.md`](file:///C:/Users/gokal/Desktop/Rimworld-mod/Rimworld-Pawn-variance-mod/docs/superpowers/plans/2026-08-03-profile-editor-layout.md)
 
-> [!WARNING]
-> **Every layout figure below is arithmetic, not observation.** This repo has no
-> test harness for IMGUI code, so all seven tasks were verified by clean build and
-> static review only — RimWorld was never launched. The header sums to exactly
-> `162f` on paper (grew from `140f` after the 2026-08-04 Best-of-25 readout row was added —
-> see §1.6) and the body should land near 500px, but **no pixel of this has
-> been seen**. Do not treat it as working until the owner's in-game pass is done.
-> **The checklist is §1 at the top of this document** (also spec §9 / plan Task 7).
+> [!NOTE]
+> **The layout figures below started as arithmetic and have since been observed.** This repo
+> still has no test harness for IMGUI code, so the original seven tasks shipped on clean build
+> and static review alone. They were then measured live via GABS: the header ends at **y=260**
+> with the body scroll view starting exactly there and no overlap with the distribution curve,
+> and row 3 splits cleanly (see §1.9). The `162f` figure below is the header's own height
+> (grew from `140f` when the 2026-08-04 Best-of-25 row was added — see §1.6); the y=260 figure
+> is where it lands on screen, and the two are not in conflict.
+>
+> **What is still arithmetic:** the individual row sums in the bullet below were never measured
+> row by row, only in aggregate. If you change one, re-measure rather than re-adding.
 
 - **Pinned 162px header** (`DrawProfileEditorHeader`), does not scroll: profile picker +
   5-button action strip (`+ New`, `Duplicate`, `Rename`, `Reset`, `Delete`) / one-line
