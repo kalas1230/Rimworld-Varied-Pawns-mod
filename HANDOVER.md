@@ -28,14 +28,55 @@ Confirm with `git status` rather than trusting this line.
 
 # ⚠️ CURRENT PRIORITIES & IN-PROGRESS TASKS
 
-## 1.11. 🔜 NEXT UP — THE OWNER IS RETUNING EVERY PRESET (stated 2026-08-06)
+## 1.11. 🔜 NEXT UP — TWO STEPS, STRICTLY IN THIS ORDER (owner, 2026-08-06)
 
-Not started. Recorded here because **four decisions settled on 2026-08-06 were settled partly
-*because* of it**, and a retune done without knowing them will fight the code:
+**Neither is started.** The order is deliberate: the retune calibrates numbers against the passion
+model, so auditing that model *after* tuning would invalidate the tuning.
 
-- **Decision 4 — no downside floor.** Deliberately rejected so the retune isn't fighting a global
-  clamp. `skillShiftMin` (how low the band goes) and `skillNoise` (how far noise escapes it) are
-  now **the only downside controls**. Nothing else protects a pawn from a deep negative roll.
+### STEP 1 — Deep research pass on passions: hunt the stale 24-pip era
+
+**Why this exists.** The passion pip ceiling used to be **24** (12 skills × **2** pips per Major).
+It is now **18** (12 × **1.5**) — `Constants.MaxPassionPips`. Two separate things moved: the
+**cost of a Major** and the **ceiling**. Any code, comment, bound or calibrated value written under
+the old model and not updated is now silently wrong.
+
+> [!IMPORTANT]
+> **This is not hypothetical — two instances have already been found, months apart, both by
+> accident.** The `Passion budget` slider's upper bound stayed at `24` until `f2e44d4` (six pips of
+> range that could never buy anything). And `PassionVarianceApplier.cs:175` still justified its
+> "ran out of skills" guard with *"a 24-pip budget buys 16 Majors"* until `fca87a0` on 2026-08-06 —
+> a comment that had become an argument for **deleting a live guard**. Neither was found by
+> looking. **This step is the deliberate look.**
+
+Known surface to audit — treat as a starting list, not a complete one:
+
+| Location | What to verify |
+|---|---|
+| `Constants.cs:43` `MaxPassionPips = 18` | The `12 × 1.5` derivation. **Is 12 even right?** `pawn.skills.skills.Count` is used elsewhere, so a mod adding a `SkillDef` breaks the hardcoded 12 while the trace line adapts. Genuine inconsistency. |
+| `PassionVarianceApplier.cs:61-64` | Major costs `1.5f`, Minor `1f`, both inline literals. Should they derive from a named constant? |
+| `GrowUpVariance.cs:103` | Re-derives existing pips with its own inline `1.5f`/`1f`. A third copy of the price list. |
+| `DebugActions.cs:602` | A fourth copy of `1.5f`. |
+| `VarianceProfile.cs:100-101, 110-111` | Clamp of `passionCountMin`/`Max` to `MaxPassionPips`, and the comment deriving it. |
+| `ProfileEditorTab.cs:413-428` | Slider ceiling and the caption prose that states the arithmetic to the player. |
+| `PawnVarianceSettings.cs:1292` | `passionNorm = pips / MaxPassionPips` — the composite's passion axis. |
+| **All eight presets'** `passionCountMin`/`Max` | Which era were they calibrated in? The 2026-08-04 retune postdates the change, but verify rather than assume. |
+| `docs/tools/envelope_check.py` | Mirrors these constants. Must stay in step with the C#. |
+
+**Fold open decision 3 into this step.** "Composite saturation mismatch" (score saturates at budget
+18/16/14.4 by Major bias, reality 12/15/18) *is* a passion-model defect — it is the same class of
+bug this audit is hunting, and it should be judged with the rest of the model in view rather than
+in isolation. Note it forces the recalc-and-repaste cascade if fixed.
+
+**Fix what is found.** This is not a survey; wrong assumptions get corrected.
+
+### STEP 2 — Retune every preset
+
+Only after step 1. **Four decisions settled on 2026-08-06 were settled partly *because* of this
+retune**, and tuning without knowing them will fight the code:
+
+- **Decision 4 — no downside floor, and do not add one.** `skillShiftMin` (how low the band goes)
+  and `skillNoise` (how far noise escapes it) are the downside controls. A clamp was tried and
+  reverted; the reasoning is under decision 4 and it is about distribution shape, not taste.
 - **Decision 1 — noise floors dropped to `0f`.** Every preset's dispersion already moved, hardest
   at the quiet end (`Faithful` −25%). **Re-read the dispersion table before picking targets; the
   pre-2026-08-06 figures are dead.**
@@ -557,8 +598,33 @@ and it is the expensive one — see the note under it.
 | 1 | ✅ **DECIDED 2026-08-06: drop both floors to `0f`.** | Owner's call, against the doc's own leaning. Shipped. **The consequence was larger than "zero now means zero"** — both are Lerp low endpoints, so every noise setting was rescaled and the quiet presets moved most. See the CAUTION under "Surprise 1". Envelope unaffected; dispersion tables updated. |
 | 2 | ✅ **DECIDED 2026-08-06: leave it. No clamp.** | Reached the right answer by the wrong route: the owner approved clamping, then asked how Wildcard could reach all-Major at all. Investigating that showed the clamp is a **nerf to restricted-skill pawns across every profile**, not a Wildcard-tail cleanup. Decision reversed on the evidence. Full working below — **read it before anyone proposes clamping again.** |
 | 3 | 🔓 **STILL OPEN — composite saturation mismatch** | Score saturates at budget 18/16/14.4 by Major bias; reality at 12/15/18. No shipped preset reaches it. Fixing it **would** move envelope figures → full recalc-and-repaste cycle. **Pair it with the first-order CDF item in §1.8 "Carried, quantified, NOT fixed"** — both force the same regenerate-and-repaste cascade, so paying that cost twice would be wasteful. Neither is urgent; nothing on screen is wrong today. |
-| 4 | ✅ **DECIDED 2026-08-06: no floor. Control the downside per-profile instead.** | The asymmetric risk is real — a passion budget escaping upward is harmless, a skill shift escaping downward is not — but the owner is retuning every preset, and a global floor would fight that tuning. `skillShiftMin` sets how low the band goes and `skillNoise` sets how far noise escapes it; **those two are now the only downside controls, so tune them deliberately.** Wildcard stays intentionally brutal. |
+| 4 | ✅ **DECIDED 2026-08-06: no floor. Control the downside per-profile instead.** | Held after a failed attempt to reverse it — see the block below, which is the argument that should stop the next attempt. `skillShiftMin` sets how low the band goes and `skillNoise` sets how far noise escapes it; **those two are the downside controls.** Wildcard stays intentionally brutal. |
 | 5 | ✅ **DECIDED 2026-08-06: split into two named methods.** | `SkillVarianceApplier.Shift` is now private and reached only through `ShiftAroundBand` (generation — soft band, noise escapes) and `ShiftWithinBounds` (age-13 — hard per-skill bound). The ambiguity no longer exists to be misread. Shipped. |
+
+### ⛔ Decision 4 — why a clamp is the WRONG TOOL here, not merely unnecessary
+
+A floor on the skill-shift downside was proposed, accepted, implemented and **reverted within the
+hour** on 2026-08-06. It was `shift = Mathf.Max(shift, skillShiftMin - 2f)` on the generation path.
+Two independent reasons it was wrong, both of which apply to *any* variant of the idea:
+
+1. **A clamp converts a spread into a spike.** Every roll that would have landed below the line
+   instead lands *exactly on* the line. That is a probability mass point at an endpoint — precisely
+   the artifact the soft-band design exists to avoid, and the reason generation does not reuse the
+   age-13 path's `Mathf.Clamp`. Clamping to fix a distribution's tail damages the distribution.
+2. **The invariant people think is missing is already enforced.** `Shift` ends with
+   `record.Level = Mathf.Clamp(newLevel, 0, 20)`. A skill cannot go negative and never could.
+
+> [!CAUTION]
+> **The "13.8 levels below vanilla" figure that motivated the fix was misleading, and it was
+> written in this document by the agent that then acted on it.** On `Wildcard`, `skillShiftMin`
+> −8.7 plus a 5.1 magnitude does compute to −13.8 — but that shift is applied to a level that is
+> then clamped to 0. The pawn does not end up at −13. **The real effect is that a share of skills
+> pin at 0**, which is itself an endpoint pile. Adding a second clamp above it would have created a
+> second pile and made the distribution strictly worse.
+
+**What is actually there, stated honestly:** on a low-quality `Wildcard` pawn, many skills pin at
+0. That is a tuning outcome, not a safety hole, and the levers are `skillShiftMin` and `skillNoise`.
+If pinning is judged too aggressive, **narrow the band or the noise — do not add a clamp.**
 
 ### 🔬 Why decision 2 came out "leave it" — the working, so nobody re-proposes the clamp
 
