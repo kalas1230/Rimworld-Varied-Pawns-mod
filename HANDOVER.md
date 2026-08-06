@@ -24,6 +24,161 @@ Branch: **`main`** (41 commits ahead of `origin/main`, **not pushed**)
 
 # ⚠️ CURRENT PRIORITIES & IN-PROGRESS TASKS
 
+## 1.9. 🟢 SECOND IN-GAME PASS — RACE OVERRIDES LARGELY CLEARED, ONE DOC CLAIM FALSIFIED (2026-08-06)
+
+Run through GABS against the real assembly, `641c40c` plus the two uncommitted working-tree
+files. Quicktest map, Wolfein Race + Milira Race + Humanoid Alien Races all loaded, so the
+race checks were meaningful rather than vacuous.
+
+### ✅ Confirmed live
+
+- **Best-of-N gate: PASS, 32/32.** `Wildcard` N=1 now reads **−18.12%**, was −21% before the
+  §1.8 fix. Defect A is fixed in the shipped assembly, not just in source.
+- **Both debug actions are visible on a map** (`visible: true`). Defect C's fix confirmed.
+- **The Task 3 refactor did not regress the Faction or Xenotype sections.** Both render through
+  the shared row renderer at *identical* geometry — name `x=0 w=287`, profile `x=295.2 w=229.6`,
+  priority `x=533 w=164`, Remove `x=705.2 w=114.8` — with their own column headers. This was the
+  batch's highest-risk item and it is clean.
+- **Three-section geometry holds.** One frame carries Faction (10 rows), Race (empty state) and
+  Xenotype (9 rows): content `1227px` in a `524px` viewport, `maxOffsetY=703`, sections stacking
+  at y=94 / 581 / 728 with no overlapping rects. The Race section shows its empty-state caption
+  and a single Delete button with no Restore pair, exactly as designed.
+- **Profile Editor header and body.** Header ends at y=260 with the body scroll view starting
+  there — no overlap with the curve. Row 3 splits cleanly: `Average pawn quality: 0.50 (read-only)`
+  ends at x=280, `→ Typical Baseline (0.25)` starts at x=567. Best-of-25 row reads
+  `baseline vs Faithful (0.34)`, matching the tool's N=25 Faithful figure. With the owner's
+  uncommitted `580f` floor the body is `580px` in a `354px` viewport (`maxOffsetY=226`), so lower
+  controls stay reachable.
+- **First observed dispersion figures** (`Roll pawns and dump distribution`, 200 colonists,
+  Faithful): per-skill level sd **3.55** against the tool's predicted **0.65** (noise term only),
+  passion budget sd **1.24** against predicted **1.19**, traits/pawn 2.57, 0 passionless pawns.
+  Observed sits above predicted on both, which is the direction §"🧪 Verification harness"
+  says is correct.
+
+### ❌ The Add-menu expectation in §1.7 was wrong
+
+A new debug action, **`Varied Pawns > Dump Add-menu race list`**, prints what
+`SelectableRaces()` actually returns — it calls the real method, so a regression cannot pass it.
+On the owner's install it returns **four** rows, and they are not the four this document claimed:
+
+```
+Human                    Human
+Human                    CreepJoiner
+Milira                   Milira_Race
+Wolfein race             Wolfein_Race
+excluded: Milian         Milian_Race        (+ 5 corpse defs)
+```
+
+- **`Milian_Race` is NOT in the menu, and this document said it would be.** Cause: the
+  `PawnKindDef` traversal. The only def with `<race>Milian_Race</race>` is `Milian_Base`, which is
+  `Abstract="True"`, and it has **zero concrete children** in the mod's 1.6 defs — verified by
+  grepping the Milira mod. So nothing in `DefDatabase<PawnKindDef>` spawns a `Milian_Race` pawn and
+  the filter drops it, which is the filter working as specified. **The filter is right; the
+  §1.7 claim "yields exactly Human, Wolfein, Milira, Milian" was never observed and is false.**
+  Open question for the owner: if Milians are spawned in code rather than through a PawnKindDef,
+  they are unreachable by race override and the traversal needs a second source.
+- **`CreepJoiner` (Anomaly) also reaches the menu, labelled "Human".** Two rows would read
+  "Human" — which is exactly what the **uncommitted** `PawnVarianceSettings.cs` duplicate-label
+  change fixes, rendering them `Human (Human)` and `Human (CreepJoiner)`. **That uncommitted
+  change is load-bearing, not cosmetic.** Whether `CreepJoiner` belongs in the menu at all is a
+  decision, not a bug.
+- ✅ **Zero mechanoid, drone or float-unit defs reached the menu** — the `Humanlike` filter holds.
+  That was the acceptance check and it passes.
+
+### ✅ Override resolution — verified against the real `ValuesFor` (owner added the race rows)
+
+The owner configured **Human, CreepJoiner, Milira_Race, Wolfein_Race → Sovereign, all at Normal**,
+with `factionOverridesTakePrecedence = false`. A third debug action,
+**`Varied Pawns > Dump override resolution matrix`**, generates a real pawn per case and calls
+`PawnVarianceSettings.ValuesFor(pawn, request)` — the same call the Harmony postfix makes — under
+both toggle states. It reports rather than asserts: re-deriving the expected winner in the harness
+would be a second copy of the rule, and a copy agreeing with itself proves nothing.
+
+| case | candidates | `false` | `true` |
+|---|---|---|---|
+| player colonist | race Sovereign@Normal | Sovereign | Sovereign |
+| Empire faction | faction Elite@**Highest**, race Sovereign@Normal | Elite | Elite |
+| Waster xenotype | race Sovereign@Normal, xeno Scavenger@Normal | **Sovereign** | **Sovereign** |
+| Hussar xenotype | race Sovereign@Normal, xeno Specialist@**High** | Specialist | Specialist |
+| all three | faction Elite@Highest, race Normal, xeno Normal | Elite | Elite |
+| Milira / Wolfein pawn | race Sovereign@Normal | Sovereign | Sovereign |
+
+**Priority sweep** — race Human (Sovereign) against faction Empire (Elite) pinned to Normal:
+
+| race priority | `takePrecedence=false` | `takePrecedence=true` |
+|---|---|---|
+| Low | Elite | Elite |
+| **Normal (tie)** | **Sovereign** | **Elite** |
+| High | Sovereign | Sovereign |
+
+- ✅ **Priority beats source.** Low → faction wins, High → race wins, in *both* toggle states.
+- ✅ **The precedence toggle flips the winner, and only on the tie row.**
+- ✅ **Xenotype never beats Race at equal priority, in either toggle state.**
+- ✅ **Race overrides reach HAR races.** Milira and Wolfein pawns resolve to Sovereign — the
+  feature does the thing it was built for.
+
+> [!CAUTION]
+> **A Human race override at Normal silently supersedes the Active Colony Profile.** The owner's
+> General tab reads `Faithful`, but a plain player colonist now resolves to **Sovereign**, because
+> the player faction has no override and the race one is the only match. That is the documented
+> design (any override beats Active), but "Active Colony Profile" now names a value that never
+> applies to human colonists. Worth a caption, or worth knowing before wondering why colonists got
+> stronger.
+
+> [!NOTE]
+> **The first sweep run returned `Specialist` on the tie row** — neither candidate. The Empire
+> pawnkind had randomly rolled a **Genie**, whose xenotype override sits at High and outranked both
+> Normals. Correct behaviour, wrong experiment. The sweep now forces `Baseliner`, which has no
+> override, so race vs faction is the only live comparison. **If you add cases here, force the
+> xenotype or a third candidate will quietly decide your test.**
+
+### ⛔ Still not verified, and why
+
+**Adding a race override through the UI is not automatable.** The Add button opens a `FloatMenu`
+from `Listing_Standard.ButtonText`; a synthetic click activates the button but no float menu
+survives to the next frame for the bridge to read. Confirmed against the **Faction** Add button
+too, so it is a limit of the automation, not of the race section. `update_mod_settings` was tried
+as a way in and rejects dictionary-index paths. (The owner adding the rows by hand is what
+unblocked everything above.)
+
+Both were closed **by the owner, by hand, on 2026-08-06**:
+
+1. ✅ **The stale scrub.** Owner-verified. Still worth extracting the carried
+   `ScrubStaleOverrides(overrides, priorities, deletedId)` helper: the scrub is inline in the
+   Delete button's lambda in `ProfileEditorTab.cs`, so no debug action can reach it without
+   testing a *copy* of it, which is why this one could not be automated.
+2. ✅ **Race section is not Biotech-gated.** Owner-verified by launching with Biotech disabled.
+   The startup log for that run contains **no `[PawnVarianceMod]` line at all** and no Harmony
+   patch failure — and since this mod logs nothing at startup by design, a silent load is the
+   pass condition.
+
+> [!NOTE]
+> **The no-Biotech run produces a large error wall, and none of it is this mod.** Every entry
+> belongs to **Milira Race**: its *Milian mechanoid* content binds to Biotech defs that do not
+> exist when Biotech is off — `MechBandwidth`, `MechControlGroups`, `MechRepairSpeed`,
+> `MechFormingSpeed`, `WorkSpeedGlobalOffsetMech`, the `LightMechanoid`/`LightMechanoidKind`
+> parent nodes, `MainButtonDef Mechs`, `PawnColumnDef Overseer`/`ControlGroup`, `Milian_Gestator`,
+> `Milian_Recharger` and the `Milian_NamePlate_*` family — which then cascades into the
+> `Milira_Scenarios` config errors. A pre-existing Milira-without-Biotech compatibility problem,
+> not ours. (The duplicate-`packageId` errors for `CETeam.CombatExtended` and
+> `NozoMe.MapModeFramework` are duplicate workshop installs, also unrelated.) **Do not read this
+> wall as a regression next time it appears.**
+
+**With these two closed, every in-game gate on the race-overrides batch (§1.7) is now met.**
+
+> [!NOTE]
+> **The `disabled` field in `get_ui_layout` does not capture ambient `GUI.enabled`.** Every button
+> reports `disabled: false`, including Rename/Delete while a read-only preset is selected — where
+> the code demonstrably sets `GUI.enabled = outerEnabled && customProfile != null`. Do not read a
+> greying regression out of that field; it cannot see one.
+
+**Also observed:** `Roll pawns and dump distribution` emits one vanilla
+`Tried to discard <pawn> whose state is -1.` warning per generated pawn. Harmless, but at 200
+pawns it floods the log and each warning is a candidate for GABS's attention gate.
+
+**`countProtectedTraits` is live as `true`** — the Profile Editor shows *Count xenotype/forced
+traits toward the trait count* checked. The §5 open decision is now visibly in effect.
+
 ## 1.8. 🟢 BEST-OF-N INTEGRATOR — TWO DEFECTS FOUND **IN-GAME** AND FIXED (2026-08-06)
 
 **The first session in this project's history where the mod was actually driven under
@@ -116,9 +271,15 @@ would be a genuine accuracy improvement (and would let 1024 nodes match 20000 to
 skill ↔ passion exchange rate" and every Best-of-25 figure in this document. Deferred deliberately;
 raise it with the owner before starting, because it is a documentation cascade, not a code change.
 
-## 1.7. 🟡 RACE OVERRIDES — BUILT, REVIEWED, **NEVER SEEN RUNNING** (2026-08-06)
+## 1.7. 🟢 RACE OVERRIDES — BUILT, REVIEWED, **AND NOW VERIFIED IN-GAME** (2026-08-06)
 
-The newest batch and the top open gate. Full detail in
+> [!NOTE]
+> **All in-game gates on this batch are closed as of 2026-08-06 — see §1.9.** The Add-menu filter,
+> the Task 3 render regression, three-section geometry, the full resolution matrix and both
+> owner-run checks (stale scrub, non-Biotech) have all passed against the real assembly. The
+> section below is kept for its design rationale, which is still current.
+
+Full detail in
 **"WHERE THIS LEFT OFF — THE 2026-08-06 RACE OVERRIDES BATCH"** below; ledger at
 `.superpowers/sdd/progress.md`.
 
@@ -301,8 +462,10 @@ Per-task findings, review adjudications and the carried Minor list are in
   menu is unusable.
 - **The `PawnKindDef` traversal** excludes abstract and unreferenced race defs.
 
-On the owner's install this yields exactly **Human, Wolfein, Milira, Milian**. If someone
-"simplifies" this to `DefDatabase<ThingDef>.AllDefs.Where(d => d.race != null)`, the menu floods.
+~~On the owner's install this yields exactly **Human, Wolfein, Milira, Milian**.~~
+**Measured 2026-08-06: it yields Human, CreepJoiner, Milira, Wolfein — `Milian_Race` is filtered
+out and `CreepJoiner` is not. See §1.9.** If someone "simplifies" this to
+`DefDatabase<ThingDef>.AllDefs.Where(d => d.race != null)`, the menu floods.
 
 ### ⛔ What is NOT done
 
