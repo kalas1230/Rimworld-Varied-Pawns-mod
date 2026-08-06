@@ -171,8 +171,18 @@ namespace PawnVarianceMod
             }
 
             // Ran out of skills before running out of budget — the loop above just ends, so without
-            // this the trace looks identical to a budget that came out exactly even. Reachable at high
-            // passionCountMax: a 24-pip budget buys 16 Majors but there are only 12 skills.
+            // this the trace looks identical to a budget that came out exactly even.
+            //
+            // Still reachable, but NOT for the reason this comment used to give. It said "a 24-pip
+            // budget buys 16 Majors but there are only 12 skills", which was true when a Major cost
+            // 2 pips and the cap was 24. At MaxPassionPips = 18 (= 12 x 1.5) an all-Major budget
+            // buys exactly 12 Majors for exactly 12 skills — dead even, no surplus. The surplus now
+            // comes from the other two directions:
+            //   - Minor-heavy rolls. A Minor costs 1 pip, so 18 pips can buy up to 18 passions for
+            //     at most 12 skills.
+            //   - `eligible` is often smaller than 12 — conflicting passions (Brawler vs Shooting),
+            //     TotallyDisabled skills, and DropAll passion genes all shrink it.
+            // Do not delete this guard on the grounds that the budget can no longer exceed 12.
             if (trace != null && (majorPassions > 0 || minorPassions > 0))
                 trace.AppendLine($"  ran out of eligible skills with {majorPassions} Major + {minorPassions} Minor unspent (budget exceeds what {pawn.skills.skills.Count} skills can hold)");
 
