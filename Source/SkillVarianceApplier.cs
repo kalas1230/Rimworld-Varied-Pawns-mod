@@ -48,6 +48,11 @@ namespace PawnVarianceMod
         // parameter names commit to one meaning.
         private static void Shift(Pawn pawn, float quality, VarianceProfileValues v, float shiftMin, float shiftMax, bool clampToRange)
         {
+            // Guarded here rather than in each wrapper because both funnel through this method.
+            // pawn.skills is optional even on a Humanlike race — Humanlike is an intelligence
+            // check, and HAR lets a race def drop the tracker.
+            if (pawn?.skills?.skills == null) return;
+
             float baseline = Mathf.Lerp(shiftMin, shiftMax, quality);
             float magnitude = Mathf.Lerp(Constants.MinMagnitudeFloor, Constants.MaxMagnitude, v.skillNoise);
 

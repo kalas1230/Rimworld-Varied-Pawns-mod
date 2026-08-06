@@ -22,6 +22,10 @@ namespace PawnVarianceMod
         // was removed accordingly; see settings).
         public static void Apply(Pawn pawn, float quality, PawnGenerationRequest request, VarianceProfileValues v)
         {
+            // pawn.story is optional on a Humanlike race (HAR can switch it off); callers gate on
+            // this too, but this is a public entry point.
+            if (pawn?.story?.traits == null) return;
+
             var protection = TraitProtection.Build(pawn, request);
             List<Trait> current = pawn.story.traits.allTraits;
 
@@ -161,6 +165,10 @@ namespace PawnVarianceMod
                 foreach (var t in backstory.forcedTraits)
                     forced[t.def] = t.degree;
             }
+
+            // Both current callers gate on pawn.story upstream, so this is defence in depth rather
+            // than a live path — but this is a public helper and the next caller may not.
+            if (pawn?.story == null) return forced;
 
             CaptureFrom(pawn.story.Childhood);
             CaptureFrom(pawn.story.Adulthood);

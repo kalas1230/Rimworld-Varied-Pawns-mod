@@ -6,7 +6,15 @@ using Verse;
 namespace PawnVarianceMod
 {
     // Mirrors vanilla PawnGenerator.GenerateSkills' real passion-assignment algorithm (decompiled
-    // and verified against this RimWorld version's Assembly-CSharp.dll), rather than a custom
+    // and re-verified against this RimWorld version's Assembly-CSharp.dll on 2026-08-06, at
+    // GenerateSkills:1846-1955) — its INTENDED algorithm. There are three places where vanilla's
+    // implementation contradicts its own design and we deliberately do not copy it; each is
+    // marked "DELIBERATE DEPARTURE" below with the vanilla line range and the reason. Do not
+    // "restore fidelity" at any of them without reading the argument there first.
+    // The budget roll, the 1.5/1 price list, the 4-sigma clamp, the level-ordered walk by
+    // GetLevel(includeAptitudes: false), the trait/gene exclusions and the gene bump ARE exact.
+    //
+    // The algorithm, rather than a custom
     // scheme: roll a random "passion budget", spend it turn-by-turn as Major (costs 1.5) or Minor
     // (costs 1) via a weighted coin flip, then hand out ALL rolled Majors to the pawn's
     // highest-level eligible skills first (in strict descending-level order) before any Minors —
@@ -21,6 +29,16 @@ namespace PawnVarianceMod
     {
         public static void Apply(Pawn pawn, float quality, VarianceProfileValues v)
         {
+            // Callers gate on this too; repeated here because pawn.skills is optional on a
+            // Humanlike race (HAR can switch it off) and this is a public entry point.
+            //
+            // MUST match AssignPassions' guard exactly, story tracker included. This method wipes
+            // every passion to None before delegating, so a guard that admits a pawn AssignPassions
+            // will then reject leaves that pawn permanently passionless — the wipe happens, the
+            // reassignment does not, and nothing logs. A narrower guard here is strictly worse than
+            // no guard at all, which at least threw where the postfix could catch and report it.
+            if (pawn?.skills?.skills == null || pawn.story?.traits == null) return;
+
             foreach (SkillRecord record in pawn.skills.skills)
                 record.passion = Passion.None;
 
@@ -33,6 +51,10 @@ namespace PawnVarianceMod
         // existing passions has to be able to express 1.5 too, or Majors get over-charged.
         public static void AssignPassions(Pawn pawn, float quality, float alreadyCommittedPips, VarianceProfileValues v)
         {
+            // Public entry point in its own right (GrowUpVariance calls it directly), and the
+            // eligibility checks below read pawn.story.traits as well as pawn.skills.
+            if (pawn?.skills?.skills == null || pawn.story?.traits == null) return;
+
             var settings = PawnVarianceMod.Settings;
             var trace = settings.verboseLogging ? new System.Text.StringBuilder() : null;
 
@@ -56,17 +78,17 @@ namespace PawnVarianceMod
 
             int minorPassions = 0;
             int majorPassions = 0;
-            while (budget >= 1f)
+            while (budget >= Constants.MinorPassionCost)
             {
-                if (budget >= 1.5f && Rand.Chance(v.passionMajorBias))
+                if (budget >= Constants.MajorPassionCost && Rand.Chance(v.passionMajorBias))
                 {
                     majorPassions++;
-                    budget -= 1.5f;
+                    budget -= Constants.MajorPassionCost;
                 }
                 else
                 {
                     minorPassions++;
-                    budget -= 1f;
+                    budget -= Constants.MinorPassionCost;
                 }
             }
 
@@ -98,7 +120,7 @@ namespace PawnVarianceMod
             {
                 trace.AppendLine($"[PawnVarianceMod] Passion assignment for {pawn.LabelShortCap} (quality {quality:F2}, profile {v.profileLabel})");
                 trace.AppendLine($"  budget mean {budgetMean:F2}, spread {spread:F2}, committed pips {alreadyCommittedPips:F2} (Minor 1, Major 1.5), rolled {rolledBudget:F2}"
-                    + (flooredBudget ? $" -> FLOORED to 1.00 (minimum is {v.passionCountMin:F0}, not 0)" : string.Empty)
+                    + (flooredBudget ? $" -> FLOORED to 1.00 (minimum is {v.passionCountMin:F1}, not 0)" : string.Empty)
                     + $" -> {majorPassions} Major + {minorPassions} Minor");
                 foreach (SkillRecord r in pawn.skills.skills)
                 {
@@ -119,6 +141,26 @@ namespace PawnVarianceMod
             // uses this (Tortured Artist), so silently never guaranteeing it was a real gap, not a
             // theoretical one. Only applies to skills with no passion yet, so an existing
             // growth-moment passion (GrowthUpPatch) is never downgraded or overwritten.
+            //
+            // TWO DELIBERATE DEPARTURES FROM VANILLA HERE, both kept because vanilla's version is
+            // defective. Verified against the decompiled GenerateSkills 2026-08-06, lines 1871-1884:
+            //
+            //   1. Vanilla's forced pass skips only TotallyDisabled. It does NOT check
+            //      conflictingPassions or DropAll genes, so it will hand a Brawler a forced
+            //      Shooting passion — the exact outcome its own level-ordered walk goes out of its
+            //      way to prevent twenty lines later. We iterate `eligible`, which excludes both.
+            //      No shipped vanilla trait both forces and conflicts on one skill, so this is
+            //      unreachable in vanilla content but reachable the moment a mod adds one.
+            //
+            //   2. Vanilla's inner `foreach (Trait ...)` has no `break` after a match, so a pawn
+            //      with two traits that both force the same skill calls CreatePassion TWICE and is
+            //      charged twice for one passion — the second call overwrites the first on the same
+            //      SkillRecord, so the budget is silently burned for nothing. `.Any(...)` charges
+            //      once, which is what the budget arithmetic everywhere else in this mod assumes.
+            //
+            // Reproducing either would mean reproducing a bug, and the composite score, the
+            // envelope tool and the pip accounting in GrowUpVariance all assume one charge buys
+            // one passion. "Mirrors vanilla" in this file means mirrors its INTENDED algorithm.
             foreach (SkillRecord record in eligible)
             {
                 if (record.passion != Passion.None) continue;
@@ -144,6 +186,15 @@ namespace PawnVarianceMod
             // the gene grants its passion bump separately, through GeneDef.passionMod, which is
             // re-applied at the end of this method. Ordering by the aptitude-inclusive Level here
             // double-counted the gene: it both jumped the queue and got its bump.
+            // THIRD DELIBERATE DEPARTURE: `.Where(r => r.passion == Passion.None)`.
+            // Vanilla's walk (GenerateSkills:1911-1941) calls CreatePassion on every eligible
+            // skill in level order WITHOUT checking whether it already holds a passion, so a
+            // trait-forced Minor assigned moments earlier gets overwritten to Major and charged a
+            // second time. Net effect in vanilla: a Tortured Artist ends up with FEWER distinct
+            // passions than an identical pawn without the trait, because part of the budget was
+            // spent twice on Artistic. That is plainly not the intent of a trait whose whole
+            // purpose is to GRANT a passion. We skip already-assigned skills, so every unit of
+            // budget buys one distinct passion.
             var candidates = eligible
                 .Where(r => r.passion == Passion.None)
                 .OrderByDescending(r => r.GetLevel(includeAptitudes: false))
@@ -220,13 +271,21 @@ namespace PawnVarianceMod
                     // AptitudeRemarkable_Animals push a bottom-ranked Animals skill to Major.
                     // Only filling a None keeps all three vanilla outcomes intact: walk reached the
                     // skill (walk's value stands), or it didn't (the gene's Minor survives).
+                    // BEFORE the bump, never after. passionPreAdd means "what this skill's passion
+                    // was before this gene touched it", and Gene.NewPassionForOnRemoval puts that
+                    // value back when the gene is removed (xenogerm implant, gene surgery, xenotype
+                    // change). Snapshotting after the bump would record the gene's own grant as the
+                    // pre-add value, so removal would restore the bonus instead of undoing it and
+                    // the gene's effect would outlive the gene permanently. Vanilla's
+                    // Pawn_GeneTracker.AddGene writes it in this same order for the same reason.
+                    gene.passionPreAdd = record.passion;
+
                     if (record.passion == Passion.None)
                     {
                         Passion bumped = gene.def.passionMod.NewPassionFor(record);
                         trace?.AppendLine($"  GENE BUMP: {gene.def.defName} restored {record.def.defName} to {bumped} (walk never reached it)");
                         record.passion = bumped;
                     }
-                    gene.passionPreAdd = record.passion;
                 }
             }
 

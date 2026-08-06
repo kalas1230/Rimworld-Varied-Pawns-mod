@@ -224,9 +224,24 @@ namespace PawnVarianceMod
             else
             {
                 var custom = GetCustomProfile(id);
+                // Deliberately a live reference, not a clone: settings are applied live, with no
+                // apply/cancel step, so an edit to a custom profile must reach the values pawn
+                // generation reads. Presets are cloned above for the opposite reason — they are
+                // static templates that must stay pristine. Do not "fix" this asymmetry.
                 if (custom != null) vals = custom.values;
-                else if (customProfiles != null && customProfiles.Count > 0) vals = customProfiles[0].values;
-                else vals = VarianceProfiles.VanillaLike.MakeValues();
+                // An id matching nothing at all. This used to fall through to customProfiles[0],
+                // which generated pawns from an arbitrary unrelated profile with no error and no
+                // visible symptom (the UI keeps showing the requested profile's name, because
+                // LabelFor is asked about the REQUESTED id), and — since that was a live reference,
+                // not a clone — the label write below then stamped the dead id onto that innocent
+                // profile. A dangling id is a defect, not a preference: fall back to the pristine
+                // default and say so. Known route in: an imported payload naming a custom_ id that
+                // the payload does not itself carry (SettingsTransfer.CopyFrom does not validate).
+                else
+                {
+                    Log.WarningOnce($"[PawnVarianceMod] Profile id '{id}' resolves to nothing; falling back to {VarianceProfiles.VanillaLike.label}. A settings import may reference a profile it did not include.", ("PawnVarianceMod.DanglingProfileId." + id).GetHashCode());
+                    vals = VarianceProfiles.VanillaLike.MakeValues();
+                }
             }
 
             if (vals != null) vals.profileLabel = LabelFor(id);
@@ -244,6 +259,40 @@ namespace PawnVarianceMod
             return id ?? "?";
         }
 
+        // The ONE answer to "what faction is this pawn?" — every caller must use it, and the reason
+        // is not tidiness. pawn.Faction is observably null at GenerateNewPawnInternal postfix time
+        // for some pawns (which is why the request fallback below exists at all — it would be dead
+        // code otherwise). The hostile-pawn toggle used to test bare pawn.Faction while the override
+        // lookup used the full chain, so a pawn whose faction was only knowable from the request
+        // slipped past the "this mod never touches them" guard and then had that same hostile
+        // faction's override applied to it — the exact inverse of the setting. Weakest test guarding
+        // the strongest promise. Resolve identically everywhere or that gap comes back.
+        public Faction EffectiveFactionOf(Pawn pawn, PawnGenerationRequest? request)
+        {
+            if (pawn == null) return null;
+
+            Faction faction = pawn.Faction;
+            if (faction == null && request.HasValue)
+                faction = request.Value.Faction;
+            if (faction == null && pawn.kindDef?.defaultFactionDef != null && Find.FactionManager != null)
+                faction = Find.FactionManager.FirstFactionOfDef(pawn.kindDef.defaultFactionDef);
+            return faction;
+        }
+
+        // Null-safe on BOTH sides. OfPlayerSilentFail returns null rather than logging when there is
+        // no player faction yet — which is precisely why the project adopted it (to kill world-gen
+        // log spam), so these call sites demonstrably run in that window. Three of the four original
+        // sites passed that null straight into HostileTo; only one guarded it. One place now.
+        public static bool IsHostileToPlayer(Faction faction)
+        {
+            Faction player = Faction.OfPlayerSilentFail;
+            return faction != null && player != null && faction.HostileTo(player);
+        }
+
+        // True when the hostile toggle is off and this pawn is one it promises not to touch.
+        public bool IsExcludedAsHostile(Pawn pawn, PawnGenerationRequest? request)
+            => !applyToHostilePawns && IsHostileToPlayer(EffectiveFactionOf(pawn, request));
+
         public VarianceProfileValues ValuesFor(Pawn pawn) => ValuesFor(pawn, null);
 
         public VarianceProfileValues ValuesFor(Pawn pawn, PawnGenerationRequest? request)
@@ -252,11 +301,7 @@ namespace PawnVarianceMod
 
             if (enableOverrides)
             {
-                Faction faction = pawn.Faction;
-                if (faction == null && request.HasValue)
-                    faction = request.Value.Faction;
-                if (faction == null && pawn.kindDef?.defaultFactionDef != null && Find.FactionManager != null)
-                    faction = Find.FactionManager.FirstFactionOfDef(pawn.kindDef.defaultFactionDef);
+                Faction faction = EffectiveFactionOf(pawn, request);
 
                 string bestProfileId = null;
                 OverridePriority bestPrio = OverridePriority.Lowest;
@@ -303,11 +348,10 @@ namespace PawnVarianceMod
                 if (bestProfileId != null) return Resolve(bestProfileId);
             }
 
-            Faction fHostile = pawn.Faction;
-            if (fHostile == null && request.HasValue) fHostile = request.Value.Faction;
-
-            if (applyToHostilePawns && fHostile != null && Faction.OfPlayerSilentFail != null
-                && fHostile.HostileTo(Faction.OfPlayerSilentFail))
+            // Same resolution as the override branch above. This used to stop at request.Faction,
+            // omitting the kindDef.defaultFactionDef step, so the two branches could disagree about
+            // the same pawn: one could see a hostile faction the other could not.
+            if (applyToHostilePawns && IsHostileToPlayer(EffectiveFactionOf(pawn, request)))
             {
                 return Hostile;
             }
@@ -1269,6 +1313,65 @@ namespace PawnVarianceMod
             return $"{(diffPct > 0f ? "+" : "")}{diffPct:F0}%";
         }
 
+        // How much a passion pip is WORTH at a given Major bias, relative to a pip spent on an
+        // all-Major roll. Range 0.848 (all Minor) .. 1.000 (all Major). Added 2026-08-06.
+        //
+        // ── WHY THIS EXISTS ──────────────────────────────────────────────────────────────────
+        // The passion budget is denominated in pips, and the score used to be "count the pips".
+        // But pips and value do not line up, because vanilla prices a Major at 1.5 pips while a
+        // Major is worth more than 1.5 Minors:
+        //
+        //     LearnRateFactor:  None 0.35x   Minor 1.00x   Major 1.50x
+        //     gain over None:               Minor +0.65    Major +1.15
+        //     so a Major is worth 1.15 / 0.65 = 1.769 Minors, and costs 1.5 pips.
+        //
+        // Majors are underpriced by the pip currency. Two profiles can spend an identical budget
+        // and the Major-heavy one is genuinely stronger, by up to ~18% at the extremes. A score
+        // that counts pips alone cannot see that, which also made `passionMajorBias` a slider that
+        // visibly changes pawns and never moves the readout.
+        //
+        // ── THE DERIVATION ───────────────────────────────────────────────────────────────────
+        // At bias b, one passion costs   price(b) = Minor + (Major - Minor) * b        pips
+        //           and is worth         gain(b)  = minorGain + (majorGain - minorGain) * b
+        // so value per pip is gain(b) / price(b), and this returns it normalised against b = 1.
+        //
+        // ── WHY NORMALISED AT b = 1, NOT AT VANILLA'S b = 0.5 ────────────────────────────────
+        // Anchoring at 1.0 keeps MaxPassionPips meaning what it says: 18 pips of all-Major is
+        // exactly a saturated axis, score 1.0. Anchoring at vanilla's 0.5 would make Major-heavy
+        // profiles multiply ABOVE 1.0 and clamp — the axis would saturate before 18 pips and the
+        // ceiling would stop being the ceiling. That is the same class of mistake as the factor
+        // this replaced. The cost of anchoring high is that every profile below b = 1 scores
+        // slightly lower than it did, which is a scale shift, not a ranking change.
+        //
+        // ── WHAT THIS MODEL DOES *NOT* CAPTURE — read before trusting it too far ─────────────
+        // It values a passion by its XP-rate increment over having no passion, and nothing else.
+        // It therefore assumes all twelve skills are equally worth training, ignores that Majors
+        // land on the pawn's BEST skills first (concentration is worth something on its own),
+        // ignores diminishing returns once a skill nears 20, and has no time axis at all — the
+        // same limitation already documented for the exchange rate R, whose ~2.0 is a
+        // colony-lifetime average. It does NOT double-count R's discount for passions landing on
+        // skills the colony never assigns: R prices a pip in skill-levels, this re-weights pips by
+        // grade. Two different axes.
+        //
+        // This is a display-only score (see "CalculateCompositeScore is display-only" in
+        // HANDOVER). 1.769 is defensible and derived from mechanics that actually run; it is not
+        // the only defensible number. Two alternatives were considered and rejected on
+        // 2026-08-06: vanilla's own `Pawn_SkillTracker.MajorPassionWeight = 2` (a valuation
+        // vanilla declares and never calls), and the 1.25 that used to sit here (not derived from
+        // anything). Changing this moves every published figure — see the CAUTION in HANDOVER.
+        private static float PassionPipEfficiency(float majorBias)
+        {
+            float minorGain = Constants.PassionLearnRateMinor - Constants.PassionLearnRateNone;
+            float majorGain = Constants.PassionLearnRateMajor - Constants.PassionLearnRateNone;
+
+            float pricePerPassion = Constants.MinorPassionCost
+                + (Constants.MajorPassionCost - Constants.MinorPassionCost) * majorBias;
+            float gainPerPassion = minorGain + (majorGain - minorGain) * majorBias;
+
+            // Value per pip at this bias, over value per pip when every passion is a Major.
+            return (gainPerPassion / pricePerPassion) / (majorGain / Constants.MajorPassionCost);
+        }
+
         private static float CalculateCompositeScore(float q, VarianceProfileValues v)
         {
             float skillNorm = 0.25f;
@@ -1291,12 +1394,57 @@ namespace PawnVarianceMod
             // model, which is not recoverable from def data (see TRAIT-DESIRABILITY-RESEARCH.md).
             // Omitting a term we cannot estimate beats including one we know is wrong.
 
-            float passionNorm = 0.25f;
+            // Passion variance off => the pawn keeps vanilla's assignment, whose budget averages
+            // VanillaPassionBudget pips at vanilla's own 50/50 coin flip. Not 0.25: that was the
+            // skill axis's baseline (5/20) copied across, which is right there and only
+            // coincidentally near-right here. Scored through the same efficiency term as every
+            // other profile, or this branch would silently sit on a different scale.
+            float passionNorm = Constants.VanillaPassionBudget
+                * PassionPipEfficiency(Constants.VanillaMajorBias) / Constants.MaxPassionPips;
             if (v.enablePassionVariance)
             {
+                // Three terms, and they are three genuinely different things. Do not collapse them.
+                //   budget      — pips the profile targets at this quality. The spend loop charges
+                //                 Majors MajorPassionCost and Minors MinorPassionCost out of it.
+                //   capacity    — the most pips the pawn's skills can physically absorb.
+                //   efficiency  — what a pip is WORTH at this Major bias. See PassionPipEfficiency.
+                //
+                // This line used to read `budget * (1f + 0.25f * v.passionMajorBias)`, a 24-pip-era
+                // leftover. When it was written the denominator was 12 (the SKILL COUNT), so the
+                // budget was being read as a COUNT OF PASSIONS and the 1.25 was the quality premium
+                // of an all-Major set over an all-Minor set of the same size — coherent in count
+                // units. The denominator was later corrected to 18 pips; that numerator was not,
+                // and a count-unit premium inflated a pip-unit quantity by up to 25% until
+                // 2026-08-06. It also ran backwards at the top end: it made a LOW Major bias
+                // saturate LATE (18 pips at bias 0) when a low bias is exactly the case that
+                // saturates EARLY, since 12 Minors fill all 12 skills for 12 pips.
+                //
+                // The instinct behind it was sound and is now expressed properly by `efficiency`:
+                // a Major really is worth more than its 1.5-pip price. What was wrong was the
+                // units (a count premium on a pip quantity), the anchor (it scaled above the
+                // ceiling instead of discounting below it) and the magnitude (1.25 from nowhere,
+                // against 1.18 derived from the game's own XP rates).
+                //
+                // Capacity is what actually caps the axis: each skill holds at most one passion,
+                // and a passion costs on average Minor + (Major - Minor) * majorBias, so a profile
+                // can place one per skill and no more. Budget above that is rolled and then
+                // discarded by the applier (open decision 2 — deliberately not clamped at roll
+                // time), so the score must not keep counting it. Without this cap a custom profile
+                // at budget 18 and Major bias 0 would score a saturated 1.0 while only 12 pips are
+                // spendable — 12 Minors fill all 12 skills.
+                //
+                // The skill count is DERIVED, not a constant: MaxPassionPips is 12 skills x a
+                // Major, so dividing it back out gives 12 exactly and cannot drift out of step
+                // with the ceiling. See the note on Constants.MaxPassionPips before replacing this
+                // with a named 12.
+                float skillCount = Constants.MaxPassionPips / Constants.MajorPassionCost;
                 float budget = Mathf.Lerp(v.passionCountMin, v.passionCountMax, q);
-                float pips = budget * (1f + 0.25f * v.passionMajorBias);
-                passionNorm = Mathf.Clamp01(pips / Constants.MaxPassionPips);
+                float capacity = skillCount
+                    * (Constants.MinorPassionCost
+                       + (Constants.MajorPassionCost - Constants.MinorPassionCost) * v.passionMajorBias);
+                float efficiency = PassionPipEfficiency(v.passionMajorBias);
+                passionNorm = Mathf.Clamp01(
+                    Mathf.Min(budget, capacity) * efficiency / Constants.MaxPassionPips);
             }
 
             // These two weights and Constants.MaxPassionPips jointly set the skill/passion exchange

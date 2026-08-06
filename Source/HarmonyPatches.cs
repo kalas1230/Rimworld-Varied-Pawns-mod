@@ -22,8 +22,27 @@ namespace PawnVarianceMod
             Pawn pawn = __result;
 
             if (pawn == null || !pawn.RaceProps.Humanlike) return;
-            if (!settings.applyToHostilePawns && pawn.Faction != null && pawn.Faction.HostileTo(Faction.OfPlayerSilentFail)) return;
-            if (ModsConfig.BiotechActive && pawn.DevelopmentalStage != DevelopmentalStage.Adult) return;
+            // Humanlike is an INTELLIGENCE check, not a promise that the optional trackers exist —
+            // a race def can turn skills or story off, and Humanoid Alien Races (which this mod
+            // supports) lets it. Every applier below walks pawn.skills.skills or
+            // pawn.story.traits unguarded, and with verboseLogging on the resulting NRE is
+            // rethrown into vanilla's pawn generation rather than logged. Gate once, here.
+            if (pawn.skills?.skills == null || pawn.story?.traits == null) return;
+            // Full faction resolution, not bare pawn.Faction — see EffectiveFactionOf.
+            if (settings.IsExcludedAsHostile(pawn, request)) return;
+            // Vanilla's own rule, matched exactly: PawnGenerator.GenerateSkills returns early at
+            // `AgeBiologicalYears < 13`, so a pawn below it never receives a rolled passion budget
+            // at all -- its passions come from forced traits and growth birthdays instead. Rolling
+            // one here would hand a child something vanilla structurally never gives.
+            //
+            // An AGE, not DevelopmentalStage, and not gated on Biotech. This check used to read
+            // `ModsConfig.BiotechActive && pawn.DevelopmentalStage != DevelopmentalStage.Adult`,
+            // which agrees for humans on Biotech (HumanlikeTeenager starts at 13 and inherits
+            // LifeStageDef.developmentalStage's Adult default) but disagrees in two real cases:
+            // a race declaring a Child life stage past 13 -- HAR races do -- would be skipped here
+            // while vanilla had already given it the full adult treatment, and without Biotech the
+            // guard did not run at all.
+            if (pawn.ageTracker != null && pawn.ageTracker.AgeBiologicalYears < Constants.VanillaAdultPassionAge) return;
 
             // Which profile this pawn is generated from — the player's, or the separate hostile one.
             // Resolved before the enable checks below because those toggles are themselves per-profile,

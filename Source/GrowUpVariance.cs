@@ -18,6 +18,10 @@ namespace PawnVarianceMod
         public static void Apply(Pawn pawn, string triggerPath)
         {
             if (pawn == null) return;
+            // Same reason as the generation postfix: Humanlike does not guarantee these optional
+            // trackers exist, and everything below walks pawn.skills.skills / pawn.story.traits
+            // unguarded. This path reaches pawns that were never seen by the generation gate.
+            if (pawn.skills?.skills == null || pawn.story?.traits == null) return;
 
             var settings = PawnVarianceMod.Settings;
 
@@ -38,7 +42,7 @@ namespace PawnVarianceMod
                         Log.Message($"[PawnVarianceMod] Suppressed grow-up variance for {pawn.LabelShort} ({triggerPath}): applyVarianceToChildren is off.");
                     return;
                 }
-                if (!settings.applyToHostilePawns && pawn.Faction != null && pawn.Faction.HostileTo(Faction.OfPlayerSilentFail))
+                if (settings.IsExcludedAsHostile(pawn, null))
                 {
                     if (settings.verboseLogging)
                         Log.Message($"[PawnVarianceMod] Suppressed grow-up variance for {pawn.LabelShort} ({triggerPath}): hostile pawn and applyToHostilePawns is off.");
@@ -100,7 +104,9 @@ namespace PawnVarianceMod
             // an existing Major 2 here (as this did before) over-counts by 0.5 per Major and lands
             // grown-up children under the passion slider, which is the mirror image of the
             // growth-moment stacking bug this whole path exists to fix.
-            float existingPips = pawn.skills.skills.Sum(r => r.passion == Passion.Major ? 1.5f : r.passion == Passion.Minor ? 1f : 0f);
+            float existingPips = pawn.skills.skills.Sum(
+                r => r.passion == Passion.Major ? Constants.MajorPassionCost
+                   : r.passion == Passion.Minor ? Constants.MinorPassionCost : 0f);
             PassionVarianceApplier.AssignPassions(pawn, quality, existingPips, v);
         }
 

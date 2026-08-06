@@ -52,7 +52,10 @@ namespace PawnVarianceMod
             // Reaching here means we ourselves observed this exact pawn as NotAdult on a prior
             // firing and now see Adult — a genuine, once-per-pawn-per-session transition.
 
-            if (!settings.applyToHostilePawns && ___pawn.Faction != null && ___pawn.Faction.HostileTo(Faction.OfPlayerSilentFail)) return;
+            // No PawnGenerationRequest on this path (the pawn exists already), so the resolution
+            // reduces to pawn.Faction with the kindDef fallback — but it goes through the same
+            // helper as generation so the toggle cannot mean two different things.
+            if (settings.IsExcludedAsHostile(___pawn, null)) return;
             // Per-pawn profile: a hostile faction's child is judged by the hostile profile's enable
             // toggles, not the player's. Re-resolved in GrowUpVariance.Apply rather than passed
             // along, because the pawn can sit pending for days and its faction can turn hostile in

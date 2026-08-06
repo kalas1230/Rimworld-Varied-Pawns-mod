@@ -26,8 +26,14 @@ namespace PawnVarianceMod
     {
         public float averageQuality = 0.5f;
         public float skillNoise = 0.35f;
-        public float passionNoise = 0.35f;
-        public float passionMajorBias = 0.8f;
+        // These four match the Scribe_Values defaults in ExposeData below, which in turn match
+        // Faithful. They are effectively unreachable -- every creation path passes explicit values
+        // (PawnVarianceSettings.cs:1096/1106, Clone), and the parameterless ctor is only used by
+        // Scribe, which overwrites all four on load -- but they used to read 1.0/7.0/0.35/0.8, a
+        // stale copy of an older Distinct that matched no shipped preset. Keep them in step with
+        // the Scribe defaults so nothing here can be mistaken for a live default.
+        public float passionNoise = 0.25f;
+        public float passionMajorBias = 0.5f;
         public float skillShiftMin = -4f;
         public float skillShiftMax = 6f;
 
@@ -43,8 +49,8 @@ namespace PawnVarianceMod
 
         public float traitCountMin = 1f;
         public float traitCountMax = 6f;
-        public float passionCountMin = 1f;
-        public float passionCountMax = 7f;
+        public float passionCountMin = 2f;
+        public float passionCountMax = 6f;
         public bool enableSkillVariance = true;
         public bool enableTraitVariance = true;
         public bool enablePassionVariance = true;

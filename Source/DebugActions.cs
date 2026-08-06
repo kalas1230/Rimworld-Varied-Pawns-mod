@@ -153,6 +153,27 @@ namespace PawnVarianceMod
 
             int failures = 0;
 
+            // Modded skills change what the passion axis MEANS, and nothing else can detect it.
+            // The score's capacity term assumes MaxPassionPips / MajorPassionCost skills, because
+            // CalculateCompositeScore describes a profile and has no pawn to ask -- while the
+            // applier itself reads the live list and is already correct. Deliberately NOT a
+            // failure: the figures are still internally consistent and the envelope tool has no
+            // way to know a player's modlist. Reported so a modded install knows the readout is an
+            // approximation, instead of the tool and the game disagreeing in silence.
+            int liveSkills = DefDatabase<SkillDef>.AllDefsListForReading.Count;
+            float assumedSkills = Constants.MaxPassionPips / Constants.MajorPassionCost;
+            if (Mathf.Abs(liveSkills - assumedSkills) > 0.001f)
+            {
+                sb.AppendLine($"  NOTE  skill count: live {liveSkills}, score assumes {assumedSkills:F0} "
+                    + $"(a mod adds skills). Real capacity is {liveSkills * Constants.MajorPassionCost:F1} pips, "
+                    + $"not {Constants.MaxPassionPips:F1} -- the passion axis understates high budgets. "
+                    + "Pawn generation is unaffected: PassionVarianceApplier reads the live skill list.");
+            }
+            else
+            {
+                sb.AppendLine($"  skill count {liveSkills} matches the score's assumption.");
+            }
+
             // Stale-table check first. If a scoring constant moved without the tool being re-run,
             // every figure below is measuring against the wrong reference, and a table that is
             // merely SELF-consistent would otherwise pass while being wrong -- which is exactly
@@ -169,6 +190,32 @@ namespace PawnVarianceMod
                 Constants.AssumedMaxSkillLevel, EnvelopeFigures.GenAssumedMaxSkillLevel);
             failures += CheckConstant(sb, "BetaConcentrationK",
                 Constants.BetaConcentrationK, EnvelopeFigures.GenBetaConcentrationK);
+            // Not a weight, but it sets the DOMAIN both integrators run over: GetBetaAlphaBeta
+            // clamps averageQuality into [eps, 1-eps] before deriving alpha/beta. The tool only
+            // started mirroring that clamp on 2026-08-07; before then the two sides disagreed for
+            // any preset outside the window, and this gate would have reported a failure with no
+            // bug in either implementation.
+            failures += CheckConstant(sb, "QualityClampEpsilon",
+                Constants.QualityClampEpsilon, EnvelopeFigures.GenQualityClampEpsilon);
+            // These two entered the composite on 2026-08-06, as the passion-capacity term that
+            // replaced the stale `(1 + 0.25 * majorBias)` premium. They are scoring constants now,
+            // so they are drift-checked like the rest -- not merely the price list. Together with
+            // MaxPassionPips above they also pin the derived skill count, so it needs no check of
+            // its own.
+            failures += CheckConstant(sb, "MajorPassionCost",
+                Constants.MajorPassionCost, EnvelopeFigures.GenMajorPassionCost);
+            failures += CheckConstant(sb, "MinorPassionCost",
+                Constants.MinorPassionCost, EnvelopeFigures.GenMinorPassionCost);
+            // The XP rates entered the composite on 2026-08-06 via PassionPipEfficiency. They are
+            // vanilla's numbers, so they only move if a RimWorld update moves them -- which is
+            // precisely the drift this check exists to catch, since nothing else in this mod would
+            // notice SkillRecord.LearnRateFactor changing under it.
+            failures += CheckConstant(sb, "PassionLearnRateNone",
+                Constants.PassionLearnRateNone, EnvelopeFigures.GenPassionLearnRateNone);
+            failures += CheckConstant(sb, "PassionLearnRateMinor",
+                Constants.PassionLearnRateMinor, EnvelopeFigures.GenPassionLearnRateMinor);
+            failures += CheckConstant(sb, "PassionLearnRateMajor",
+                Constants.PassionLearnRateMajor, EnvelopeFigures.GenPassionLearnRateMajor);
 
             if (failures > 0)
             {
@@ -599,8 +646,8 @@ namespace PawnVarianceMod
                         // Major 1.5, Minor 1. Counting passions instead would understate any
                         // Major-biased profile by a third.
                         float pips = pawn.skills.skills.Sum(
-                            r => r.passion == Passion.Major ? 1.5f
-                               : r.passion == Passion.Minor ? 1f : 0f);
+                            r => r.passion == Passion.Major ? Constants.MajorPassionCost
+                               : r.passion == Passion.Minor ? Constants.MinorPassionCost : 0f);
                         passionPips.Add(pips);
                         if (pips <= 0f) passionless++;
                     }

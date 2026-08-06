@@ -32,6 +32,12 @@ namespace PawnVarianceMod
         public const float GenAssumedVanillaSkillBaseline = 5f;
         public const float GenAssumedMaxSkillLevel = 20f;
         public const float GenBetaConcentrationK = 8f;
+        public const float GenQualityClampEpsilon = 0.001f;
+        public const float GenMajorPassionCost = 1.5f;
+        public const float GenMinorPassionCost = 1f;
+        public const float GenPassionLearnRateNone = 0.35f;
+        public const float GenPassionLearnRateMinor = 1f;
+        public const float GenPassionLearnRateMajor = 1.5f;
 
         public static readonly int[] Batches = { 1, 5, 25, 50 };
 
@@ -50,14 +56,14 @@ namespace PawnVarianceMod
 
         public static readonly float[][] Scores =
         {
-            new[] { 0.250000f, 0.302227f, 0.333331f, 0.342445f },
-            new[] { 0.226061f, 0.307478f, 0.366965f, 0.386566f },
-            new[] { 0.204709f, 0.312038f, 0.390872f, 0.416051f },
-            new[] { 0.189535f, 0.234083f, 0.264807f, 0.274620f },
-            new[] { 0.310068f, 0.356128f, 0.382603f, 0.390193f },
-            new[] { 0.321326f, 0.369463f, 0.396458f, 0.404075f },
-            new[] { 0.274874f, 0.326024f, 0.356490f, 0.365418f },
-            new[] { 0.211170f, 0.258040f, 0.288267f, 0.297558f }
+            new[] { 0.223715f, 0.270824f, 0.298879f, 0.307099f },
+            new[] { 0.200536f, 0.273227f, 0.326339f, 0.343839f },
+            new[] { 0.174217f, 0.269832f, 0.340586f, 0.363185f },
+            new[] { 0.171132f, 0.211401f, 0.239175f, 0.248045f },
+            new[] { 0.277384f, 0.318341f, 0.341884f, 0.348633f },
+            new[] { 0.287219f, 0.329172f, 0.352699f, 0.359339f },
+            new[] { 0.246344f, 0.292074f, 0.319311f, 0.327292f },
+            new[] { 0.190042f, 0.232499f, 0.259880f, 0.268297f }
         };
     }
 }
