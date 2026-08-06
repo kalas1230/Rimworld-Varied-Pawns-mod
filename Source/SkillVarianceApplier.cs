@@ -6,9 +6,11 @@ namespace PawnVarianceMod
 {
     public static class SkillVarianceApplier
     {
+        // Generation. `skillShiftMin`/`Max` are a BAND the pawn's baseline is picked from — the
+        // noise term is then added on top and is free to carry an individual skill outside it.
         public static void Apply(Pawn pawn, float quality, VarianceProfileValues v)
         {
-            Shift(pawn, quality, v, v.skillShiftMin, v.skillShiftMax, clampToRange: false);
+            ShiftAroundBand(pawn, quality, v, v.skillShiftMin, v.skillShiftMax);
         }
 
         // The age-13 growth moment. Its own range, and — unlike generation — the range is a hard
@@ -22,9 +24,28 @@ namespace PawnVarianceMod
         // honestly describes.
         public static void ApplyGrowUp(Pawn pawn, float quality, VarianceProfileValues v)
         {
-            Shift(pawn, quality, v, v.childSkillShiftMin, v.childSkillShiftMax, clampToRange: true);
+            ShiftWithinBounds(pawn, quality, v, v.childSkillShiftMin, v.childSkillShiftMax);
         }
 
+        // SOFT band. `bandMin`/`bandMax` position the baseline only; the noise term is added
+        // afterwards and is NOT clamped, so a single skill can and does land outside the band.
+        // A band whose minimum reads 0 does NOT mean "never subtracts" here.
+        private static void ShiftAroundBand(Pawn pawn, float quality, VarianceProfileValues v, float bandMin, float bandMax)
+        {
+            Shift(pawn, quality, v, bandMin, bandMax, clampToRange: false);
+        }
+
+        // HARD per-skill bounds. Identical to the above except the finished shift is clamped back
+        // into [floor, ceiling], so no skill can move further than the slider says.
+        private static void ShiftWithinBounds(Pawn pawn, float quality, VarianceProfileValues v, float floor, float ceiling)
+        {
+            Shift(pawn, quality, v, floor, ceiling, clampToRange: true);
+        }
+
+        // Shared core. Deliberately NOT called directly: the two wrappers above exist because
+        // `shiftMin`/`shiftMax` mean different things depending on `clampToRange`, and that
+        // ambiguity was flagged as the most likely future bug in this file. Call a wrapper, whose
+        // parameter names commit to one meaning.
         private static void Shift(Pawn pawn, float quality, VarianceProfileValues v, float shiftMin, float shiftMax, bool clampToRange)
         {
             float baseline = Mathf.Lerp(shiftMin, shiftMax, quality);
