@@ -600,6 +600,13 @@ namespace PawnVarianceMod
             GUI.color = new Color(1f, 1f, 1f, 0.7f);
             listing.Label(VarianceProfiles.DescriptionFor(activeProfileId));
             GUI.color = Color.white;
+
+            // Any override beats this setting — that is the design, but without saying so the
+            // General tab names a profile that may never apply to a single colonist. Observed
+            // 2026-08-06: a Human race override at Normal silently supersedes it, because the
+            // player faction has no override and the race one is then the only match.
+            Caption(listing, "Overrides on a pawn's faction, race or xenotype take precedence over this.");
+
             listing.Gap(SectionGap);
 
             DrawGlobalSettings(listing);
