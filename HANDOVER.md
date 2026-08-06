@@ -28,6 +28,72 @@ Confirm with `git status` rather than trusting this line.
 
 # ⚠️ CURRENT PRIORITIES & IN-PROGRESS TASKS
 
+## 1.10. 🟢 THE MISSING WHOLE-BRANCH REVIEW — RUN LATE, AFTER THE PUSH (2026-08-06)
+
+The 2026-08-04 batch's final cross-task review was never dispatched. It has now run, against
+`cd62f04..f2e44d4` (15 commits, 11 files, ~3436 insertions), via `gemini-reviewer`. Verdict:
+**needs follow-up fixes.** Nothing it found was urgent.
+
+### The point of running it late
+
+**Two of its four highest-severity findings were the exact defects §1.8 caught in-game** — the
+`n == 1` shortcut and a debug action invisible on a map. Both were real at `f2e44d4` and both are
+fixed in `641c40c`, outside the reviewed range, so neither is actionable. But they were re-derived
+**statically, from the diff alone.**
+
+> [!IMPORTANT]
+> §1.8's lesson was "only executing the real assembly catches numerical defects." That was drawn
+> from a sample where **the whole-branch review had been skipped.** It caught them on the first
+> try when finally asked. The honest lesson is narrower: *per-task* review does not catch
+> cross-task numerical defects, and neither mode substitutes for the other. Do not use §1.8 as an
+> argument for skipping static review, which is what nearly happened here.
+
+### What was live, and what was done
+
+| Finding | Status |
+|---|---|
+| `countProtectedTraits` default flip | **De-escalated, see below.** Still an open *decision*, not a defect. |
+| Stale `24`-pip comment in `PassionVarianceApplier.cs:175` | ✅ **Fixed** — and it was worse than a stale number. See below. |
+| `CopyFrom` does not validate imported profile ids | Carried. This is the pre-existing **T5-M1**, already rated Minor. Belongs with the load-validation cluster, not fixed piecemeal. |
+| Single-slot cache thrashing in `CalculateBestOfNScore` | Carried, Minor. UI-only path. |
+
+**`countProtectedTraits` was rated Critical on migration grounds, and the migration half is void.**
+`docs/superpowers/plans/2026-08-06-race-overrides.md:13` states the project's standing position:
+*"The mod is unreleased — there are no existing users and no backward-compatibility obligation.
+Do not add migration shims... If a saved config breaks, the fix is to reset it."* There is no
+upgrade population; the only affected settings file in existence is the owner's. What survives is
+the question §5 already asked and this review does not change: **is `true` the intended default?**
+
+**The stale comment was load-bearing.** It read *"a 24-pip budget buys 16 Majors but there are only
+12 skills"* — true when a Major cost 2 pips and the cap was 24. At `MaxPassionPips = 18` (12 × 1.5)
+an all-Major budget buys exactly 12 Majors for exactly 12 skills, **dead even**. A reader checking
+the comment's arithmetic would conclude the guard beneath it is unreachable and delete it. It is
+still reachable, via Minor-heavy rolls (a Minor costs 1 pip, so 18 pips buys up to 18 passions) and
+via `eligible` being smaller than 12 (conflicting passions, disabled skills, DropAll genes). The
+comment now says so and says not to delete the guard.
+
+### 🔍 The reviewer overrode Gemini three times — worth knowing before trusting a verdict
+
+`gemini-reviewer` verified every line citation against the source before relaying, and three did
+not survive:
+
+- A cache finding cited `PawnVarianceSettings.cs:742-775`. That range is UI override-row code; the
+  cache is at `:1327+`.
+- Gemini claimed the static cache **races against async pawn generation**. The call graph says
+  otherwise: `CalculateBestOfNScore` is reached only from `ProfileEditorTab.cs:284` and
+  `DebugActions.cs:201/228` — main-thread UI and debug, never the Harmony generation postfix.
+- On the visibility bug, Gemini flagged the **correctly-declared** action and missed its genuinely
+  broken sibling.
+
+**Cite-checking a review is not optional here.** Two of three overrides would have sent someone
+editing the wrong code.
+
+> [!NOTE]
+> **`.superpowers/sdd/progress.md` is gitignored and was overwritten in place** by the
+> race-overrides batch. The 2026-08-04 batch's original per-task findings (T1-M1 … T6-M3) survive
+> only in the HANDOVER summary at `git show fb1d8a8:HANDOVER.md`. Nothing to recover; know it
+> before going looking.
+
 ## 1.9. 🟢 SECOND IN-GAME PASS — RACE OVERRIDES LARGELY CLEARED, ONE DOC CLAIM FALSIFIED (2026-08-06)
 
 Run through GABS against the real assembly, `641c40c` plus the two uncommitted working-tree
@@ -262,9 +328,17 @@ the bridge can execute hidden actions directly.
 
 `.superpowers/sdd/progress.md` already records a Best-of-N defect that shipped because the plan's
 own snippet was wrong. This is the second. Both were invisible to `dotnet build`, to
-`envelope_check.py` (which never executes the C#), and to every static review. **The only thing
-that caught either was executing the real assembly.** Treat "reviewed and builds clean" as saying
-nothing about numerical code.
+`envelope_check.py` (which never executes the C#), and to every static review that had actually
+been run. **Executing the real assembly is what caught them.** Treat "reviewed and builds clean"
+as saying nothing about numerical code.
+
+> [!IMPORTANT]
+> **This paragraph overstated its case, and §1.10 corrects it.** "Every static review" meant every
+> *per-task* review — the batch's whole-branch review had been skipped. When it was finally run on
+> 2026-08-06 it re-derived **both** of these defects from the diff alone. So the claim "only
+> executing the assembly could have caught them" is false. The defensible version: per-task review
+> does not catch cross-task numerical defects, and execution and cross-task static review catch
+> different things. **Do not cite this section as a reason to skip a review.**
 
 ### ⚠️ Carried, quantified, NOT fixed
 
@@ -624,15 +698,9 @@ no code review and no in-game pass.** What it changes:
      dump distribution` at 200 gave the project's first observed dispersion figures: per-skill
      level sd **3.55**, passion budget sd **1.24**, 2.57 traits/pawn, 0 passionless pawns.
 
-2. ⚠️ **The final whole-branch review for THIS batch was never dispatched — still true.** Per-task
-   reviews all passed, but the broad cross-task review has not run *for the 2026-08-04 work*. The
-   race-overrides batch got one (it returned SOUND), and that review traced both composite paths
-   end to end, so the overlap is partial — **it is not a substitute**. The previous branch's final
-   review found an assembled-geometry defect that only the whole-branch view could see. Point any
-   such review at the five remaining Minor findings in the ledger.
-
-   *Note the in-game pass is no longer the argument for skipping this: §1.8 showed static review
-   and live execution catch different classes of defect. Neither replaces the other.*
+2. ~~**The final whole-branch review for THIS batch was never dispatched.**~~ ✅ **Run 2026-08-06,
+   late — after the batch had already been merged AND pushed.** Range `cd62f04..f2e44d4`, verdict
+   **"needs follow-up fixes"**. See §1.10 for the findings and what was done with them.
 
 ### ✅ What IS solid
 
