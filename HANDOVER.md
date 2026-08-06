@@ -2,16 +2,14 @@
 
 Date: 2026-08-06
 Repo: `C:\Users\gokal\Desktop\Rimworld-mod\Rimworld-Pawn-variance-mod`
-Branch: **`main`** (~49 commits ahead of `origin/main`, **not pushed** — run `git rev-list --count
-origin/main..main` rather than trusting this number; a docs commit moves it).
-Last code commit: **`546183d`**. One uncommitted file, `Source/ProfileEditorTab.cs` (the owner's,
-see below).
+Branch: **`main`** — ✅ **pushed 2026-08-06.** `origin/main` and `main` are both at `9526093`;
+the working tree is clean. This is the first time this project's work has left the machine.
+Confirm with `git status` rather than trusting this line.
 
 > [!IMPORTANT]
 > **`feature/profile-editor-layout` was merged into `main` and deleted on 2026-08-06.** The
 > merge was a fast-forward (`main` was strictly behind), so every commit below is now on
-> `main` unchanged and no merge commit exists. Nothing was pushed — `origin/main` is still at
-> the pre-merge state.
+> `main` unchanged and no merge commit exists. All of it has since been pushed.
 >
 > **Both open batches have now been seen running.** The race-overrides batch (§1.7) was also
 > built directly on `main` at the owner's instruction. Two GABS sessions on 2026-08-06 —
@@ -21,9 +19,10 @@ see below).
 > remaining warning banner below as scoped to the specific item it names.
 
 > [!NOTE]
-> **Everything the 2026-08-06 sessions produced is committed as of `546183d`.** The one dirty
-> file is the owner's in-flight `ProfileEditorTab.cs` scroll-height change, deliberately left
-> out of every commit. See "UNCOMMITTED WORK IN THE TREE" below.
+> **Nothing is uncommitted any more.** Everything the 2026-08-06 sessions produced is in, and the
+> owner's in-flight `ProfileEditorTab.cs` scroll-height change (`750f → 580f`) was folded into
+> `9526093` at push time. The "UNCOMMITTED WORK IN THE TREE" section below is kept for the note
+> on *why* that file was staged partially, not because anything is still pending.
 
 ---
 
@@ -357,9 +356,10 @@ Then Mod Settings → Varied Pawns → Profile Editor status:
 - [x] **Zero Default Custom Profiles** *(Fixed: removed pre-populated `custom_1` profile from default state in `PawnVarianceSettings.cs` and enabled `Delete` for single custom profiles)*
 
 **Everything passed**, so §5's warning banner has been replaced with a completion note. The
-branch was already merged on 2026-08-06 (see the header); nothing here gates pushing any more.
-The one item still gating a push is the `countProtectedTraits` default flip in §5 — a decision,
-not a check.
+branch was already merged on 2026-08-06 and has since been pushed (see the header), so nothing
+here gates anything. **Note the `countProtectedTraits` default flip in §5 was supposed to be
+decided before pushing and was not** — it is now shipped behaviour. Still a decision, but a
+louder one.
 
 ## 1.5. 🟢 COMPOSITE-SCORE RETUNE — **VERIFIED IN-GAME VIA GABS & SCRIPT** (2026-08-04)
 
@@ -399,26 +399,25 @@ All three live in `Constants.cs`. `docs/tools/envelope_check.py` ran and confirm
 
 ---
 
-# 🧾 UNCOMMITTED WORK IN THE TREE — READ BEFORE ANYTHING ELSE (2026-08-06)
+# 🧾 THE WORKING TREE IS CLEAN — kept for the partial-staging note (2026-08-06)
 
 > [!NOTE]
-> **This section used to list the whole 2026-08-05/06 working tree. That work is now committed**
-> — it went in as `f2e44d4` at merge time (see the batch table below), and the §1.9 session's
-> output went in as `b1e4b2d` / `e5fe80e` / `b917327` on 2026-08-06. The list that was here is
-> preserved in git history at `f2e44d4:HANDOVER.md`.
+> **Nothing is uncommitted.** This section used to list the whole 2026-08-05/06 working tree;
+> that work went in as `f2e44d4` at merge time (see the batch table below), the §1.9 session's
+> output as `b1e4b2d` / `e5fe80e` / `b917327`, and the owner's `ProfileEditorTab.cs` scroll-height
+> change as part of `9526093` at push time. The list that was here is preserved in git history at
+> `f2e44d4:HANDOVER.md`.
 
-Only one file is uncommitted, and it is the same one as before:
-
-| File | State |
-|---|---|
-| `Source/ProfileEditorTab.cs` | **The owner's, in flight.** Profile-editor scroll height: floor `750f → 580f`, and `profileEditorViewHeight` now takes `listing.CurHeight + 40f` without the `Math.Max(..., 750f)` clamp. Iterated twice during the 2026-08-06 session. Not agent-authored; left uncommitted deliberately. |
+The one thing worth carrying forward is *how* `ProfileEditorTab.cs` was handled, because the
+situation recurs:
 
 > [!IMPORTANT]
-> **This file was committed *partially* in `546183d`, on purpose.** The `ScrubStaleOverrides`
-> refactor touches the same file, so only that hunk was staged (via `git apply --cached` of a
-> filtered patch — the working tree was never rewritten). The two scroll-height lines above are
-> still the only diff against `HEAD`. If you `git diff` this file and see exactly two changed
-> lines, that is correct and expected, not a lost refactor.
+> **That file was committed *partially* in `546183d`, on purpose.** The `ScrubStaleOverrides`
+> refactor landed in the same file the owner had in flight, so only the refactor hunk was staged —
+> via `git apply --cached` of a filtered patch, which never rewrites the working tree. The owner's
+> `750f → 580f` lines stayed dirty until they chose to commit them. **This is the safe pattern
+> when an agent must edit a file the owner is holding:** stage a filtered patch to the index,
+> never `stash`/`checkout`/`reset` the file out from under them.
 
 > [!CAUTION]
 > **The owner edits this file while agents run.** During the race-overrides batch, three files
@@ -428,7 +427,7 @@ Only one file is uncommitted, and it is the same one as before:
 > any `stash`/`checkout`/`reset`, not from a snapshot taken earlier in the session.** A `git status`
 > from the top of a long session is not evidence about the tree now.
 
-**Verified state at `546183d`:** `dotnet build` → `0 Error(s), 0 Warning(s)`.
+**Verified state at `9526093`:** `dotnet build` → `0 Error(s), 0 Warning(s)`.
 `python zzz-Do-Not-Commit/test_race_resolution.py` → **PASS, 19/19**.
 
 **Both batches have now been seen running** — §1.8 and §1.9. What remains open is not
@@ -507,7 +506,7 @@ out and `CreepJoiner` is not. See §1.9.** If someone "simplifies" this to
    button's `FloatMenu` does not survive to the next frame for the bridge to read — a limit of the
    automation, confirmed against the Faction button too. The owner added the rows by hand.
 
-2. **Nothing is pushed.** `origin/main` is 48 commits behind.
+2. ~~**Nothing is pushed.**~~ ✅ **Pushed 2026-08-06.** `origin/main` is level with `main`.
 
 ### ✅ What IS solid
 
@@ -801,13 +800,18 @@ Plan: [`docs/superpowers/plans/2026-08-03-profile-editor-layout.md`](file:///C:/
   ```
 
   > [!CAUTION]
-  > **Silent behaviour change for existing settings, and unverified.** `Scribe_Values.Look`
-  > omits a value from the written XML when it equals the default. Any settings file saved
-  > while the default was `false`, by a user who had it `false`, therefore has **no
-  > `countProtectedTraits` key at all** — and now loads as `true`, flipping `Trait count` from
-  > "traits this mod rolls" to "total traits including forced ones" without the player touching
-  > anything. **Confirm this is intended before pushing.** If it is, it wants a release note; if
-  > it is not, the field initialiser and the `Scribe_` default must both go back to `false`.
+  > **Silent behaviour change for existing settings — and it has now SHIPPED undecided.**
+  > `Scribe_Values.Look` omits a value from the written XML when it equals the default. Any
+  > settings file saved while the default was `false`, by a user who had it `false`, therefore has
+  > **no `countProtectedTraits` key at all** — and now loads as `true`, flipping `Trait count`
+  > from "traits this mod rolls" to "total traits including forced ones" without the player
+  > touching anything.
+  >
+  > This line used to read "confirm this is intended before pushing." **The push happened on
+  > 2026-08-06 without the confirmation**, and §1.9 observed the checkbox live as checked. So the
+  > decision is now about released behaviour: either it stays and wants a release note, or the
+  > field initialiser *and* the `Scribe_` default both go back to `false` — and reverting now is
+  > itself a second silent flip for anyone who has saved settings since. **Still undecided.**
 
   `VarianceProfile.cs` also gained `IRenameable` on `CustomProfile`, dropped the `GiftedColony`
   enum member, and now clamps `passionCountMin`/`Max` to `Constants.MaxPassionPips` in the
