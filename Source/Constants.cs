@@ -7,7 +7,13 @@ namespace PawnVarianceMod
         public const float BetaConcentrationK = 8f; // fixed population-spread constant
 
         // Noise-floor / max constants (Settings Schema)
-        public const float MinMagnitudeFloor = 0.5f;
+        // 0f, not 0.5f, as of 2026-08-06: the noise sliders now mean literally what they say, and
+        // a slider at 0 produces genuinely zero spread. NOTE this is a Lerp LOW ENDPOINT, not a
+        // floor applied after the fact — dropping it rescales magnitude at EVERY noise setting,
+        // not only at 0. Lerp(0.5, 6, t) vs Lerp(0, 6, t) diverge most at low t: skillNoise 0.2
+        // went 1.60 -> 1.20 (-25%), 0.85 went 5.18 -> 5.10 (-1.4%). Every preset except Wildcard
+        // sits in the 0.20-0.35 band, so this narrowed per-skill dispersion across the board.
+        public const float MinMagnitudeFloor = 0f;
         public const float MaxMagnitude = 6f;
         public const float SmallRandomJitter = 0.5f;
 
@@ -15,7 +21,10 @@ namespace PawnVarianceMod
         // PawnGenerator.GenerateSkills' own passion-budget roll — `5f + clamp(Rand.Gaussian(), -4f,
         // 4f)` — but with the Gaussian's width factor and clamp window driven by passionNoise instead
         // of vanilla's hardcoded 1 and 4, so the setting controls "how much the total passion budget
-        public const float PassionBudgetSpreadMin = 0.25f;
+        // 0f as of 2026-08-06, same reasoning as MinMagnitudeFloor above: a Lerp low endpoint, so
+        // passionNoise 0.25 went sigma 1.19 -> 1.00 (-16%), not just the zero case. At
+        // passionNoise = 0 the budget is now exactly its quality-lerped mean, with no roll at all.
+        public const float PassionBudgetSpreadMin = 0f;
         public const float PassionBudgetSpreadMax = 4f;
         public const float PassionBudgetClampFactor = 4f; // matches vanilla's own spread:clamp ratio (widthFactor 1 : clamp 4)
 
