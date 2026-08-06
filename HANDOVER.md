@@ -633,6 +633,57 @@ was wrong, both of which apply to *any* variant of the idea:
 outcome, not a safety hole, and the levers are `skillShiftMin` and `skillNoise`. If pinning is judged
 too aggressive, **narrow the band or the noise — do not add a clamp.**
 
+## ⚠️ Left-censoring: a band below the floor DESTROYS dispersion, it does not create it
+
+**Measured 2026-08-07**, `Roll pawns and dump distribution` at 1000 pawns, active profile only, no
+overrides in play. This is the single most important empirical fact about the skill axis and it is
+the opposite of what the preset names imply.
+
+| | `Faithful` | `Wildcard` |
+|---|---|---|
+| per-skill level, mean | 3.37 | **1.42** |
+| per-skill level, **median** | 3.0 | **0.0** |
+| per-skill level, p90 | 8.0 | 5.0 |
+| **per-pawn mean skill, sd** | **1.23** | **1.10** |
+| passion pips, mean / sd | 3.59 / 1.24 | 4.34 / 2.96 |
+| traits/pawn | 2.51 (2–3) | 2.89 (0–7) |
+
+**`Wildcard`'s per-pawn skill dispersion is NARROWER than `Faithful`'s.** The preset whose entire
+purpose is maximum variation produces *less* pawn-to-pawn variation in skills than the vanilla-like
+baseline. Its median skill is **0**, and 506 of 1000 pawns averaged under 0.6 across all twelve
+skills.
+
+**The mechanism.** `skillShiftMin = -8.7` is applied on top of vanilla's own levels, which average
+~3.4 (read `Faithful`'s column — it barely shifts anything, so it is effectively a vanilla readout).
+Most rolls therefore land below zero, and `Shift` ends with `Mathf.Clamp(newLevel, 0, 20)`. Every one
+of those rolls stacks onto the same floor. **You cannot have spread below a wall you are already
+pressed against** — the clamp converts the entire lower half of the distribution into a point mass at
+0, which is the exact "spread becomes a spike" failure documented for the rejected clamp proposal,
+arriving through the band instead of through a new clamp.
+
+> [!CAUTION]
+> **The envelope cannot see this and never will.** `CalculateCompositeScore` reads
+> `Lerp(skillShiftMin, skillShiftMax, q)` — the *mean band* — and `envelope_check.py` computes the
+> same. Neither models the per-pawn `Clamp(0, 20)`, because neither generates a pawn. `Wildcard`
+> passes Rule 1 comfortably at −20.8% while its actual population is censored. **A preset can be
+> inside the envelope, inside the dispersion table, and still be broken in the only place it
+> matters.** The dispersion table's `per-skill sd` column is derived from `skillNoise` alone and is
+> equally blind — it reports `2.08 lv` for `Wildcard`, four times `Faithful`, which is true of the
+> *intended* noise and false of the delivered population.
+
+**Rules that follow — apply these before moving any `skillShiftMin`:**
+
+1. **Keep `skillShiftMin` above roughly `−4`** unless censoring is the deliberate goal. Vanilla's
+   base is ~3.4, so a band floor much past that guarantees a pile at zero rather than a wide preset.
+2. **Widening a band downward past the floor REDUCES dispersion.** It looks like more variance in
+   every number this project computes offline and delivers less in game. If the goal is spread, the
+   levers are `skillNoise` and the *upper* handle.
+3. **Never judge a skill band from `envelope_check.py` alone.** Run
+   `Roll pawns and dump distribution` and read the **median** and the per-pawn sd, not the mean. A
+   median of 0 means the band is under the floor.
+4. This is a property of the *band*, not of noise. `Wildcard`'s `skillNoise = 0.85` is not the cause
+   and narrowing it would not fix it.
+
 ## Why the passion budget is not clamped to capacity
 
 "Clamp realized budget to eligible capacity" was accepted, then broken by the owner's question:
@@ -1147,10 +1198,10 @@ Files marked `DONE (REVIEWED)` are protected by Rule 8 — no modification witho
   Biotech gene aptitude fix reading `levelInt` directly.
 - [x] `Source/TraitProtection.cs` — Biotech gene DNA protection, `ScenForced`, multi-source forced
   trait capture, relationship-aware sexuality protection.
-- [ ] `Source/TraitVarianceApplier.cs` — **NEXT UP**
-- [ ] `Source/TraitAgeCap.cs`
-- [ ] `Source/TraitTrace.cs`
-- [ ] `Source/PassionVarianceApplier.cs`
+- [x] `Source/TraitVarianceApplier.cs` — in-place reconciliation, safe `RemoveTrait` cleanup, 4-source forced trait degree fallback (`FirstValidDegree`).
+- [x] `Source/TraitAgeCap.cs` — dynamic `GrowthUtility.GrowthMomentAges` milestone lookup, adult uncapped sentinel.
+- [x] `Source/TraitTrace.cs` — single-buffer atomic logging per pawn, degree and age cap formatting.
+- [ ] `Source/PassionVarianceApplier.cs` — **NEXT UP**
 - [ ] `Source/GrowUpVariance.cs`
 - [ ] `Source/GrowthUpPatch.cs`
 - [ ] `Source/GrowUpPendingComponent.cs`

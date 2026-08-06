@@ -233,7 +233,7 @@ namespace PawnVarianceMod
 
         private static float JitterSample()
         {
-            return ((float)Rand.Value - 0.5f) * Constants.SmallRandomJitter;
+            return (Rand.Value - 0.5f) * Constants.SmallRandomJitter;
         }
     }
 }
