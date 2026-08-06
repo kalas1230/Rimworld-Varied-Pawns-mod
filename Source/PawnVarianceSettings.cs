@@ -757,7 +757,7 @@ namespace PawnVarianceMod
             {
                 OverrideColumnHeaders(listing, "Faction");
                 DrawOverrideRows(listing, factionOverrides, factionPriorities,
-                    key => DefDatabase<FactionDef>.GetNamedSilentFail(key)?.LabelCap.ToString() ?? key);
+                    key => LabelOf(DefDatabase<FactionDef>.GetNamedSilentFail(key)) ?? key);
             }
 
             Color oldColor = GUI.color;
@@ -770,7 +770,7 @@ namespace PawnVarianceMod
                     if (!factionOverrides.ContainsKey(factionDef.defName))
                     {
                         var fDef = factionDef;
-                        options.Add(new FloatMenuOption(fDef.LabelCap, () =>
+                        options.Add(new FloatMenuOption(LabelOf(fDef), () =>
                         {
                             factionOverrides[fDef.defName] = VarianceProfiles.DistinctId;
                             factionPriorities[fDef.defName] = OverridePriority.Normal;
@@ -830,7 +830,7 @@ namespace PawnVarianceMod
             {
                 OverrideColumnHeaders(listing, "Xenotype");
                 DrawOverrideRows(listing, xenotypeOverrides, xenotypePriorities,
-                    key => DefDatabase<XenotypeDef>.GetNamedSilentFail(key)?.LabelCap.ToString() ?? key);
+                    key => LabelOf(DefDatabase<XenotypeDef>.GetNamedSilentFail(key)) ?? key);
             }
 
             Color oldColor = GUI.color;
@@ -843,7 +843,7 @@ namespace PawnVarianceMod
                     if (!xenotypeOverrides.ContainsKey(xenoDef.defName))
                     {
                         var xDef = xenoDef;
-                        options.Add(new FloatMenuOption(xDef.LabelCap, () =>
+                        options.Add(new FloatMenuOption(LabelOf(xDef), () =>
                         {
                             xenotypeOverrides[xDef.defName] = VarianceProfiles.DistinctId;
                             xenotypePriorities[xDef.defName] = OverridePriority.Normal;
@@ -896,7 +896,7 @@ namespace PawnVarianceMod
             Section(listing, "Race Overrides");
 
             var selectableList = SelectableRaces().ToList();
-            var duplicateLabels = selectableList.GroupBy(r => r.LabelCap.ToString())
+            var duplicateLabels = selectableList.GroupBy(r => LabelOf(r))
                                                 .Where(g => g.Count() > 1)
                                                 .Select(g => g.Key)
                                                 .ToHashSet();
@@ -913,7 +913,7 @@ namespace PawnVarianceMod
                     {
                         ThingDef d = DefDatabase<ThingDef>.GetNamedSilentFail(key);
                         if (d == null) return key;
-                        string labelStr = d.LabelCap.ToString();
+                        string labelStr = LabelOf(d);
                         return duplicateLabels.Contains(labelStr) ? $"{labelStr} ({d.defName})" : labelStr;
                     });
             }
@@ -928,7 +928,7 @@ namespace PawnVarianceMod
                     if (!raceOverrides.ContainsKey(raceDef.defName))
                     {
                         var rDef = raceDef;
-                        string labelStr = rDef.LabelCap.ToString();
+                        string labelStr = LabelOf(rDef);
                         string displayLabel = duplicateLabels.Contains(labelStr)
                             ? $"{labelStr} ({rDef.defName})"
                             : labelStr;
@@ -966,6 +966,41 @@ namespace PawnVarianceMod
             GUI.color = oldColor;
         }
 
+        // Def.LabelCap throws on a def whose <label> is missing or empty, and nothing stops a
+        // third-party mod shipping one. All three override sections render defs they did not
+        // author, so all three route their labels through here and fall back to the defName.
+        internal static string LabelOf(Def d)
+        {
+            if (d == null) return null;
+            return string.IsNullOrEmpty(d.label) ? d.defName : d.LabelCap.ToString();
+        }
+
+        // Drops every override pointing at a deleted profile, from BOTH of the axis's dictionaries.
+        // Each override axis is two parallel maps keyed the same way; removing a key from one and
+        // not the other leaves a priority with no override, which is the failure mode this exists
+        // to make impossible. A fourth axis gets the scrub by calling this, not by remembering to
+        // write nine more lines.
+        //
+        // internal, not private: the Delete button's lambda is unreachable from a debug action, so
+        // scrub behaviour could only ever be tested against a copy of it. It can now be called.
+        internal static void ScrubStaleOverrides(
+            Dictionary<string, string> overrides,
+            Dictionary<string, OverridePriority> priorities,
+            string deletedId)
+        {
+            if (overrides == null) return;
+
+            var stale = new List<string>();
+            foreach (var kv in overrides)
+                if (kv.Value == deletedId) stale.Add(kv.Key);
+
+            foreach (var key in stale)
+            {
+                overrides.Remove(key);
+                priorities?.Remove(key);
+            }
+        }
+
         // Humanlike races that something actually spawns. Two filters, both load-bearing:
         // Humanlike drops the ~35 mechanoid ThingDef_AlienRace entries that Wolfein and Milira
         // ship alongside their playable races, and the PawnKindDef pass drops abstract or
@@ -986,7 +1021,7 @@ namespace PawnVarianceMod
                 if (!race.race.Humanlike) continue;
                 seen.Add(race);
             }
-            return seen.OrderBy(d => d.LabelCap.ToString());
+            return seen.OrderBy(d => LabelOf(d));
         }
 
         private static void Section(Listing_Standard listing, string title)

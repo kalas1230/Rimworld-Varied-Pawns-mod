@@ -181,32 +181,9 @@ namespace PawnVarianceMod
                         if (activeProfileId == deletedId) activeProfileId = VarianceProfiles.FaithfulId;
                         if (hostileProfileId == deletedId) hostileProfileId = VarianceProfiles.DistinctId;
 
-                        var staleFactions = new List<string>();
-                        foreach (var kv in factionOverrides)
-                            if (kv.Value == deletedId) staleFactions.Add(kv.Key);
-                        foreach (var k in staleFactions)
-                        {
-                            factionOverrides.Remove(k);
-                            factionPriorities.Remove(k);
-                        }
-
-                        var staleXenotypes = new List<string>();
-                        foreach (var kv in xenotypeOverrides)
-                            if (kv.Value == deletedId) staleXenotypes.Add(kv.Key);
-                        foreach (var k in staleXenotypes)
-                        {
-                            xenotypeOverrides.Remove(k);
-                            xenotypePriorities.Remove(k);
-                        }
-
-                        var staleRaces = new List<string>();
-                        foreach (var kv in raceOverrides)
-                            if (kv.Value == deletedId) staleRaces.Add(kv.Key);
-                        foreach (var k in staleRaces)
-                        {
-                            raceOverrides.Remove(k);
-                            racePriorities.Remove(k);
-                        }
+                        ScrubStaleOverrides(factionOverrides, factionPriorities, deletedId);
+                        ScrubStaleOverrides(xenotypeOverrides, xenotypePriorities, deletedId);
+                        ScrubStaleOverrides(raceOverrides, racePriorities, deletedId);
 
                         RefreshResolved();
                     },
