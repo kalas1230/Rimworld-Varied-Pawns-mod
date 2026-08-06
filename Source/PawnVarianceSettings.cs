@@ -895,6 +895,12 @@ namespace PawnVarianceMod
         {
             Section(listing, "Race Overrides");
 
+            var selectableList = SelectableRaces().ToList();
+            var duplicateLabels = selectableList.GroupBy(r => r.LabelCap.ToString())
+                                                .Where(g => g.Count() > 1)
+                                                .Select(g => g.Key)
+                                                .ToHashSet();
+
             if (raceOverrides.Count == 0)
             {
                 Caption(listing, "No race overrides configured. Race overrides ship empty because the available races depend on which race mods are installed.");
@@ -903,7 +909,13 @@ namespace PawnVarianceMod
             {
                 OverrideColumnHeaders(listing, "Race");
                 DrawOverrideRows(listing, raceOverrides, racePriorities,
-                    key => DefDatabase<ThingDef>.GetNamedSilentFail(key)?.LabelCap.ToString() ?? key);
+                    key =>
+                    {
+                        ThingDef d = DefDatabase<ThingDef>.GetNamedSilentFail(key);
+                        if (d == null) return key;
+                        string labelStr = d.LabelCap.ToString();
+                        return duplicateLabels.Contains(labelStr) ? $"{labelStr} ({d.defName})" : labelStr;
+                    });
             }
 
             Color oldColor = GUI.color;
@@ -911,12 +923,17 @@ namespace PawnVarianceMod
             if (listing.ButtonText("+ Add Race Override"))
             {
                 var options = new List<FloatMenuOption>();
-                foreach (var raceDef in SelectableRaces())
+                foreach (var raceDef in selectableList)
                 {
                     if (!raceOverrides.ContainsKey(raceDef.defName))
                     {
                         var rDef = raceDef;
-                        options.Add(new FloatMenuOption(rDef.LabelCap, () =>
+                        string labelStr = rDef.LabelCap.ToString();
+                        string displayLabel = duplicateLabels.Contains(labelStr)
+                            ? $"{labelStr} ({rDef.defName})"
+                            : labelStr;
+
+                        options.Add(new FloatMenuOption(displayLabel, () =>
                         {
                             raceOverrides[rDef.defName] = VarianceProfiles.DistinctId;
                             racePriorities[rDef.defName] = OverridePriority.Normal;
@@ -952,9 +969,14 @@ namespace PawnVarianceMod
         // Humanlike races that something actually spawns. Two filters, both load-bearing:
         // Humanlike drops the ~35 mechanoid ThingDef_AlienRace entries that Wolfein and Milira
         // ship alongside their playable races, and the PawnKindDef pass drops abstract or
-        // unreferenced race defs. On a Wolfein + Milira install this yields exactly Human,
-        // Wolfein_Race, Milira_Race and Milian_Race.
-        private static IEnumerable<ThingDef> SelectableRaces()
+        // unreferenced race defs. Measured 2026-08-06 on a Wolfein + Milira + Anomaly install:
+        // Human, CreepJoiner, Milira_Race, Wolfein_Race. Milian_Race is NOT in the list — its only
+        // def is the abstract Milian_Base with zero concrete children, so no PawnKindDef spawns it
+        // and the traversal drops it. CreepJoiner also labels itself "Human", which is why the two
+        // call sites above disambiguate duplicate labels with the defName.
+        // internal, not private: the "Dump Add-menu race list" debug action calls this directly so
+        // the harness checks the list the menu actually builds rather than a copy of the filter.
+        internal static IEnumerable<ThingDef> SelectableRaces()
         {
             var seen = new HashSet<ThingDef>();
             foreach (var kind in DefDatabase<PawnKindDef>.AllDefs)
