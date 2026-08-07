@@ -1478,6 +1478,7 @@ namespace PawnVarianceMod
         private static float cachedBestOfNResult;
         private static float cachedBestOfN_avgQ, cachedBestOfN_shiftMin, cachedBestOfN_shiftMax;
         private static float cachedBestOfN_passionMin, cachedBestOfN_passionMax, cachedBestOfN_majorBias;
+        private static float cachedBestOfN_skillNoiseScalar, cachedBestOfN_passionNoiseScalar;
         private static bool cachedBestOfN_skillOn, cachedBestOfN_passionOn;
         private static int cachedBestOfN_n = -1;
 
@@ -1492,6 +1493,8 @@ namespace PawnVarianceMod
                 && cachedBestOfN_passionMin == v.passionCountMin
                 && cachedBestOfN_passionMax == v.passionCountMax
                 && cachedBestOfN_majorBias == v.passionMajorBias
+                && cachedBestOfN_skillNoiseScalar == v.SkillNoiseScalar
+                && cachedBestOfN_passionNoiseScalar == v.PassionNoiseScalar
                 && cachedBestOfN_skillOn == v.enableSkillVariance
                 && cachedBestOfN_passionOn == v.enablePassionVariance)
             {
@@ -1507,6 +1510,8 @@ namespace PawnVarianceMod
             cachedBestOfN_passionMin = v.passionCountMin;
             cachedBestOfN_passionMax = v.passionCountMax;
             cachedBestOfN_majorBias = v.passionMajorBias;
+            cachedBestOfN_skillNoiseScalar = v.SkillNoiseScalar;
+            cachedBestOfN_passionNoiseScalar = v.PassionNoiseScalar;
             cachedBestOfN_skillOn = v.enableSkillVariance;
             cachedBestOfN_passionOn = v.enablePassionVariance;
             cachedBestOfNResult = result;
