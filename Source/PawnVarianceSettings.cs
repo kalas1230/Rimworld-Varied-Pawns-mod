@@ -1458,10 +1458,6 @@ namespace PawnVarianceMod
             return Mathf.Clamp01((wS * skillNorm + wP * passionNorm) / totalW);
         }
 
-        // Scratch buffer for the Best-of-N grid. Static and reused: the settings window redraws
-        // every frame while open, and a fresh 1024-float array per frame is pure GC churn.
-        private static float[] betaDensityScratch;
-
         // Expected composite score of the best of n pawns: E[composite(max(q1..qn))].
         //
         // This is the figure that describes actual play. The player CHOOSES which pawns to keep --
@@ -1520,48 +1516,7 @@ namespace PawnVarianceMod
 
         private static float CalculateBestOfNScoreCore(VarianceProfileValues v, int n)
         {
-            // No n == 1 shortcut. Returning composite(averageQuality) here would be assuming
-            // E[composite(q)] == composite(E[q]), which holds only while composite is LINEAR in q.
-            // It is linear for every preset whose skill band keeps AssumedVanillaSkillBaseline +
-            // shift above zero -- but Wildcard's skillShiftMin of -8.7 drives it negative, and the
-            // Mathf.Clamp in CalculateCompositeScore puts a kink at q = 0.2868. Past that kink the
-            // function is convex, so by Jensen the shortcut UNDERSTATES the true expectation: it
-            // returned 0.197666 against the reference's 0.204709, moving Wildcard's displayed
-            // "Typical" figure from -18% to -21%. Seven of eight presets are linear and matched to
-            // six decimals, which is exactly why this survived review. The integral below is
-            // correct at n == 1 too -- Pow(cdf, 0) is 1, so it reduces to E[composite(q)].
-            int nodes = Constants.BestOfNIntegrationNodes;
-            if (betaDensityScratch == null || betaDensityScratch.Length != nodes)
-                betaDensityScratch = new float[nodes];
-
-            v.GetBetaAlphaBeta(out float alpha, out float beta);
-            float dq = 1f / nodes;
-
-            // Unnormalised Beta density on a midpoint grid. The normalising constant is divided
-            // out below rather than computed via lgamma, which keeps this allocation-free.
-            float total = 0f;
-            for (int i = 0; i < nodes; i++)
-            {
-                float q = (i + 0.5f) * dq;
-                float d = Mathf.Exp((alpha - 1f) * Mathf.Log(q) + (beta - 1f) * Mathf.Log(1f - q));
-                betaDensityScratch[i] = d;
-                total += d * dq;
-            }
-
-            if (total <= 0f || float.IsNaN(total) || float.IsInfinity(total))
-                return CalculateCompositeScore(v.averageQuality, v);
-
-            float acc = 0f;
-            float cdf = 0f;
-            for (int i = 0; i < nodes; i++)
-            {
-                float q = (i + 0.5f) * dq;
-                float density = betaDensityScratch[i] / total;
-                cdf += density * dq;   // running CDF, inclusive of the current cell
-                acc += CalculateCompositeScore(q, v) * n * Mathf.Pow(cdf, n - 1) * density * dq;
-            }
-
-            return acc;
+            return DispersionModel.BestOfN(v, n);
         }
 
         private static float cachedFaithfulBaseline = -1f;

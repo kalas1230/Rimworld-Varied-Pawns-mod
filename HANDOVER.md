@@ -220,8 +220,9 @@ Two terms, each with a reason:
 **Capacity cap** — `skills × (MinorCost + (MajorCost − MinorCost) · bias)` = 12 / 15 / 18 pips at
 bias 0 / 0.5 / 1. A *low* Major bias saturates *early* (12 Minors fill all 12 skills for 12 pips),
 which is the opposite of what the old formula assumed. **The cap binds no shipped preset** — the
-widest is `Wildcard` at 9.8 against a 15.6 capacity — so it changes nothing today and is correct for
-custom profiles, which can reach 18.
+widest is `Wildcard` at 10.8 against a 14.1 capacity (bias moved 0.6 → 0.35 on 2026-08-07, which
+also moved the capacity from 15.6) — so it changes nothing today and is correct for custom profiles,
+which can reach 18.
 
 **Pip efficiency — what a Major is actually worth.** Without it, `passionMajorBias` could not move
 the score at all: `passionNorm` was identical to four decimals at bias 0 and bias 1 for all eight
@@ -315,9 +316,9 @@ not more. Mild dilution, no wrong arithmetic. The in-game verify action prints t
 > the marginal pip there is worth **zero**. The cap binds no shipped preset but is reachable on
 > custom profiles — which is exactly where a live `R` would be used.
 >
-> | Major bias | 0.00 | 0.50 (vanilla, `Faithful`) | 0.70 (`Sovereign`) | 1.00 |
-> |---|---|---|---|---|
-> | `R` | 1.77 | **1.96** | 2.01 | 2.08 |
+> | Major bias | 0.00 | 0.35 (`Wildcard`) | 0.50 (vanilla, `Faithful`) | 0.70 (`Sovereign`) | 1.00 |
+> |---|---|---|---|---|---|
+> | `R` | 1.77 | **1.91** | **1.96** | 2.01 | 2.08 |
 
 Decided after a four-agent review (2 Claude, 2 Gemini) that landed on **≈2.0**. `wP` moved `1.4 → 1.5`
 on 2026-08-07 to **restore** that conclusion rather than to change it: the efficiency term had
@@ -353,37 +354,38 @@ Verbatim output of `python docs/tools/envelope_check.py` (deterministic integrat
 Pasted, not hand-edited — Rule 6.
 
 ```
+dispersion model self-check (zero noise vs analytic): 2.13e-04
 wS=0.8  wP=1.5  pips/18  skill/20  K=8
 Exchange rate R(bias) = (20/18) * (1.5/0.8) * eff(bias)
   R = 1.96 skill levels per passion pip at vanilla bias 0.5   (range 1.77 at bias 0 .. 2.08 at bias 1)
 Faithful baseline @ q=0.50: 0.2571
 
 profile                     N=1                N=5               N=25               N=50
-Faithful        0.2571   +0.0%     0.3039   +0.0%     0.3318   +0.0%     0.3400   +0.0% 
-Distinct        0.2350   -8.6%     0.3071   +1.1%     0.3598   +8.4%     0.3772  +11.0%   (variance)
-Wildcard        0.2451   -4.7%     0.3345  +10.1%     0.3962  +19.4%     0.4159  +22.3%   (variance)
-Desperate       0.2036  -20.8%     0.2437  -19.8%     0.2713  -18.2%     0.2801  -17.6% 
-Elite           0.3107  +20.8%     0.3515  +15.7%     0.3750  +13.0%     0.3817  +12.3% 
-Sovereign       0.3205  +24.7%     0.3626  +19.3%     0.3862  +16.4%     0.3929  +15.6% 
-Specialist      0.2796   +8.8%     0.3251   +7.0%     0.3523   +6.2%     0.3602   +6.0% 
-Scavenger       0.2230  -13.3%     0.2651  -12.8%     0.2923  -11.9%     0.3007  -11.6% 
+Faithful        0.2571   +0.0%     0.3184   +0.0%     0.3589   +0.0%     0.3727   +0.0% 
+Distinct        0.2354   -8.4%     0.3264   +2.5%     0.3924   +9.3%     0.4155  +11.5%   (variance)
+Wildcard        0.2274  -11.5%     0.3347   +5.1%     0.4118  +14.7%     0.4387  +17.7%   (variance)
+Desperate       0.2036  -20.8%     0.2588  -18.7%     0.2976  -17.1%     0.3111  -16.5% 
+Elite           0.3107  +20.8%     0.3682  +15.7%     0.4064  +13.2%     0.4194  +12.5% 
+Sovereign       0.3205  +24.7%     0.3793  +19.1%     0.4179  +16.4%     0.4310  +15.7% 
+Specialist      0.2796   +8.8%     0.3403   +6.9%     0.3807   +6.1%     0.3944   +5.8% 
+Scavenger       0.2230  -13.3%     0.2804  -11.9%     0.3197  -10.9%     0.3332  -10.6% 
 
 Rule 2 - power-tier ordering at the same N:
   N=1   Desperate(0.204) < Scavenger(0.223) < Faithful(0.257) < Specialist(0.280) < Elite(0.311) < Sovereign(0.321)   OK
-  N=5   Desperate(0.244) < Scavenger(0.265) < Faithful(0.304) < Specialist(0.325) < Elite(0.352) < Sovereign(0.363)   OK
-  N=25  Desperate(0.271) < Scavenger(0.292) < Faithful(0.332) < Specialist(0.352) < Elite(0.375) < Sovereign(0.386)   OK
-  N=50  Desperate(0.280) < Scavenger(0.301) < Faithful(0.340) < Specialist(0.360) < Elite(0.382) < Sovereign(0.393)   OK
+  N=5   Desperate(0.259) < Scavenger(0.280) < Faithful(0.318) < Specialist(0.340) < Elite(0.368) < Sovereign(0.379)   OK
+  N=25  Desperate(0.298) < Scavenger(0.320) < Faithful(0.359) < Specialist(0.381) < Elite(0.406) < Sovereign(0.418)   OK
+  N=50  Desperate(0.311) < Scavenger(0.333) < Faithful(0.373) < Specialist(0.394) < Elite(0.419) < Sovereign(0.431)   OK
 
 Tightest envelope margins:
   Sovereign @ N=1: +24.7%  (10.3pp of headroom)
-  Wildcard @ N=50: +22.3%  (12.7pp of headroom)
   Elite @ N=1: +20.8%  (14.2pp of headroom)
+  Desperate @ N=1: -20.8%  (14.2pp of headroom)
 
 Within-pawn dispersion (REPORTED, NOT ENFORCED -- invisible to every % above):
   profile      skillNoise   per-skill sd  vs Faithful  passionNoise   budget sd
   Faithful           0.20        0.49 lv        1.00x          0.25     1.00 pips
   Distinct           0.35        0.86 lv        1.75x          0.35     1.40 pips
-  Wildcard           0.85        2.08 lv        4.25x          0.85     3.40 pips
+  Wildcard           0.85        2.08 lv        4.25x          0.50     2.00 pips
   Desperate          0.25        0.61 lv        1.25x          0.25     1.00 pips
   Elite              0.22        0.54 lv        1.10x          0.25     1.00 pips
   Sovereign          0.24        0.59 lv        1.20x          0.25     1.00 pips
@@ -392,7 +394,7 @@ Within-pawn dispersion (REPORTED, NOT ENFORCED -- invisible to every % above):
   A profile can be flat in the table above and 3x wider here. Wildcard is exactly
   that case: its 2026-08-04 retune narrowed skillShift (the mean band), not skillNoise.
 
-Source/EnvelopeFigures.g.cs: unchanged.
+Source/EnvelopeFigures.g.cs: REWRITTEN -- the shipped figures were stale, commit it.
 
 PASS: Rule 1 and Rule 2 hold at every N for all enforced presets.
 If any number moved, update the table in HANDOVER.md "The skill <-> passion exchange rate".

@@ -258,16 +258,17 @@ namespace PawnVarianceMod
             // The readout is output, not input -- always full opacity, even on a
             // read-only preset, so presets stay comparable by cycling the picker.
             // Labelled "Typical" so it reads as one half of a pair with the row below.
-            float meanComposite = CalculateCompositeScore(v.averageQuality, v);
+            float meanComposite = DispersionModel.TypicalAt(v, v.averageQuality);
             bool prevReadoutWordWrap = Text.WordWrap;
             Text.WordWrap = false;
             Widgets.Label(qReadout, $"→  Typical  {PawnVarianceSettings.FormatPowerReadout(meanComposite)}");
             Text.WordWrap = prevReadoutWordWrap;
             // The second paragraph is the load-bearing half. Without it a player reads Distinct's
             // -10% as "weaker than Faithful" and picks against the profile for the exact reason it
-            // exists: its spread is 1.52x Faithful's, and spread is the one thing this figure
-            // structurally cannot see (CalculateCompositeScore takes neither skillNoise nor
-            // passionNoise). Say what the number excludes, not how it is computed.
+            // exists: its spread is 1.52x Faithful's. This figure is now dispersion-aware (it DOES
+            // see skillNoise and passionNoise, via DispersionModel), but it is still a single
+            // number describing an average pawn -- it does not show how much pawns differ from each
+            // other, so two profiles with the same figure can still play very differently.
             TooltipHandler.TipRegion(qReadout,
                 "The average pawn this profile generates, compared to the Faithful baseline (0.25).\n\n"
                 + "Based on starting skill levels and the passion budget only. It does not include "
@@ -511,7 +512,7 @@ namespace PawnVarianceMod
             }
 
             // Draw Mean Compound Power Line
-            float meanRawComposite = CalculateCompositeScore(v.averageQuality, v);
+            float meanRawComposite = DispersionModel.TypicalAt(v, v.averageQuality);
             float meanComposite = MapToCenteredX(meanRawComposite);
             float meanX = rect.x + meanComposite * rect.width;
             Widgets.DrawLine(new Vector2(meanX, rect.y), new Vector2(meanX, rect.yMax), Color.yellow, 1.5f);

@@ -278,39 +278,24 @@ namespace PawnVarianceMod
             {
                 averageQuality = 0.37f,
                 skillNoise = 0.85f,
-                passionNoise = 0.85f,
-                passionMajorBias = 0.6f,
-                // Retuned 2026-08-04: narrowed to ~0.78x its previous dispersion, which pulls
-                // Best-of-25 from +27.1% to +17.3% and Best-of-50 from a near-breach +33.1% to
-                // +21.5%. Narrowing raises N=1 (-23.6% -> -18.1%) and lowers N=25 at the same
-                // time, so it buys headroom at both ends. (Those five figures were MEASURED UNDER
-                // wP = 1.4 AND THE PRE-2026-08-06 PASSION AXIS. They record why the band is what it
-                // is; do not compare them against the current table, which reads -20.8% at N=1 and
-                // +19.3% at N=50. Re-measure, do not diff against these.) Still the widest preset -- it is
-                // a variance preset, not a power tier, so it legitimately crosses Faithful as N
-                // rises; it just may not leave the +-35% band.
-                // Raised from -8.7 on 2026-08-07 to stop left-censoring. MEASURED at -8.7, 1000
-                // pawns: median skill 0.0 and per-pawn skill sd 1.10 -- NARROWER than Faithful's
-                // 1.23, because a floor below vanilla's own ~3.4 average drove most rolls negative
-                // and Shift's Clamp(0, 20) stacked them onto zero. There is no spread below a wall
-                // you are already pressed against, so the widest preset in the file was delivering
-                // less skill variation than the vanilla-like one.
+                passionNoise = 0.50f,
+                passionMajorBias = 0.35f,
+                // Retuned 2026-08-07 for the dispersion-aware envelope. Under the old mean-band
+                // metric Wildcard read +22.3% at N=50; measured with dispersion it was +49.0%,
+                // OUTSIDE the +-35% envelope. Rule 1 passed only because the metric could not see
+                // the axis that broke it.
                 //
-                // -5.0 rather than -4.0: both clear the floor, but -4.0 lifts Wildcard to -0.7% at
-                // N=1, which destroys the property that a variance preset sits BELOW Faithful at
-                // N=1 and crosses as N rises. -5.0 keeps that and still moves the band at
-                // median quality from -1.7 to +1.7 levels. (That -0.7%/-5.6% pair was measured
-                // BEFORE the +1 pip passion move, which compressed every figure toward Faithful;
-                // -5.0 now reads -4.7% at N=1. The ordering the choice rests on is unchanged, but
-                // re-measure before reusing either number.) Real dispersion is meant to come from
-                // skillNoise = 0.85 (4x Faithful), not from a band pushed under the clamp.
+                // passionNoise 0.85 -> 0.50 is the load-bearing change: passion budget is a single
+                // per-pawn draw, so it reaches Best-of-N in full. skillNoise is deliberately LEFT
+                // at 0.85 -- taking it to 0.00 moves N=50 by only 0.3pp, because per-skill noise
+                // averages down by sqrt(12) and is then censored by Clamp(0,20).
                 //
-                // NEITHER envelope_check.py NOR the dispersion table can see censoring: both read
-                // the Lerp band and neither models the per-pawn clamp. Verify any change to this
-                // number with `Roll pawns and dump distribution` and read the MEDIAN, not the mean.
-                // See HANDOVER.md "Left-censoring".
+                // passionMajorBias 0.6 -> 0.35 nerfs through the pip EXCHANGE RATE, not through
+                // spread (R 1.99 -> 1.91; Rule 7 trigger). skillShiftMax 4.2 -> 2.0 lowers the
+                // cherry-picked ceiling. Result: -11.5/+5.1/+14.7/+17.7%, 17.3pp of margin,
+                // dispersion still 1.71x Faithful, still below Faithful at N=1.
                 skillShiftMin = -5.0f,
-                skillShiftMax = 4.2f,
+                skillShiftMax = 2.0f,
                 childSkillShiftMin = -5f,
                 childSkillShiftMax = 6f,
                 traitCountMin = 0f,

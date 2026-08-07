@@ -451,14 +451,6 @@ def main():
         print("FAIL: the dispersion model does not reduce to the analytic score at zero noise")
         return 1
 
-    print("\nDispersion-aware figures (REPORTED, not yet enforced -- see Task 4):")
-    dispersed = {n: grid_score(p, with_noise=True) for n, p in P.items()}
-    for n in P:
-        cells = "  ".join(
-            f"N={N}: {dispersed[n][N] / dispersed['Faithful'][N] * 100.0 - 100.0:+6.1f}%"
-            for N in (1, 5, 25, 50))
-        print(f"  {n:<12} {cells}")
-
     # R carries the pip-efficiency factor, so it is a FUNCTION of the profile's Major bias, not a
     # scalar. Printing the bare weight ratio is what audit P-03 was: a figure that is only true for
     # an all-Major profile, quoted as though it were the general rate. Anchor it at vanilla's bias
@@ -477,8 +469,8 @@ def main():
           f"{ratio * eff(1.0):.2f} at bias 1)")
     print(f"Faithful baseline @ q=0.50: {composite(0.50, P['Faithful']):.4f}\n")
 
-    score = {(n, N): expected_best_of_n(P[n], N, grids[n], composite)
-             for n in P for N in BATCHES}
+    dispersed = {n: grid_score(p, with_noise=True) for n, p in P.items()}
+    score = {(n, N): dispersed[n][N] for n in P for N in BATCHES}
     dev = {(n, N): (score[(n, N)] - score[("Faithful", N)]) / score[("Faithful", N)] * 100.0
            for n in P for N in BATCHES}
 
