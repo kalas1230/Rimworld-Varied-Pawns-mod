@@ -293,8 +293,11 @@ namespace PawnVarianceMod
                 //
                 // -5.0 rather than -4.0: both clear the floor, but -4.0 lifts Wildcard to -0.7% at
                 // N=1, which destroys the property that a variance preset sits BELOW Faithful at
-                // N=1 and crosses as N rises. -5.0 keeps that (-5.6%) and still moves the band at
-                // median quality from -1.7 to +1.7 levels. Real dispersion is meant to come from
+                // N=1 and crosses as N rises. -5.0 keeps that and still moves the band at
+                // median quality from -1.7 to +1.7 levels. (That -0.7%/-5.6% pair was measured
+                // BEFORE the +1 pip passion move, which compressed every figure toward Faithful;
+                // -5.0 now reads -4.7% at N=1. The ordering the choice rests on is unchanged, but
+                // re-measure before reusing either number.) Real dispersion is meant to come from
                 // skillNoise = 0.85 (4x Faithful), not from a band pushed under the clamp.
                 //
                 // NEITHER envelope_check.py NOR the dispersion table can see censoring: both read

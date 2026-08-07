@@ -15,21 +15,101 @@ do not add migration shims. If a saved config breaks, the fix is to reset it.
 
 # 🔴 OPEN WORK
 
-## 1. Run the in-game Best-of-N gate
+## 0. THE NEXT THING TO DO — implement dispersion-aware scoring
 
-**`Varied Pawns > Verify Best-of-N against envelope_check.py`** has not been run since the passion
-axis was rebuilt. Both sides of that gate (the C# integrator and `EnvelopeFigures.g.cs`) were
-edited together, so it *should* pass 32/32 — but that is a prediction, and predictions about the
-numerical code in this project have been wrong twice. It takes seconds. **Do this before the
-retune.**
+**Plan:** [`docs/superpowers/plans/2026-08-07-dispersion-aware-scoring.md`](docs/superpowers/plans/2026-08-07-dispersion-aware-scoring.md)
+**Spec:** [`docs/superpowers/specs/2026-08-07-dispersion-aware-scoring-design.md`](docs/superpowers/specs/2026-08-07-dispersion-aware-scoring-design.md)
 
-## 2. Preset retune — not started
+Status: **design approved, plan written and reviewed, nothing implemented.** Eight tasks, each
+ending in a commit. Execute with `superpowers:subagent-driven-development` or
+`superpowers:executing-plans`.
 
-Every preset's numbers predate the passion-axis rebuild. The retune was deliberately sequenced
-*after* the passion audit, because it calibrates numbers against the passion model, and auditing
-that model after tuning would invalidate the tuning.
+### Why this is first, and not one of the items below
 
-Constraints that are already settled — tuning without knowing them will fight the code:
+**`Wildcard` is outside the ±35% envelope — Rule 1 is currently being violated, and the gate cannot
+see it.** `CalculateCompositeScore` reads six fields; `skillNoise` and `passionNoise` are not among
+them. Best-of-N is a **maximum** statistic and maxima reward dispersion, so a metric blind to spread
+systematically understates the one preset whose noise sits far off the pack:
+
+| `Wildcard` | reported today | measured with dispersion | understated by |
+|---|---|---|---|
+| N=1 | −4.7% | −1.4% | 3.2pp |
+| N=25 | +19.4% | **+44.3%** | 24.9pp |
+| N=50 | +22.3% | **+49.0%** | 26.6pp |
+
+The 32/32 green gate below is therefore **not evidence that the envelope holds.** It proves the two
+implementations agree with each other; both are measuring the wrong quantity. Every other preset
+moves ≤1.5pp, so this is `Wildcard`-specific — but it is a live Rule 1 breach, not a scope limit.
+
+Two findings that shape the fix, so a reader does not re-derive them:
+
+- **`skillNoise` is nearly free on the envelope; `passionNoise` is the whole story.** Taking
+  `Wildcard`'s `skillNoise` from 0.85 to **0.00** moves N=50 by 0.3pp. Skill noise is drawn
+  per-skill, so the pawn's average over 12 carries only `variance/12` and is then censored by
+  `Clamp(0,20)`. The passion budget is a single per-pawn draw and reaches Best-of-N in full. **The
+  retune therefore leaves `Wildcard`'s within-pawn skill chaos completely intact.**
+- **The retune is `passionNoise` 0.85 → 0.50, `passionMajorBias` 0.6 → 0.35, `skillShiftMax`
+  4.2 → 2.0.** Lands at −11.5/+5.1/+14.7/+17.7%, 17.3pp of margin, dispersion still 1.71×
+  `Faithful`, still below `Faithful` at N=1.
+
+### What it also delivers
+
+Noise sliders in real units (levels and pips, replacing the meaningless 0–1 scalars), and a header
+curve that plots the **realised outcome distribution** instead of the Beta density of `q` — so the
+spread sliders visibly move it and left-censoring shows as a pile at the left edge. That censoring
+is invisible everywhere in the UI today and is the failure mode that already cost this project a
+full retune.
+
+### Before you start
+
+- **Rule 8 sign-off is GRANTED** for the five `DONE (REVIEWED)` files the plan names, and for those
+  only. **`Source/SettingsTransfer.cs` is NOT covered** — it is `[x]` reviewed and the plan
+  deliberately does not touch it. **Re-read the code review status list below rather than trusting
+  any summary of it.**
+- **Rule 6 and Rule 7 both fire.** Every pasted table in this document regenerates, including the
+  bias-indexed `R` table under "The skill ↔ passion exchange rate" — `passionMajorBias` 0.6 → 0.35
+  moves `R` 1.99 → 1.91 while touching none of the three global constants. Plan Task 4 Step 6a.
+- **Tasks 2 and 3 of the spec are fused into one commit (plan Task 4), deliberately.** Switching the
+  metric on before the retune puts `Wildcard` at ≈+48%, and `envelope_check.py` exits 1 on any Rule 1
+  breach — that boundary cannot be green by construction. Land the metric first *within* the commit,
+  then tune against it.
+- The plan was reviewed by two Gemini reviewers on 2026-08-07 and revised. The statistical model was
+  found sound; the fixes were a `private static` that would not compile, a nested-loop blowup in
+  `OutcomeDensity`, three `CalculateCompositeScore` call sites where the plan said "wherever", and
+  preset literals that needed six decimals to survive the plan's own no-figure-moved check.
+
+## 1. Carried items — known, quantified, not fixed
+
+**The Best-of-N gate and the preset retune are both DONE** — under the *current* metric, with the
+caveat in §0 above. The in-game `Varied Pawns > Verify Best-of-N against envelope_check.py` gate
+passes **32/32** against the shipped build: worst displayed divergence 0.26pp against the 0.50pp
+tolerance, worst raw 0.94% against the 3% guard, every `N=1` row bit-identical. `envelope_check.py`
+PASSes Rule 1 and Rule 2 at N = 1, 5, 25, 50 and reports `EnvelopeFigures.g.cs: unchanged`.
+
+Neither is a standing task. **Re-running both after any scoring change is Rule 6**, and the tuning
+constraints that used to sit here have moved to "Tuning constraints" below — they govern every future
+retune, not the finished one.
+
+| Item | Why it is carried |
+|---|---|
+| **The shared right-edge CDF is first-order accurate.** Both `envelope_check.py`'s `beta_grid` and `CalculateBestOfNScoreCore` do `run += v * dq` *before* appending. Error ∝ `dq`, so 1024 and 20000 nodes differ by up to ~0.9% at N=50. | Both sides have it, so they agree with each other and **nothing on screen is wrong** (the gap cancels in the ratio to `Faithful`). **DECIDED 2026-08-07: carried permanently — do not raise it again.** See "Why the integration slip is carried" below for the argument and for what fixing it would cost. |
+| **Are Milians reachable by race override?** `Milian_Race` does not appear in the Add menu: its only def, `Milian_Base`, is `Abstract="True"` with zero concrete children, so no `PawnKindDef` spawns it and the traversal filter drops it. The filter is behaving as specified. | If Milians are spawned in code rather than through a `PawnKindDef`, they are unreachable by race override and the traversal needs a second source. Owner question. |
+| **Init-vs-`Scribe` default mismatch on skill and trait fields** — `skillNoise` 1.0 init vs 0.2 Scribe, `skillShift` −4/6 vs −3/3, `traitCount` 1/6 vs 2/3 on `VarianceProfileValues`. | Unreachable either way (every creation path passes explicit values), but they read as live defaults that contradict `Faithful`. The passion fields were aligned; the rest were left alone as out of scope. **The noise half of this resolves in §0's plan (Task 5 Step 4), which rescales both pairs — do not fix it separately first.** The `skillShift` and `traitCount` halves stay carried. |
+| **`CopyFrom` does not validate imported profile ids** (T5-M1, Minor). | Belongs with the load-validation cluster, not worth fixing piecemeal. |
+| **Single-slot cache thrashing in `CalculateBestOfNScore`** (Minor). | UI-only path. |
+| Five further Minor findings | In `.superpowers/sdd/progress.md`. |
+
+> [!NOTE]
+> `.superpowers/sdd/progress.md` is **gitignored and gets overwritten in place** by each batch. The
+> 2026-08-04 batch's original per-task findings (T1-M1 … T6-M3) survive only in
+> `git show fb1d8a8:HANDOVER.md`. Nothing to recover — just know it before going looking.
+
+---
+
+# 🎚️ TUNING CONSTRAINTS
+
+Settled properties of the code that a retune has to work with. **Tuning without knowing these will
+fight the implementation** — each one has bitten at least once.
 
 - **No downside floor on skills, and do not add one.** `skillShiftMin` and `skillNoise` are the
   downside controls. See "Why a clamp is the wrong tool" below.
@@ -42,17 +122,17 @@ Constraints that are already settled — tuning without knowing them will fight 
 - **No passion-budget clamp.** A rolled budget above what the pawn's eligible skills can hold is
   discarded, and that is what lets restricted-skill pawns max out. Widening `passionCountMax` past
   ~12 buys progressively less. See "Why the budget is not clamped".
-- **The `Faithful` baseline is `0.2571`, and an exactly-`0.2500` baseline was rejected.** ✅ Settled
-  2026-08-07: `Faithful`'s budget midpoint moved `4.0 → 5.0` to match **vanilla's own flat budget**,
-  which is what the vanilla-like preset should have carried all along. Chasing a round `0.2500`
-  reference instead would have needed a `4.79`-pip midpoint — a number picked to make a readout
-  tidy rather than to match the game. The round number is cosmetic and nothing depends on it.
-  Measured at 1000 pawns, `Faithful`'s realised budget went `3.59 → 4.59` pips mean and its range
-  `1.0–7.0 → 1.0–9.0`, which **is** vanilla's `5 + Clamp(Gaussian(0,1), ±4)` range exactly.
-  **Every preset's band moved by the same +1 pip**, not just `Faithful`'s: raising the reference
-  alone put `Faithful` *above* `Specialist` (a Rule 2 violation) and left `Desperate` 1.3pp inside
-  the envelope. A uniform shift preserves every relative difference and widened the tightest margin
-  from 7.0pp to 10.3pp.
+- **The `Faithful` baseline is `0.2571`, and an exactly-`0.2500` baseline was rejected.**
+  `Faithful`'s budget midpoint is `5.0` to match **vanilla's own flat budget**, which is what the
+  vanilla-like preset should have carried all along. Chasing a round `0.2500` reference instead
+  would have needed a `4.79`-pip midpoint — a number picked to make a readout tidy rather than to
+  match the game. The round number is cosmetic and nothing depends on it. Measured at 1000 pawns,
+  `Faithful`'s realised budget is `4.59` pips mean over a `1.0–9.0` range, which **is** vanilla's
+  `5 + Clamp(Gaussian(0,1), ±4)` range exactly.
+- **Every preset's passion band carries the same `+1` pip offset**, not just `Faithful`'s. Raising
+  the reference alone put `Faithful` *above* `Specialist` (a Rule 2 violation) and left `Desperate`
+  1.3pp inside the envelope. A uniform shift preserves every relative difference; it is what widened
+  the tightest margin to 10.3pp. **If `Faithful` moves again, move all eight.**
 
 **Two hard gates on any retune:** `envelope_check.py` must still PASS Rule 1 and Rule 2 at
 N = 1, 5, 25, 50; and if any figure moves, `Source/EnvelopeFigures.g.cs` **and** every pasted table
@@ -64,22 +144,6 @@ in this document must be regenerated together. The tool prints
 > and the ~36pp Best-of-25 inversion were introduced during retune-adjacent work and survived clean
 > builds and static review. Run the in-game `Verify Best-of-N` action afterwards.
 
-## 3. Carried items — known, quantified, not fixed
-
-| Item | Why it is carried |
-|---|---|
-| **The shared right-edge CDF is first-order accurate.** Both `envelope_check.py`'s `beta_grid` and `CalculateBestOfNScoreCore` do `run += v * dq` *before* appending. Error ∝ `dq`, so 1024 and 20000 nodes differ by up to ~0.9% at N=50. | Both sides have it, so they agree with each other and **nothing on screen is wrong** (the gap cancels in the ratio to `Faithful`). **DECIDED 2026-08-07: carried permanently — do not raise it again.** See "Why the integration slip is carried" below for the argument and for what fixing it would cost. |
-| **Are Milians reachable by race override?** `Milian_Race` does not appear in the Add menu: its only def, `Milian_Base`, is `Abstract="True"` with zero concrete children, so no `PawnKindDef` spawns it and the traversal filter drops it. The filter is behaving as specified. | If Milians are spawned in code rather than through a `PawnKindDef`, they are unreachable by race override and the traversal needs a second source. Owner question. |
-| **Init-vs-`Scribe` default mismatch on skill and trait fields** — `skillNoise` 1.0 init vs 0.2 Scribe, `skillShift` −4/6 vs −3/3, `traitCount` 1/6 vs 2/3 on `VarianceProfileValues`. | Unreachable either way (every creation path passes explicit values), but they read as live defaults that contradict `Faithful`. The passion fields were aligned; the rest were left alone as out of scope. |
-| **`CopyFrom` does not validate imported profile ids** (T5-M1, Minor). | Belongs with the load-validation cluster, not worth fixing piecemeal. |
-| **Single-slot cache thrashing in `CalculateBestOfNScore`** (Minor). | UI-only path. |
-| Five further Minor findings | In `.superpowers/sdd/progress.md`. |
-
-> [!NOTE]
-> `.superpowers/sdd/progress.md` is **gitignored and gets overwritten in place** by each batch. The
-> 2026-08-04 batch's original per-task findings (T1-M1 … T6-M3) survive only in
-> `git show fb1d8a8:HANDOVER.md`. Nothing to recover — just know it before going looking.
-
 ---
 
 # 🔒 MANDATORY ARCHITECTURAL RULES
@@ -87,6 +151,10 @@ in this document must be regenerated together. The tool prints
 1. **Mean-power envelope (±35%)** — every preset MUST stay within ±35% of `Faithful` **at every
    batch size** (N = 1, 5, 25, 50), not only at Best-of-1. Read "mean-power" as a scope limit, not
    decoration: the rule does not constrain dispersion at all.
+   > **`Wildcard` currently breaches this and the gate cannot see it — see §0.** The rule itself is
+   > unchanged; what changes is that the metric enforcing it becomes dispersion-aware, at which
+   > point "mean-power" stops being an accurate name for the scope limit. Do not weaken the rule to
+   > accommodate a variance preset; §0's plan retunes the preset instead.
 2. **Monotonic power-tier ordering at any N** —
    `Desperate < Scavenger < Faithful < Specialist < Elite < Sovereign`.
    **`Distinct` and `Wildcard` are exempt** — they are *variance* presets, not power tiers. They sit
@@ -136,8 +204,11 @@ any high-dispersion profile.
    `K = Constants.BetaConcentrationK` (8). See `QualityRoller.RollQuality`.
 2. Draw N qualities, take the max. `CalculateCompositeScore` is monotonic in `q`, so
    Best-of-N score `= composite(max(q₁…q_N))`.
-3. `composite = (0.8·skillNorm + 1.4·passionNorm) / 2.2`, where `skillNorm = (5 + skillShift)/20`
-   and `passionNorm` is the passion axis below.
+3. `composite = (0.8·skillNorm + 1.5·passionNorm) / 2.3`, where `skillNorm = (5 + skillShift)/20`
+   and `passionNorm` is the passion axis below. The weights are
+   `Constants.CompositeSkillWeight` / `CompositePassionWeight` and the divisor is their sum — **do
+   not hardcode either here again.** This line read `1.4 / 2.2` for a while after `wP` moved to
+   `1.5`, which is exactly the stale-normalizer shape described under "Unit errors survive review".
 4. Compare each profile to `Faithful` **at the same N**.
 
 ## The passion axis
@@ -392,6 +463,11 @@ satisfy for any profile with real dispersion. **The enforceable reading is same-
 >   since nothing else here would notice.
 > - any preset's `averageQuality`, `skillShiftMin/Max`, `passionCountMin/Max`, `passionMajorBias`
 >
+> **`skillNoise` and `passionNoise` are deliberately absent, and §0's plan adds them (Task 8 Step 3).**
+> They are exempt today *only* because the composite cannot read them — which is precisely the
+> defect §0 fixes. Once plan Task 4 lands, changing either one moves every figure, and omitting them
+> from this list would recreate the same silent-staleness trap Rule 7 was corrected to close.
+>
 > The tool **parses `Source/Constants.cs` and `Source/VarianceProfile.cs` directly** rather than
 > hardcoding values, so it cannot drift from what ships. Deterministic integration, not sampling.
 > No third-party dependencies. It exits non-zero on a Rule 1 or Rule 2 violation, so it can gate a
@@ -404,6 +480,14 @@ satisfy for any profile with real dispersion. **The enforceable reading is same-
 > can breach the envelope without touching the preset that breaks, because the weights are shared.
 
 ## What the envelope does NOT measure — `skillNoise` and `passionNoise`
+
+> [!IMPORTANT]
+> **This section describes the state §0's plan exists to end, and it is scheduled for rewrite
+> (plan Task 8 Step 1).** Read it for the *mechanism* — why per-skill noise averages down by `√12`,
+> and why you cannot read dispersion out of the mean band. Those parts stay true and stay in the
+> document. The claim that **no percentage responds to the noise scalars** stops being true the
+> moment plan Task 4 lands, and the two fields become scoring inputs on Rule 6's
+> recalculate-trigger list.
 
 **The model treats a pawn as fully determined by its quality roll `q`.** `CalculateCompositeScore`
 reads exactly six fields: `averageQuality`, `skillShiftMin/Max`, `passionCountMin/Max`,
@@ -1242,6 +1326,15 @@ lines dirty in the working tree.
 
 Files marked `DONE (REVIEWED)` are protected by Rule 8 — no modification without explicit permission.
 
+> [!IMPORTANT]
+> **This list is the authority; §0's plan and its spec are not.** An earlier draft of that spec
+> described `Source/SettingsTransfer.cs` as unreviewed — it is `[x]` below and therefore gated, and
+> the Rule 8 sign-off does **not** cover it. `Source/PassionVarianceApplier.cs` also flipped to `[x]`
+> part-way through that design session. **Re-read the entries here before touching anything, rather
+> than trusting any summary of them, including this one.** Six files land edits under §0 and will
+> need re-review afterwards: `VarianceProfile.cs`, `PawnVarianceSettings.cs`, `ProfileEditorTab.cs`,
+> `SkillVarianceApplier.cs`, `PassionVarianceApplier.cs`, `DebugActions.cs`.
+
 - [x] `Source/VarianceProfile.cs` — legacy enum/comment cleanup, `IExposable` parameterless
   `ExposeData()`, `distributionParamsDirty` cache, `MakeValues()`.
 - [x] `Source/PawnVarianceSettings.cs` — Overrides tab UX safety, button colors & dialogs, dynamic
@@ -1260,13 +1353,15 @@ Files marked `DONE (REVIEWED)` are protected by Rule 8 — no modification witho
 - [x] `Source/TraitVarianceApplier.cs` — in-place reconciliation, safe `RemoveTrait` cleanup, 4-source forced trait degree fallback (`FirstValidDegree`).
 - [x] `Source/TraitAgeCap.cs` — dynamic `GrowthUtility.GrowthMomentAges` milestone lookup, adult uncapped sentinel.
 - [x] `Source/TraitTrace.cs` — single-buffer atomic logging per pawn, degree and age cap formatting.
-- [ ] `Source/PassionVarianceApplier.cs` — **NEXT UP**
-- [ ] `Source/GrowUpVariance.cs`
+- [x] `Source/PassionVarianceApplier.cs` — 2-pass budget/level walk, forced trait queue jump, Biotech gene floor restoration & stale preAdd fix.
+- [ ] `Source/GrowUpVariance.cs` — **NEXT UP**
 - [ ] `Source/GrowthUpPatch.cs`
 - [ ] `Source/GrowUpPendingComponent.cs`
 - [ ] `Source/HarmonyPatches.cs`
 - [ ] `Source/PawnVarianceMod.cs`
 - [ ] `Source/Constants.cs`
+- [ ] `Source/DebugActions.cs` — dev menu actions, Best-of-N verifier UI/action, pawn profile simulation tools.
+- [x] `Source/EnvelopeFigures.g.cs` — auto-generated envelope constants baseline (generated by envelope_check.py).
 
 ---
 
