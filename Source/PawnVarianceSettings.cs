@@ -1359,7 +1359,7 @@ namespace PawnVarianceMod
         // 2026-08-06: vanilla's own `Pawn_SkillTracker.MajorPassionWeight = 2` (a valuation
         // vanilla declares and never calls), and the 1.25 that used to sit here (not derived from
         // anything). Changing this moves every published figure — see the CAUTION in HANDOVER.
-        private static float PassionPipEfficiency(float majorBias)
+        internal static float PassionPipEfficiency(float majorBias)
         {
             float minorGain = Constants.PassionLearnRateMinor - Constants.PassionLearnRateNone;
             float majorGain = Constants.PassionLearnRateMajor - Constants.PassionLearnRateNone;

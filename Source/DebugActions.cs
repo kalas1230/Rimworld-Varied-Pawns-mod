@@ -733,6 +733,27 @@ namespace PawnVarianceMod
                 MessageTypeDefOf.TaskCompletion, historical: false);
         }
 
+        [DebugAction(Category, "Dump dispersion-aware Best-of-N",
+                     allowedGameStates = AllowedGameStates.PlayingOnMap)]
+        private static void DumpDispersionBestOfN()
+        {
+            var sb = new StringBuilder();
+            sb.AppendLine("[PawnVarianceMod] Dispersion-aware Best-of-N (C# side)");
+            sb.AppendLine($"  grid q={DispersionModel.QNodes} x={DispersionModel.XNodes} "
+                          + $"tri={DispersionModel.TriNodes} gauss={DispersionModel.GaussNodes}");
+            sb.AppendLine("  profile           N=1      N=5     N=25     N=50");
+            foreach (var preset in VarianceProfiles.Presets)
+            {
+                var v = preset.MakeValues();
+                sb.AppendLine($"  {preset.label,-12}"
+                    + $"{DispersionModel.BestOfN(v, 1),9:F4}"
+                    + $"{DispersionModel.BestOfN(v, 5),9:F4}"
+                    + $"{DispersionModel.BestOfN(v, 25),9:F4}"
+                    + $"{DispersionModel.BestOfN(v, 50),9:F4}");
+            }
+            Log.Message(sb.ToString());
+        }
+
         private static string Describe(string label, List<float> xs)
         {
             if (xs.Count == 0) return $"  {label,-22} (no data)";

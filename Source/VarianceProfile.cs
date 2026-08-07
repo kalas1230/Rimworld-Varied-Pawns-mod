@@ -34,6 +34,11 @@ namespace PawnVarianceMod
         // the Scribe defaults so nothing here can be mistaken for a live default.
         public float passionNoise = 0.25f;
         public float passionMajorBias = 0.5f;
+
+        // Indirection so DispersionModel and the appliers do not care whether the stored field is
+        // a 0-1 scalar or a real-unit spread. Task 5 of the dispersion plan changes ONLY these.
+        public float SkillNoiseScalar => skillNoise;
+        public float PassionNoiseScalar => passionNoise;
         public float skillShiftMin = -4f;
         public float skillShiftMax = 6f;
 
