@@ -284,15 +284,24 @@ namespace PawnVarianceMod
                 // +19.3% at N=50. Re-measure, do not diff against these.) Still the widest preset -- it is
                 // a variance preset, not a power tier, so it legitimately crosses Faithful as N
                 // rises; it just may not leave the +-35% band.
-                // MEASURED 2026-08-07, 1000 pawns: this floor is BELOW vanilla's own average level
-                // (~3.4), so most rolls go negative and Shift's Clamp(0, 20) stacks them onto zero.
-                // Wildcard's median skill is 0.0 and its per-pawn skill sd is 1.10 -- NARROWER than
-                // Faithful's 1.23. The widest preset in the file delivers less skill variation than
-                // the vanilla-like one, because there is no spread below a floor you are already on.
-                // Neither envelope_check.py nor the dispersion table can see this: both read the
-                // Lerp band and neither models the per-pawn clamp. See HANDOVER.md "Left-censoring".
-                // Do not read this number as "more variance" -- past about -4 it buys the opposite.
-                skillShiftMin = -8.7f,
+                // Raised from -8.7 on 2026-08-07 to stop left-censoring. MEASURED at -8.7, 1000
+                // pawns: median skill 0.0 and per-pawn skill sd 1.10 -- NARROWER than Faithful's
+                // 1.23, because a floor below vanilla's own ~3.4 average drove most rolls negative
+                // and Shift's Clamp(0, 20) stacked them onto zero. There is no spread below a wall
+                // you are already pressed against, so the widest preset in the file was delivering
+                // less skill variation than the vanilla-like one.
+                //
+                // -5.0 rather than -4.0: both clear the floor, but -4.0 lifts Wildcard to -0.7% at
+                // N=1, which destroys the property that a variance preset sits BELOW Faithful at
+                // N=1 and crosses as N rises. -5.0 keeps that (-5.6%) and still moves the band at
+                // median quality from -1.7 to +1.7 levels. Real dispersion is meant to come from
+                // skillNoise = 0.85 (4x Faithful), not from a band pushed under the clamp.
+                //
+                // NEITHER envelope_check.py NOR the dispersion table can see censoring: both read
+                // the Lerp band and neither models the per-pawn clamp. Verify any change to this
+                // number with `Roll pawns and dump distribution` and read the MEDIAN, not the mean.
+                // See HANDOVER.md "Left-censoring".
+                skillShiftMin = -5.0f,
                 skillShiftMax = 4.2f,
                 childSkillShiftMin = -5f,
                 childSkillShiftMax = 6f,

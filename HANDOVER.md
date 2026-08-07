@@ -286,7 +286,7 @@ Faithful baseline @ q=0.50: 0.2231
 profile                     N=1                N=5               N=25               N=50
 Faithful        0.2231   +0.0%     0.2699   +0.0%     0.2978   +0.0%     0.3059   +0.0% 
 Distinct        0.1995  -10.6%     0.2717   +0.7%     0.3244   +8.9%     0.3418  +11.7%   (variance)
-Wildcard        0.1767  -20.8%     0.2721   +0.8%     0.3424  +15.0%     0.3649  +19.3%   (variance)
+Wildcard        0.2105   -5.6%     0.3000  +11.2%     0.3617  +21.5%     0.3814  +24.7%   (variance)
 Desperate       0.1704  -23.6%     0.2105  -22.0%     0.2381  -20.0%     0.2469  -19.3% 
 Elite           0.2759  +23.7%     0.3167  +17.4%     0.3402  +14.2%     0.3469  +13.4% 
 Sovereign       0.2855  +28.0%     0.3276  +21.4%     0.3512  +17.9%     0.3579  +17.0% 
@@ -301,8 +301,8 @@ Rule 2 - power-tier ordering at the same N:
 
 Tightest envelope margins:
   Sovereign @ N=1: +28.0%  (7.0pp of headroom)
+  Wildcard @ N=50: +24.7%  (10.3pp of headroom)
   Elite @ N=1: +23.7%  (11.3pp of headroom)
-  Desperate @ N=1: -23.6%  (11.4pp of headroom)
 
 Within-pawn dispersion (REPORTED, NOT ENFORCED -- invisible to every % above):
   profile      skillNoise   per-skill sd  vs Faithful  passionNoise   budget sd
@@ -683,6 +683,38 @@ arriving through the band instead of through a new clamp.
    median of 0 means the band is under the floor.
 4. This is a property of the *band*, not of noise. `Wildcard`'s `skillNoise = 0.85` is not the cause
    and narrowing it would not fix it.
+
+### The fix, and what it did NOT fix
+
+`skillShiftMin` went `−8.7 → −5.0` on 2026-08-07. Re-measured at 1000 pawns:
+
+| `Wildcard` | at `−8.7` | at **`−5.0`** | `Faithful` |
+|---|---|---|---|
+| per-skill median | 0.0 | **1.0** | 3.0 |
+| per-skill mean | 1.42 | **2.52** | 3.37 |
+| per-skill p90 | 5.0 | **8.0** | 8.0 |
+| per-skill sd | 2.66 | **3.31** | 3.41 |
+| per-pawn mean skill sd | 1.10 | **1.21** | 1.23 |
+| bottom histogram bucket | 249 pawns | **22** | 18 |
+
+`−5.0` rather than `−4.0` because `−4.0` lifts `Wildcard` to `−0.7%` at N=1, which destroys the
+documented property that a variance preset sits *below* `Faithful` at N=1 and crosses as N rises.
+
+> [!IMPORTANT]
+> **The residual is real: `Wildcard` is now COMPARABLE to `Faithful` in skill spread, not wider.**
+> Per-skill sd `3.31` against `Faithful`'s `3.41`, and per-pawn sd `1.21` against `1.23`. If the noise
+> were landing cleanly on top of vanilla's own spread you would expect roughly
+> `sqrt(3.41² + 2.08²) ≈ 4.0`. It reads 3.31, so **censoring is still eating dispersion** — `p10` is
+> still `0.0`, i.e. the bottom decile of quality still lands under the floor.
+>
+> Two levers remain, and they are a genuine trade, not an oversight:
+> - **Raise the floor further** (`−4.0`): fully clears the censoring, costs the below-`Faithful`-at-N=1
+>   property.
+> - **Raise `skillNoise` above 0.85**: costs **nothing** on the envelope, since the composite does not
+>   read it — but `Constants.MaxMagnitude = 6` caps the gain (at `1.0`, per-skill sd goes 2.08 → 2.45).
+>
+> Left as an owner decision. **Do not "fix" it by lowering `skillShiftMin` again** — that is the move
+> this entire section exists to prevent.
 
 ## Why the passion budget is not clamped to capacity
 
