@@ -233,8 +233,8 @@ namespace PawnVarianceMod
                 childSkillShiftMax = 2f,
                 traitCountMin = 2f,
                 traitCountMax = 3f,
-                passionCountMin = 2f,
-                passionCountMax = 6f,
+                passionCountMin = 3f,
+                passionCountMax = 7f,
             });
 
         // The mod's original intended values for randomness, before it got to where it is with multiple
@@ -260,8 +260,8 @@ namespace PawnVarianceMod
                 // from the skill/passion spread, which is untouched.
                 traitCountMin = 2f,
                 traitCountMax = 4f,
-                passionCountMin = 1.4f,
-                passionCountMax = 7.2f,
+                passionCountMin = 2.4f,
+                passionCountMax = 8.2f,
             });
 
         public static readonly VarianceProfile WildSpread = new VarianceProfile(
@@ -307,8 +307,8 @@ namespace PawnVarianceMod
                 childSkillShiftMax = 6f,
                 traitCountMin = 0f,
                 traitCountMax = 8f,   // deliberately left wide: chaos is this preset's whole point
-                passionCountMin = 1.2f,
-                passionCountMax = 9.8f,
+                passionCountMin = 2.2f,
+                passionCountMax = 10.8f,
             });
 
         public static readonly VarianceProfile Hardscrabble = new VarianceProfile(
@@ -332,8 +332,8 @@ namespace PawnVarianceMod
                 childSkillShiftMax = 1f,
                 traitCountMin = 2f,   // was 1: floor raised to vanilla's, cuts hazard exposure
                 traitCountMax = 4f,
-                passionCountMin = 1.7f,
-                passionCountMax = 5.3f,
+                passionCountMin = 2.7f,
+                passionCountMax = 6.3f,
             });
 
         public static readonly VarianceProfile Elite = new VarianceProfile(
@@ -353,8 +353,8 @@ namespace PawnVarianceMod
                 childSkillShiftMax = 2f,
                 traitCountMin = 2f,
                 traitCountMax = 4f,
-                passionCountMin = 2.6f,
-                passionCountMax = 6.3f,
+                passionCountMin = 3.6f,
+                passionCountMax = 7.3f,
             });
 
         public static readonly VarianceProfile Sovereign = new VarianceProfile(
@@ -383,8 +383,8 @@ namespace PawnVarianceMod
                 childSkillShiftMax = 3f,
                 traitCountMin = 2f,
                 traitCountMax = 4f,   // was 5: cuts hazard exposure 18.9% -> 15.4%, matches Elite
-                passionCountMin = 2.2f,
-                passionCountMax = 6.6f,
+                passionCountMin = 3.2f,
+                passionCountMax = 7.6f,
             });
 
         public static readonly VarianceProfile Specialist = new VarianceProfile(
@@ -404,8 +404,8 @@ namespace PawnVarianceMod
                 childSkillShiftMax = 2f,
                 traitCountMin = 2f,
                 traitCountMax = 4f,
-                passionCountMin = 2.1f,
-                passionCountMax = 6.1f,
+                passionCountMin = 3.1f,
+                passionCountMax = 7.1f,
             });
 
         public static readonly VarianceProfile Scavenger = new VarianceProfile(
@@ -425,8 +425,8 @@ namespace PawnVarianceMod
                 childSkillShiftMax = 1f,
                 traitCountMin = 2f,
                 traitCountMax = 4f,
-                passionCountMin = 1.8f,
-                passionCountMax = 5.3f,
+                passionCountMin = 2.8f,
+                passionCountMax = 6.3f,
             });
 
         // Display order in the dropdown. Custom is not in here — it is not a recipe, it is wherever

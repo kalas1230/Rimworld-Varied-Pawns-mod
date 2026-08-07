@@ -101,13 +101,13 @@ namespace PawnVarianceMod
         // axes, making the reference score exactly 0.2500. That 4.5 was not Faithful's budget —
         // its budget at q=0.50 is 4.0. The extra 0.5 came entirely from the `(1 + 0.25 * majorBias)`
         // factor CalculateCompositeScore applied to the budget, which was a 24-pip-era unit error
-        // (see the note on that line) and was removed 2026-08-06. The baseline is now 0.2231 and
-        // the two axes no longer coincide. Restoring the coincidence is a PRESET question, not a
-        // constants one: with the pip-efficiency term in place it needs a Faithful budget band
-        // whose q=0.50 midpoint is 4.79 pips (0.25 x 18 / 0.9391), against 4.0 today. Vanilla's
-        // own flat 5 pips would land the axis at 0.2609. Left for the retune -- and note the
-        // round 0.2500 is cosmetic; nothing depends on it, which is exactly why the old comment
-        // claiming it could go unchallenged for so long.
+        // (see the note on that line) and was removed 2026-08-06. SETTLED 2026-08-07: Faithful's
+        // budget midpoint was moved 4.0 -> 5.0, matching vanilla's own flat budget, which is what
+        // the vanilla-like preset should have carried all along. The baseline is now 0.2571 and the
+        // two axes deliberately do NOT coincide -- chasing an exactly-0.2500 reference would have
+        // needed a 4.79-pip midpoint (0.25 x 18 / 0.9391), i.e. a number picked to make a readout
+        // round rather than to match the game. The round 0.2500 is cosmetic and nothing depends on
+        // it, which is exactly why the old claim went unchallenged for so long.
         public const float MaxPassionPips = 18f;
 
         // NOTE: the assumed skill count (12) is NOT a constant of its own. It is already inside
@@ -143,7 +143,8 @@ namespace PawnVarianceMod
         // conclusion — it RESTORES it. The efficiency term rescaled the passion axis downward, which
         // silently dragged the realised rate to 1.83 at vanilla bias while the comment here still
         // claimed 1.94; 1.5 puts it back at 1.96, i.e. the ~2.0 that was actually decided. Measured,
-        // not assumed: envelope headroom IMPROVED (Sovereign @ N=1, 6.6pp -> 7.0pp), because the
+        // not assumed: envelope headroom IMPROVED (Sovereign @ N=1, 6.6pp -> 7.0pp; since widened
+        // again to 10.3pp by the 2026-08-07 passion-band retune), because the
         // power tiers differ from Faithful mostly in SKILL, so weighting passion higher pulls them
         // toward the reference. Wildcard is the one preset that genuinely moves (+18.3% -> +19.3% at
         // N=50), being the profile with the wide passion budget.

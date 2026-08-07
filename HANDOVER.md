@@ -42,13 +42,17 @@ Constraints that are already settled — tuning without knowing them will fight 
 - **No passion-budget clamp.** A rolled budget above what the pawn's eligible skills can hold is
   discarded, and that is what lets restricted-skill pawns max out. Widening `passionCountMax` past
   ~12 buys progressively less. See "Why the budget is not clamped".
-- **The `Faithful` baseline is `0.2231`, not `0.2500`.** Whether to restore an exactly-`0.2500`
-  baseline is a *retune* decision and belongs here, not in `Constants.cs`: it needs `Faithful`'s
-  budget band to have a q=0.50 midpoint of **4.79** pips (`0.25 × 18 / 0.9391`), against 4.0 today.
-  **Not 4.5** — that figure predates the pip-efficiency term and is what the budget would have to be
-  if a pip were worth its face value. Worth considering on its own merits regardless of the round
-  number, since **vanilla's flat budget is 5 pips** (which lands the axis at `0.2609`) and
-  `Faithful` is the vanilla-like preset.
+- **The `Faithful` baseline is `0.2571`, and an exactly-`0.2500` baseline was rejected.** ✅ Settled
+  2026-08-07: `Faithful`'s budget midpoint moved `4.0 → 5.0` to match **vanilla's own flat budget**,
+  which is what the vanilla-like preset should have carried all along. Chasing a round `0.2500`
+  reference instead would have needed a `4.79`-pip midpoint — a number picked to make a readout
+  tidy rather than to match the game. The round number is cosmetic and nothing depends on it.
+  Measured at 1000 pawns, `Faithful`'s realised budget went `3.59 → 4.59` pips mean and its range
+  `1.0–7.0 → 1.0–9.0`, which **is** vanilla's `5 + Clamp(Gaussian(0,1), ±4)` range exactly.
+  **Every preset's band moved by the same +1 pip**, not just `Faithful`'s: raising the reference
+  alone put `Faithful` *above* `Specialist` (a Rule 2 violation) and left `Desperate` 1.3pp inside
+  the envelope. A uniform shift preserves every relative difference and widened the tightest margin
+  from 7.0pp to 10.3pp.
 
 **Two hard gates on any retune:** `envelope_check.py` must still PASS Rule 1 and Rule 2 at
 N = 1, 5, 25, 50; and if any figure moves, `Source/EnvelopeFigures.g.cs` **and** every pasted table
@@ -281,28 +285,28 @@ Pasted, not hand-edited — Rule 6.
 wS=0.8  wP=1.5  pips/18  skill/20  K=8
 Exchange rate R(bias) = (20/18) * (1.5/0.8) * eff(bias)
   R = 1.96 skill levels per passion pip at vanilla bias 0.5   (range 1.77 at bias 0 .. 2.08 at bias 1)
-Faithful baseline @ q=0.50: 0.2231
+Faithful baseline @ q=0.50: 0.2571
 
 profile                     N=1                N=5               N=25               N=50
-Faithful        0.2231   +0.0%     0.2699   +0.0%     0.2978   +0.0%     0.3059   +0.0% 
-Distinct        0.1995  -10.6%     0.2717   +0.7%     0.3244   +8.9%     0.3418  +11.7%   (variance)
-Wildcard        0.2105   -5.6%     0.3000  +11.2%     0.3617  +21.5%     0.3814  +24.7%   (variance)
-Desperate       0.1704  -23.6%     0.2105  -22.0%     0.2381  -20.0%     0.2469  -19.3% 
-Elite           0.2759  +23.7%     0.3167  +17.4%     0.3402  +14.2%     0.3469  +13.4% 
-Sovereign       0.2855  +28.0%     0.3276  +21.4%     0.3512  +17.9%     0.3579  +17.0% 
-Specialist      0.2451   +9.9%     0.2906   +7.7%     0.3177   +6.7%     0.3257   +6.4% 
-Scavenger       0.1892  -15.2%     0.2314  -14.3%     0.2586  -13.2%     0.2669  -12.8% 
+Faithful        0.2571   +0.0%     0.3039   +0.0%     0.3318   +0.0%     0.3400   +0.0% 
+Distinct        0.2350   -8.6%     0.3071   +1.1%     0.3598   +8.4%     0.3772  +11.0%   (variance)
+Wildcard        0.2451   -4.7%     0.3345  +10.1%     0.3962  +19.4%     0.4159  +22.3%   (variance)
+Desperate       0.2036  -20.8%     0.2437  -19.8%     0.2713  -18.2%     0.2801  -17.6% 
+Elite           0.3107  +20.8%     0.3515  +15.7%     0.3750  +13.0%     0.3817  +12.3% 
+Sovereign       0.3205  +24.7%     0.3626  +19.3%     0.3862  +16.4%     0.3929  +15.6% 
+Specialist      0.2796   +8.8%     0.3251   +7.0%     0.3523   +6.2%     0.3602   +6.0% 
+Scavenger       0.2230  -13.3%     0.2651  -12.8%     0.2923  -11.9%     0.3007  -11.6% 
 
 Rule 2 - power-tier ordering at the same N:
-  N=1   Desperate(0.170) < Scavenger(0.189) < Faithful(0.223) < Specialist(0.245) < Elite(0.276) < Sovereign(0.286)   OK
-  N=5   Desperate(0.210) < Scavenger(0.231) < Faithful(0.270) < Specialist(0.291) < Elite(0.317) < Sovereign(0.328)   OK
-  N=25  Desperate(0.238) < Scavenger(0.259) < Faithful(0.298) < Specialist(0.318) < Elite(0.340) < Sovereign(0.351)   OK
-  N=50  Desperate(0.247) < Scavenger(0.267) < Faithful(0.306) < Specialist(0.326) < Elite(0.347) < Sovereign(0.358)   OK
+  N=1   Desperate(0.204) < Scavenger(0.223) < Faithful(0.257) < Specialist(0.280) < Elite(0.311) < Sovereign(0.321)   OK
+  N=5   Desperate(0.244) < Scavenger(0.265) < Faithful(0.304) < Specialist(0.325) < Elite(0.352) < Sovereign(0.363)   OK
+  N=25  Desperate(0.271) < Scavenger(0.292) < Faithful(0.332) < Specialist(0.352) < Elite(0.375) < Sovereign(0.386)   OK
+  N=50  Desperate(0.280) < Scavenger(0.301) < Faithful(0.340) < Specialist(0.360) < Elite(0.382) < Sovereign(0.393)   OK
 
 Tightest envelope margins:
-  Sovereign @ N=1: +28.0%  (7.0pp of headroom)
-  Wildcard @ N=50: +24.7%  (10.3pp of headroom)
-  Elite @ N=1: +23.7%  (11.3pp of headroom)
+  Sovereign @ N=1: +24.7%  (10.3pp of headroom)
+  Wildcard @ N=50: +22.3%  (12.7pp of headroom)
+  Elite @ N=1: +20.8%  (14.2pp of headroom)
 
 Within-pawn dispersion (REPORTED, NOT ENFORCED -- invisible to every % above):
   profile      skillNoise   per-skill sd  vs Faithful  passionNoise   budget sd
@@ -337,7 +341,7 @@ thin slices and add up their contributions. Each slice is counted as very slight
 slice too big. That is the whole defect.
 
 **Why it is harmless.** At `N=1` the slip does not enter the arithmetic at all, so the tightest
-figure in this project (`Sovereign` at N=1, the one with 7.0pp of headroom) is exact. For larger `N`
+figure in this project (`Sovereign` at N=1, the one with 10.3pp of headroom) is exact. For larger `N`
 the error compounds to at most ~0.9% at `N=50`. But `envelope_check.py` and the C# integrator make
 the **identical** slip, and every figure a player ever sees is a comparison against `Faithful`, which
 carries the same slip. It cancels. **Nothing displayed is wrong, and no decision has ever been made
@@ -395,7 +399,7 @@ satisfy for any profile with real dispersion. **The enforceable reading is same-
 > hand-edited). If `git status` shows that file dirty after a run, the shipped figures were stale —
 > commit it.
 >
-> **Why this matters more than it looks:** the tightest preset has **7.0pp** of headroom. A change
+> **Why this matters more than it looks:** the tightest preset has **10.3pp** of headroom. A change
 > that *feels* cosmetic — nudging one preset's `averageQuality` by 0.02, or "tidying" a normalizer —
 > can breach the envelope without touching the preset that breaks, because the weights are shared.
 
