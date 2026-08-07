@@ -1096,11 +1096,29 @@ world pawn pool. Expect one vanilla `Tried to discard <pawn> whose state is -1.`
 harmless, but at 200 pawns it floods the log and each warning is a candidate for GABS's attention
 gate.
 
-> [!NOTE]
-> It samples player-faction colonists, so it exercises the **active profile only** — the faction, race
-> and xenotype override paths are not covered. Nothing in this repo exercises override resolution at
-> runtime; the closest thing is the Python mirror `zzz-Do-Not-Commit/test_race_resolution.py`
-> (19 cases), which validates the rule table but not the C# that implements it.
+> [!IMPORTANT]
+> **Read the `ACTUALLY RESOLVED TO:` line, not the configured one.** It samples player-faction
+> colonists, but that does **not** mean it samples the Active Colony Profile — any override on the
+> pawn's faction, race or xenotype outranks it. Each pawn is passed through
+> `settings.ValuesFor(pawn, request)` (the same call the generation postfix makes) and the resolved
+> labels are tallied:
+>
+> ```
+>   configured active profile: Wildcard   hostile profile: Distinct
+>   ACTUALLY RESOLVED TO: Faithful x50 (100.0%)
+>   ^^ NOT the configured active profile. An override on faction, race or xenotype
+>      outranked it, so these figures are Faithful's.
+> ```
+>
+> A **`MIXED SAMPLE`** warning fires instead when more than one profile resolves — the figures then
+> average across different profiles and are not a valid reading of any of them.
+>
+> This exists because the header previously asserted *"overrides are not exercised here"* and that
+> assertion was false: on 2026-08-07 a `Human` race override at Normal priority outranked the Active
+> Colony Profile, and two consecutive 1000-pawn runs reported `Wildcard` while generating `Faithful`
+> pawns. The figures looked plausible; only cross-checking `Wildcard`'s declared 0–8 trait range
+> against a reported min 2 / max 3 exposed it. **Both the agreement and the override-wins branches
+> are verified in game.** The `MIXED SAMPLE` branch is not — it reads the same tally.
 
 ### 3. Diagnostic dumps
 
