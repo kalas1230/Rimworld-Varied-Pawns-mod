@@ -202,6 +202,131 @@ def make_spread(C):
     return spread
 
 
+QGRID, XGRID, TGRID, GGRID = 256, 512, 65, 65
+
+
+def _phi(z):
+    return 0.5 * (1.0 + math.erf(z / math.sqrt(2.0)))
+
+
+def _tri_nodes():
+    """Triangular density on [-1,1]: f(t) = 1-|t|. Mirrors (Rand.Value+Rand.Value)/2*2-1."""
+    dt = 2.0 / TGRID
+    ts, ws, tot = [], [], 0.0
+    for i in range(TGRID):
+        t = -1.0 + (i + 0.5) * dt
+        w = (1.0 - abs(t)) * dt
+        ts.append(t)
+        ws.append(w)
+        tot += w
+    return ts, [w / tot for w in ws]
+
+
+def _gauss_nodes():
+    """Standard normal truncated to +-4, matching PassionBudgetClampFactor."""
+    lo, hi = -4.0, 4.0
+    dz = (hi - lo) / GGRID
+    zs, ws, tot = [], [], 0.0
+    for i in range(GGRID):
+        z = lo + (i + 0.5) * dz
+        w = math.exp(-0.5 * z * z) * dz
+        zs.append(z)
+        ws.append(w)
+        tot += w
+    return zs, [w / tot for w in ws]
+
+
+def grid_moments(C):
+    """Mean and sd of the composite CONDITIONAL on q. Mirror of DispersionModel.Moments."""
+    wS, wP = C["CompositeSkillWeight"], C["CompositePassionWeight"]
+    base, top, pdiv = (C["AssumedVanillaSkillBaseline"],
+                       C["AssumedMaxSkillLevel"], C["MaxPassionPips"])
+    major, minor = C["MajorPassionCost"], C["MinorPassionCost"]
+    n_skills = int(round(pdiv / major))
+    efficiency = make_efficiency(C)
+    TS, TW = _tri_nodes()
+    ZS, ZW = _gauss_nodes()
+    wsum = wS + wP
+
+    def moments(p, q, with_noise=True):
+        mag = (C["MinMagnitudeFloor"] + (C["MaxMagnitude"] - C["MinMagnitudeFloor"])
+               * p["skillNoise"]) if with_noise else 0.0
+        sig = (C["PassionBudgetSpreadMin"] + (C["PassionBudgetSpreadMax"]
+               - C["PassionBudgetSpreadMin"]) * p["passionNoise"]) if with_noise else 0.0
+
+        baseline = p["skillShiftMin"] + (p["skillShiftMax"] - p["skillShiftMin"]) * q
+        s1 = s2 = 0.0
+        for t, w in zip(TS, TW):
+            lvl = base + baseline + t * mag
+            lvl = 0.0 if lvl < 0.0 else (top if lvl > top else lvl)
+            u = lvl / top
+            s1 += w * u
+            s2 += w * u * u
+        # The pawn's AVERAGE over n_skills iid draws: variance divides by n_skills (CLT).
+        s_var = max(0.0, s2 - s1 * s1) / n_skills
+
+        bmean = p["passionCountMin"] + (p["passionCountMax"] - p["passionCountMin"]) * q
+        capacity = n_skills * (minor + (major - minor) * p["passionMajorBias"])
+        eff = efficiency(p["passionMajorBias"])
+        p1 = p2 = 0.0
+        for z, w in zip(ZS, ZW):
+            b = bmean + z * sig
+            if sig > 0.0 and b < 1.0 and p["passionCountMin"] > 0.0:
+                b = 1.0
+            if b < 0.0:
+                b = 0.0
+            if b > capacity:
+                b = capacity
+            u = b * eff / pdiv
+            if u > 1.0:
+                u = 1.0
+            p1 += w * u
+            p2 += w * u * u
+        p_var = max(0.0, p2 - p1 * p1)
+
+        mu = (wS * s1 + wP * p1) / wsum
+        var = (wS * wS * s_var + wP * wP * p_var) / (wsum * wsum)
+        return mu, math.sqrt(var)
+
+    return moments
+
+
+def make_grid_score(C):
+    """Dispersion-aware Best-of-N. Mirror of DispersionModel.BestOfN."""
+    moments = grid_moments(C)
+
+    def best_of_n(p, with_noise=True):
+        eps, K = C["QualityClampEpsilon"], C["BetaConcentrationK"]
+        m = min(max(p["averageQuality"], eps), 1.0 - eps)
+        a, b = m * K, (1.0 - m) * K
+        lb = math.lgamma(a + b) - math.lgamma(a) - math.lgamma(b)
+        dq = 1.0 / QGRID
+        qs, dens, tot = [], [], 0.0
+        for i in range(QGRID):
+            q = (i + 0.5) * dq
+            d = math.exp(lb + (a - 1.0) * math.log(q) + (b - 1.0) * math.log(1.0 - q))
+            qs.append(q)
+            dens.append(d)
+            tot += d * dq
+        wq = [d * dq / tot for d in dens]
+        ms = [moments(p, q, with_noise) for q in qs]
+
+        dx = 1.0 / XGRID
+        F = []
+        for j in range(XGRID):
+            x = (j + 0.5) * dx
+            acc = 0.0
+            for (mu, sd), w in zip(ms, wq):
+                # sd == 0 is the zero-noise self-check path; Phi would divide by zero.
+                acc += w * (_phi((x - mu) / sd) if sd > 1e-12 else (1.0 if x >= mu else 0.0))
+            F.append(acc)
+
+        # The [0,1] bound IS the Clamp01 on the composite. Do not widen it.
+        return {N: sum((1.0 - F[j] ** N) * dx for j in range(XGRID)) for N in (1, 5, 25, 50)}
+
+    return best_of_n
+
+
 GEN_CONSTANTS = ("CompositeSkillWeight", "CompositePassionWeight", "MaxPassionPips",
                  "AssumedVanillaSkillBaseline", "AssumedMaxSkillLevel", "BetaConcentrationK",
                  "QualityClampEpsilon",
@@ -313,6 +438,26 @@ def main():
     composite = make_composite(C)
     grids = {n: beta_grid(p["averageQuality"], C["BetaConcentrationK"], C["QualityClampEpsilon"])
              for n, p in P.items()}
+
+    grid_score = make_grid_score(C)
+    worst_selfcheck = 0.0
+    for n, p in P.items():
+        got = grid_score(p, with_noise=False)
+        for N in (1, 5, 25, 50):
+            want = expected_best_of_n(p, N, grids[n], composite)
+            worst_selfcheck = max(worst_selfcheck, abs(got[N] - want))
+    print(f"dispersion model self-check (zero noise vs analytic): {worst_selfcheck:.2e}")
+    if worst_selfcheck > 1e-3:
+        print("FAIL: the dispersion model does not reduce to the analytic score at zero noise")
+        return 1
+
+    print("\nDispersion-aware figures (REPORTED, not yet enforced -- see Task 4):")
+    dispersed = {n: grid_score(p, with_noise=True) for n, p in P.items()}
+    for n in P:
+        cells = "  ".join(
+            f"N={N}: {dispersed[n][N] / dispersed['Faithful'][N] * 100.0 - 100.0:+6.1f}%"
+            for N in (1, 5, 25, 50))
+        print(f"  {n:<12} {cells}")
 
     # R carries the pip-efficiency factor, so it is a FUNCTION of the profile's Major bias, not a
     # scalar. Printing the bare weight ratio is what audit P-03 was: a figure that is only true for
