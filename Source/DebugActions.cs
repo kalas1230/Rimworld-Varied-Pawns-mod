@@ -592,6 +592,14 @@ namespace PawnVarianceMod
             var traitCounts = new List<int>();
             var passionPips = new List<float>();
             int majors = 0, minors = 0, nones = 0, passionless = 0;
+            // What each pawn ACTUALLY resolved to, tallied per label. This action used to print
+            // settings.activeProfileId and assert "overrides are not exercised here" -- which is
+            // false the moment any override matches a player-faction colonist. On 2026-08-07 a
+            // Human race override at Normal priority silently outranked the Active Colony Profile
+            // and this action reported "Wildcard" across two consecutive 1000-pawn runs that had
+            // in fact generated Faithful pawns. Nothing flagged it; the numbers were simply the
+            // wrong preset's. Ask the resolver instead of trusting the configured id.
+            var resolved = new Dictionary<string, int>();
 
             // Verbose logging would emit a full trace per pawn — hundreds of them here, which
             // would bury the summary this action exists to produce. Suppressed for the batch and
@@ -620,6 +628,12 @@ namespace PawnVarianceMod
 
                         pawn = PawnGenerator.GeneratePawn(request);
                         if (pawn?.skills == null) continue;
+
+                        // The same call the generation postfix makes, so this reports the profile
+                        // that actually produced the pawn rather than the one the settings name.
+                        string label = settings.ValuesFor(pawn, request)?.profileLabel ?? "(null)";
+                        resolved.TryGetValue(label, out int seen);
+                        resolved[label] = seen + 1;
 
                         float sum = 0f;
                         foreach (SkillRecord r in pawn.skills.skills)
@@ -673,10 +687,26 @@ namespace PawnVarianceMod
             var sb = new StringBuilder();
             sb.AppendLine($"[PawnVarianceMod] Distribution over {perPawnMeans.Count} generated "
                 + $"{PawnKindDefOf.Colonist.defName} pawns");
-            sb.AppendLine($"  active profile: {settings.LabelFor(settings.activeProfileId)}"
+            sb.AppendLine($"  configured active profile: {settings.LabelFor(settings.activeProfileId)}"
                 + $"   hostile profile: {settings.LabelFor(settings.hostileProfileId)}");
-            sb.AppendLine("  (player-faction colonists, so this samples the ACTIVE profile; "
-                + "overrides are not exercised here)");
+
+            // RESOLVED, not configured. Read this line, not the one above it: an override on the
+            // pawn's faction, race or xenotype beats the Active Colony Profile, so these can differ
+            // and the numbers below belong to whatever is named here.
+            var byCount = resolved.OrderByDescending(kv => kv.Value).ToList();
+            sb.AppendLine("  ACTUALLY RESOLVED TO: " + string.Join(", ",
+                byCount.Select(kv => $"{kv.Key} x{kv.Value} "
+                    + $"({100f * kv.Value / perPawnMeans.Count:F1}%)")));
+            if (byCount.Count > 1)
+            {
+                sb.AppendLine("  ^^ MIXED SAMPLE -- the figures below average across DIFFERENT "
+                    + "profiles and are not a valid reading of any one of them.");
+            }
+            else if (byCount.Count == 1 && byCount[0].Key != settings.LabelFor(settings.activeProfileId))
+            {
+                sb.AppendLine($"  ^^ NOT the configured active profile. An override on faction, race "
+                    + $"or xenotype outranked it, so these figures are {byCount[0].Key}'s.");
+            }
             sb.AppendLine();
             sb.AppendLine(Describe("per-skill level", levels.Select(x => (float)x).ToList()));
             sb.AppendLine(Describe("per-pawn mean skill", perPawnMeans));
