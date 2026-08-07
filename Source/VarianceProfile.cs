@@ -106,6 +106,15 @@ namespace PawnVarianceMod
             beta = cachedBeta;
         }
 
+        // Beta has no closed-form median; this is the standard (a-1/3)/(a+b-2/3) approximation,
+        // accurate to ~1e-3 for a,b > 1. Used for derived readouts only, never for scoring.
+        public float MedianQuality()
+        {
+            GetBetaAlphaBeta(out float a, out float b);
+            if (a <= 1f || b <= 1f) return Mathf.Clamp01(a / (a + b));   // fall back to the mean
+            return Mathf.Clamp01((a - 1f / 3f) / (a + b - 2f / 3f));
+        }
+
         public VarianceProfileValues Clone()
         {
             var copy = (VarianceProfileValues)MemberwiseClone();

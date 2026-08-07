@@ -331,19 +331,39 @@ namespace PawnVarianceMod
             Rect noiseLabelRect = noiseRow.LeftPart(0.42f);
             // Vertically centre the label against the range control.
             noiseLabelRect.y += 4f;
-            Widgets.Label(noiseLabelRect, $"Skill noise:  {v.skillSpread:F2}");
-            float sNoiseVal = Widgets.HorizontalSlider(noiseRow.RightPart(0.56f), v.skillSpread, 0f, 1f);
-            if (EditingCustom) v.skillSpread = sNoiseVal;
-            // "within a pawn" vs Passion noise's "between pawns" is the real distinction and is
+            float sMax = Constants.MaxMagnitude / Mathf.Sqrt(6f);
+            Widgets.Label(noiseLabelRect, $"Skill spread:  ±{v.skillSpread:F2} lv");
+            float sSpreadVal = Widgets.HorizontalSlider(noiseRow.RightPart(0.56f),
+                                                        v.skillSpread, 0f, sMax);
+            if (EditingCustom) v.skillSpread = sSpreadVal;
+            // "within a pawn" vs Passion spread's "between pawns" is the real distinction and is
             // easy to lose: this magnitude is drawn independently per skill around one shared
-            // baseline, so it separates a pawn's own skills. Passion noise perturbs a single
+            // baseline, so it separates a pawn's own skills. Passion spread perturbs a single
             // per-pawn budget, so it separates pawns. Keep both halves of that contrast.
             TooltipHandler.TipRegion(noiseRow,
-                "How widely a single pawn's own skills spread apart from each other.\n\n"
+                "How widely a single pawn's own skills spread apart from each other, in skill "
+                + "levels. This is the typical (standard-deviation) spread, not the maximum -- see "
+                + "the line below for the extreme.\n\n"
                 + "Drawn separately for every skill, so it makes one pawn uneven. It does not make "
                 + "pawns differ from each other; the quality roll does that.\n\n"
                 + "Because it is added on top of the Skill shift range, a high value can push "
                 + "individual skills past either handle of that range.");
+
+            Rect skillDerived = listing.GetRect(18f);
+            float skillMag = v.skillSpread * Mathf.Sqrt(6f);
+            float qMed = v.MedianQuality();
+            float bandAtMedian = Mathf.Lerp(v.skillShiftMin, v.skillShiftMax, qMed);
+            float lo = Mathf.Max(0f, Constants.AssumedVanillaSkillBaseline
+                                     + bandAtMedian - v.skillSpread);
+            float hi = Mathf.Min(Constants.AssumedMaxSkillLevel,
+                                 Constants.AssumedVanillaSkillBaseline
+                                 + bandAtMedian + v.skillSpread);
+            Text.Font = GameFont.Tiny;
+            GUI.color = Color.gray;
+            Widgets.Label(skillDerived,
+                $"extreme ±{skillMag:F1} lv per skill · most skills land {lo:F1} – {hi:F1}");
+            GUI.color = Color.white;
+            Text.Font = GameFont.Small;
             listing.Gap(ControlGap);
             LabeledFloatRange(listing, "Skill shift", SkillShiftRangeId,
                 ref v.skillShiftMin, ref v.skillShiftMax, -20f, 20f, ToStringStyle.FloatOne,
@@ -392,15 +412,31 @@ namespace PawnVarianceMod
             Rect passionNoiseLabelRect = leftHalf.LeftPart(0.52f);
             // Vertically centre the label against the range control.
             passionNoiseLabelRect.y += 4f;
-            Widgets.Label(passionNoiseLabelRect, $"Passion noise:  {v.passionSpread:F2}");
-            float pNoiseVal = Widgets.HorizontalSlider(leftHalf.RightPart(0.46f), v.passionSpread, 0f, 1f);
-            if (EditingCustom) v.passionSpread = pNoiseVal;
+            Widgets.Label(passionNoiseLabelRect, $"Passion spread:  ±{v.passionSpread:F2} pips");
+            float pSpreadVal = Widgets.HorizontalSlider(leftHalf.RightPart(0.46f),
+                v.passionSpread, 0f, Constants.PassionBudgetSpreadMax);
+            if (EditingCustom) v.passionSpread = pSpreadVal;
             TooltipHandler.TipRegion(leftHalf,
-                "How much the total passion budget varies between pawns.\n\n"
-                + "The opposite of Skill noise: this one perturbs a single per-pawn budget, so it "
+                "How much the total passion budget varies between pawns, in pips (a Minor passion "
+                + "costs 1, a Major costs 1.5). This is the typical (standard-deviation) spread, not "
+                + "the maximum -- see the line below for the extreme.\n\n"
+                + "The opposite of Skill spread: this one perturbs a single per-pawn budget, so it "
                 + "makes pawns differ from each other rather than making one pawn uneven.\n\n"
                 + "Because it is added on top of the Passion budget range, a high value can push a "
                 + "pawn's budget past either handle of that range.");
+
+            Rect passionDerived = listing.GetRect(18f);
+            float pipExtreme = v.passionSpread * Constants.PassionBudgetClampFactor;
+            float qMedP = v.MedianQuality();
+            float budgetMid = Mathf.Lerp(v.passionCountMin, v.passionCountMax, qMedP);
+            float bLo = Mathf.Max(0f, budgetMid - v.passionSpread);
+            float bHi = budgetMid + v.passionSpread;
+            Text.Font = GameFont.Tiny;
+            GUI.color = Color.gray;
+            Widgets.Label(passionDerived,
+                $"extreme ±{pipExtreme:F1} pips · budget usually {bLo:F1} – {bHi:F1}");
+            GUI.color = Color.white;
+            Text.Font = GameFont.Small;
 
             Rect majorBiasLabelRect = rightHalf.LeftPart(0.52f);
             // Vertically centre the label against the range control.
