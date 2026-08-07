@@ -291,11 +291,39 @@ namespace PawnVarianceMod
                 // averages down by sqrt(12) and is then censored by Clamp(0,20).
                 //
                 // passionMajorBias 0.6 -> 0.35 nerfs through the pip EXCHANGE RATE, not through
-                // spread (R 1.99 -> 1.91; Rule 7 trigger). skillShiftMax 4.2 -> 2.0 lowers the
-                // cherry-picked ceiling. Result: -11.5/+5.1/+14.7/+17.7%, 17.3pp of margin,
-                // dispersion still 1.71x Faithful, still below Faithful at N=1.
-                skillShiftMin = -5.0f,
-                skillShiftMax = 2.0f,
+                // spread (R 1.99 -> 1.91; Rule 7 trigger).
+                //
+                // THE SKILL BAND IS -4.0/4.2 AND IT WAS CHOSEN ON MEASURED PAWNS, NOT ON THE
+                // ENVELOPE. Three bands were built and each dumped at 1000 pawns in game.
+                // Faithful reference: per-skill median 3.0, per-skill sd 3.41-3.43, per-pawn
+                // mean-skill sd ~1.19-1.23.
+                //
+                //   band        envelope worst   N=1      median   per-skill sd   per-pawn sd
+                //   -5.0/2.0        17.7%      -11.5%      0.0         3.05          1.03
+                //   -3.5/1.0        17.3%       -8.3%      1.0         3.11          0.93
+                //   -4.0/4.2        25.9%       -2.6%      2.0         3.51          1.30
+                //
+                // -5.0/2.0 was this plan's own proposal and it FAILED IN GAME: dropping the
+                // ceiling while the floor sat at -5.0 pushed the band under the clamp, so median
+                // and p10 went to 0.0 and per-pawn sd fell to 1.03 -- Wildcard NARROWER than the
+                // vanilla-like baseline, the exact failure "Left-censoring DESTROYS dispersion"
+                // exists to prevent. Every offline number looked fine.
+                //
+                // -3.5/1.0 was the obvious fix and it made things WORSE (per-pawn sd 0.93):
+                // narrowing the band removes quality-driven pawn-to-pawn spread faster than
+                // lifting the floor restores it. Raising the floor is only half the move; the
+                // ceiling has to come up with it. Do not retry either of these.
+                //
+                // -4.0/4.2 is the only band measured wider than Faithful on BOTH spread measures
+                // while clearing the censoring. Floor is inside the "keep skillShiftMin above
+                // roughly -4" rule. It buys that with envelope headroom: 9.1pp, the second
+                // tightest preset after Sovereign's 10.3pp. Owner approved that trade 2026-08-07.
+                //
+                // NEITHER envelope_check.py NOR the dispersion table can see censoring. If you
+                // move this band, dump 1000 pawns and read the MEDIAN and the per-pawn sd. The
+                // envelope passing tells you nothing about the thing this preset is for.
+                skillShiftMin = -4.0f,
+                skillShiftMax = 4.2f,
                 childSkillShiftMin = -5f,
                 childSkillShiftMax = 6f,
                 traitCountMin = 0f,

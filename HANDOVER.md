@@ -48,9 +48,14 @@ Two findings that shape the fix, so a reader does not re-derive them:
   per-skill, so the pawn's average over 12 carries only `variance/12` and is then censored by
   `Clamp(0,20)`. The passion budget is a single per-pawn draw and reaches Best-of-N in full. **The
   retune therefore leaves `Wildcard`'s within-pawn skill chaos completely intact.**
-- **The retune is `passionNoise` 0.85 → 0.50, `passionMajorBias` 0.6 → 0.35, `skillShiftMax`
-  4.2 → 2.0.** Lands at −11.5/+5.1/+14.7/+17.7%, 17.3pp of margin, dispersion still 1.71×
-  `Faithful`, still below `Faithful` at N=1.
+- **The retune is `passionNoise` 0.85 → 0.50, `passionMajorBias` 0.6 → 0.35, and the skill band
+  −5.0/4.2 → −4.0/4.2.** Lands at −2.6/+13.7/+23.0/+25.9%, 9.1pp of margin, still below
+  `Faithful` at N=1.
+  > **The plan proposed `skillShiftMax` 4.2 → 2.0 and that was measured wrong in game** — it
+  > pushed the band under the clamp and left `Wildcard` *narrower* than `Faithful`
+  > (per-pawn skill sd 1.03 against ~1.19). The shipped band was picked from three 1000-pawn
+  > dumps; the comparison table and the reasoning are on the `WildSpread` preset in
+  > `Source/VarianceProfile.cs`. Read it before touching the band.
 
 ### What it also delivers
 
@@ -363,7 +368,7 @@ Faithful baseline @ q=0.50: 0.2571
 profile                     N=1                N=5               N=25               N=50
 Faithful        0.2571   +0.0%     0.3184   +0.0%     0.3589   +0.0%     0.3727   +0.0% 
 Distinct        0.2354   -8.4%     0.3264   +2.5%     0.3924   +9.3%     0.4155  +11.5%   (variance)
-Wildcard        0.2274  -11.5%     0.3347   +5.1%     0.4118  +14.7%     0.4387  +17.7%   (variance)
+Wildcard        0.2505   -2.6%     0.3620  +13.7%     0.4417  +23.0%     0.4693  +25.9%   (variance)
 Desperate       0.2036  -20.8%     0.2588  -18.7%     0.2976  -17.1%     0.3111  -16.5% 
 Elite           0.3107  +20.8%     0.3682  +15.7%     0.4064  +13.2%     0.4194  +12.5% 
 Sovereign       0.3205  +24.7%     0.3793  +19.1%     0.4179  +16.4%     0.4310  +15.7% 
@@ -377,9 +382,9 @@ Rule 2 - power-tier ordering at the same N:
   N=50  Desperate(0.311) < Scavenger(0.333) < Faithful(0.373) < Specialist(0.394) < Elite(0.419) < Sovereign(0.431)   OK
 
 Tightest envelope margins:
+  Wildcard @ N=50: +25.9%  (9.1pp of headroom)
   Sovereign @ N=1: +24.7%  (10.3pp of headroom)
-  Elite @ N=1: +20.8%  (14.2pp of headroom)
-  Desperate @ N=1: -20.8%  (14.2pp of headroom)
+  Wildcard @ N=25: +23.0%  (12.0pp of headroom)
 
 Within-pawn dispersion (REPORTED, NOT ENFORCED -- invisible to every % above):
   profile      skillNoise   per-skill sd  vs Faithful  passionNoise   budget sd
@@ -394,7 +399,7 @@ Within-pawn dispersion (REPORTED, NOT ENFORCED -- invisible to every % above):
   A profile can be flat in the table above and 3x wider here. Wildcard is exactly
   that case: its 2026-08-04 retune narrowed skillShift (the mean band), not skillNoise.
 
-Source/EnvelopeFigures.g.cs: REWRITTEN -- the shipped figures were stale, commit it.
+Source/EnvelopeFigures.g.cs: unchanged.
 
 PASS: Rule 1 and Rule 2 hold at every N for all enforced presets.
 If any number moved, update the table in HANDOVER.md "The skill <-> passion exchange rate".
