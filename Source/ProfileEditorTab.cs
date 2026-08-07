@@ -282,8 +282,15 @@ namespace PawnVarianceMod
             // presets the two figures disagree in SIGN. Wildcard reads -18% typical but +17% at
             // best-of-25: a player picking it for a harder run gets an easier one.
             Rect bestRow = new Rect(rect.x, qualityRow.yMax + 2f, rect.width, 20f);
-            float bestComposite = PawnVarianceSettings.CalculateBestOfNScore(v, Constants.BestOfNSampleCount);
-            float bestBaseline = PawnVarianceSettings.FaithfulBestOfNBaseline(Constants.BestOfNSampleCount);
+            // dragActive keys into the single-slot Best-of-N cache (PawnVarianceSettings): while
+            // the mouse is held every frame's profile values are potentially different, so the
+            // cache would miss every frame anyway -- take the cheap grid rather than pay full
+            // resolution for a value that is about to be replaced next frame regardless.
+            dragActive = Input.GetMouseButton(0);
+            float bestComposite = PawnVarianceSettings.CalculateBestOfNScore(
+                v, Constants.BestOfNSampleCount, lowRes: dragActive);
+            float bestBaseline = PawnVarianceSettings.FaithfulBestOfNBaseline(
+                Constants.BestOfNSampleCount, lowRes: dragActive);
 
             Text.Font = GameFont.Tiny;
             GUI.color = new Color(1f, 1f, 1f, 0.75f);
@@ -498,6 +505,20 @@ namespace PawnVarianceMod
             }
         }
 
+        // CurveSamples was the local `int samples = 70`; curveDensityScratch is reused across
+        // frames because the curve redraws every frame and DispersionModel.OutcomeDensity just
+        // fills it in place.
+        private const int CurveSamples = 70;
+        private static float[] curveDensityScratch;
+
+        // True while the mouse is held anywhere in the editor -- i.e. a slider may be moving. The
+        // single-slot Best-of-N cache now keys on this flag directly (PawnVarianceSettings), so a
+        // live drag always misses at drag resolution and the frame right after release misses
+        // once more at full resolution before settling back into cache hits. Each missed
+        // full-resolution frame pays the full 131k Erf-bearing evaluations, single-threaded in
+        // Mono, which is why drag frames ask for the cheap grid instead.
+        private static bool dragActive;
+
         private static void DrawQualityDistributionCurve(Rect rect, VarianceProfileValues v)
         {
             // Dark container background
@@ -515,29 +536,35 @@ namespace PawnVarianceMod
             DrawVerticalTierMarker(rect, 0.50f); // Center line (Faithful)
             DrawVerticalTierMarker(rect, 0.75f);
 
-            // Sample Beta Distribution and map through Composite Quality Function & Centered Scaling
-            v.GetBetaAlphaBeta(out float alpha, out float beta);
-            int samples = 70;
-            Vector2[] points = new Vector2[samples];
+            // The realised-outcome density (not the raw Beta density mapped through the mean-band
+            // composite): this is what actually responds to the two spread sliders, and shows
+            // left-censoring (skills piling up at zero) as a pile against the left edge.
+            if (curveDensityScratch == null || curveDensityScratch.Length != CurveSamples)
+                curveDensityScratch = new float[CurveSamples];
+            DispersionModel.OutcomeDensity(v, curveDensityScratch);
+
+            Vector2[] points = new Vector2[CurveSamples];
             float maxDensity = 0.001f;
 
-            for (int i = 0; i < samples; i++)
+            for (int i = 0; i < CurveSamples; i++)
             {
-                float q = Mathf.Clamp(0.005f + (i / (float)(samples - 1)) * 0.99f, 0.001f, 0.999f);
-                float density = Mathf.Exp((alpha - 1f) * Mathf.Log(q) + (beta - 1f) * Mathf.Log(1f - q));
-                float rawComposite = CalculateCompositeScore(q, v);
-                float composite = MapToCenteredX(rawComposite);
+                // Realised power on [0,1] -- the same axis OutcomeDensity fills into -- mapped
+                // through the same centering transform the old composite-score x-coordinate used.
+                float power = (i + 0.5f) / CurveSamples;
+                float x = MapToCenteredX(power);
+                float density = curveDensityScratch[i];
 
                 if (density > maxDensity) maxDensity = density;
-                points[i] = new Vector2(composite, density);
+                points[i] = new Vector2(x, density);
             }
 
-            // Sort points by composite score x-coordinate for smooth rendering
+            // Sort points by x-coordinate for smooth rendering
             Array.Sort(points, (a, b) => a.x.CompareTo(b.x));
 
-            // Draw Line Segments
+            // Draw Line Segments. maxDensity floors at 0.001f above, so this can never divide by
+            // zero even if OutcomeDensity ever returned an all-zero array.
             Color curveColor = new Color(0.35f, 0.85f, 1.00f, 0.95f);
-            for (int i = 0; i < samples - 1; i++)
+            for (int i = 0; i < CurveSamples - 1; i++)
             {
                 float x1 = rect.x + points[i].x * rect.width;
                 float y1 = rect.yMax - 3f - (points[i].y / maxDensity) * (rect.height - 6f);

@@ -1480,9 +1480,14 @@ namespace PawnVarianceMod
         private static float cachedBestOfN_passionMin, cachedBestOfN_passionMax, cachedBestOfN_majorBias;
         private static float cachedBestOfN_skillNoiseScalar, cachedBestOfN_passionNoiseScalar;
         private static bool cachedBestOfN_skillOn, cachedBestOfN_passionOn;
+        // Keyed on lowRes too: a live slider drag changes every other key field every frame
+        // anyway (miss rate ~0%), but the flag still has to be part of the key so the FIRST
+        // full-resolution frame after the mouse is released misses naturally instead of
+        // reusing the low-res result computed one frame earlier at the same profile values.
+        private static bool cachedBestOfN_lowRes;
         private static int cachedBestOfN_n = -1;
 
-        public static float CalculateBestOfNScore(VarianceProfileValues v, int n)
+        public static float CalculateBestOfNScore(VarianceProfileValues v, int n, bool lowRes = false)
         {
             if (v == null || n < 1) return 0f;
 
@@ -1496,12 +1501,13 @@ namespace PawnVarianceMod
                 && cachedBestOfN_skillNoiseScalar == v.SkillNoiseScalar
                 && cachedBestOfN_passionNoiseScalar == v.PassionNoiseScalar
                 && cachedBestOfN_skillOn == v.enableSkillVariance
-                && cachedBestOfN_passionOn == v.enablePassionVariance)
+                && cachedBestOfN_passionOn == v.enablePassionVariance
+                && cachedBestOfN_lowRes == lowRes)
             {
                 return cachedBestOfNResult;
             }
 
-            float result = CalculateBestOfNScoreCore(v, n);
+            float result = CalculateBestOfNScoreCore(v, n, lowRes);
 
             cachedBestOfN_n = n;
             cachedBestOfN_avgQ = v.averageQuality;
@@ -1514,14 +1520,15 @@ namespace PawnVarianceMod
             cachedBestOfN_passionNoiseScalar = v.PassionNoiseScalar;
             cachedBestOfN_skillOn = v.enableSkillVariance;
             cachedBestOfN_passionOn = v.enablePassionVariance;
+            cachedBestOfN_lowRes = lowRes;
             cachedBestOfNResult = result;
 
             return result;
         }
 
-        private static float CalculateBestOfNScoreCore(VarianceProfileValues v, int n)
+        private static float CalculateBestOfNScoreCore(VarianceProfileValues v, int n, bool lowRes = false)
         {
-            return DispersionModel.BestOfN(v, n);
+            return DispersionModel.BestOfN(v, n, lowRes);
         }
 
         private static float cachedFaithfulBaseline = -1f;
@@ -1540,13 +1547,16 @@ namespace PawnVarianceMod
         // baseline computed for a different n.
         private static float cachedFaithfulBestOfN = -1f;
         private static int cachedFaithfulBestOfN_n = -1;
+        private static bool cachedFaithfulBestOfN_lowRes;
 
-        public static float FaithfulBestOfNBaseline(int n)
+        public static float FaithfulBestOfNBaseline(int n, bool lowRes = false)
         {
-            if (cachedFaithfulBestOfN_n != n || cachedFaithfulBestOfN < 0f)
+            if (cachedFaithfulBestOfN_n != n || cachedFaithfulBestOfN < 0f
+                || cachedFaithfulBestOfN_lowRes != lowRes)
             {
-                cachedFaithfulBestOfN = CalculateBestOfNScoreCore(VarianceProfiles.VanillaLike.MakeValues(), n);
+                cachedFaithfulBestOfN = CalculateBestOfNScoreCore(VarianceProfiles.VanillaLike.MakeValues(), n, lowRes);
                 cachedFaithfulBestOfN_n = n;
+                cachedFaithfulBestOfN_lowRes = lowRes;
             }
             return cachedFaithfulBestOfN;
         }

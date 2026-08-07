@@ -190,6 +190,7 @@ namespace PawnVarianceMod
             for (int i = 0; i < qNodes; i++) wq[i] = wq[i] * dq / total;
 
             float invSqrt2Pi = 1f / Mathf.Sqrt(2f * Mathf.PI);
+            float dx = 1f / xNodes;
             for (int j = 0; j < xNodes; j++)
             {
                 float x = (j + 0.5f) / xNodes;
@@ -197,7 +198,19 @@ namespace PawnVarianceMod
                 for (int i = 0; i < qNodes; i++)
                 {
                     float sd = sds[i];
-                    if (sd <= 1e-12f) continue;
+                    if (sd <= 1e-12f)
+                    {
+                        // Zero-dispersion q-node (e.g. both spread sliders at 0): there is no
+                        // Gaussian to spread, so the node's whole weight collapses to a point
+                        // mass at mus[i] instead of vanishing. Deposit it only into the one
+                        // x-bin that contains mus[i], scaled by 1/dx so it is expressed as a
+                        // density -- the same units the Gaussian branch below produces -- and
+                        // integrates back to wq[i] once multiplied by dx, so a mixed profile
+                        // (some q-nodes degenerate, some not) still normalises consistently.
+                        int bin = Mathf.Clamp(Mathf.FloorToInt(mus[i] * xNodes), 0, xNodes - 1);
+                        if (j == bin) acc += wq[i] / dx;
+                        continue;
+                    }
                     float z = (x - mus[i]) / sd;
                     acc += wq[i] * invSqrt2Pi / sd * Mathf.Exp(-0.5f * z * z);
                 }
