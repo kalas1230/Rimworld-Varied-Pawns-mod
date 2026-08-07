@@ -15,91 +15,68 @@ do not add migration shims. If a saved config breaks, the fix is to reset it.
 
 # 🔴 OPEN WORK
 
-## 0. THE NEXT THING TO DO — implement dispersion-aware scoring
+## 0. Dispersion-aware scoring — DONE
 
 **Plan:** [`docs/superpowers/plans/2026-08-07-dispersion-aware-scoring.md`](docs/superpowers/plans/2026-08-07-dispersion-aware-scoring.md)
 **Spec:** [`docs/superpowers/specs/2026-08-07-dispersion-aware-scoring-design.md`](docs/superpowers/specs/2026-08-07-dispersion-aware-scoring-design.md)
 
-Status: **design approved, plan written and reviewed, nothing implemented.** Eight tasks, each
-ending in a commit. Execute with `superpowers:subagent-driven-development` or
-`superpowers:executing-plans`.
+Best-of-N's composite score used to read six profile fields (`averageQuality`, `skillShiftMin/Max`,
+`passionCountMin/Max`, `passionMajorBias`) and was blind to noise. Best-of-N is a **maximum**
+statistic and maxima reward dispersion, so a metric blind to spread systematically understated the
+one preset whose noise sits far off the pack — `Wildcard` breached the ±35% envelope (Rule 1) while
+the gate read green, because the gate only proved the two implementations agreed with each other,
+not that either measured the real quantity. The rest of this document now describes the fixed state;
+the two findings that shaped the fix are worth carrying forward because they generalize:
 
-### Why this is first, and not one of the items below
+- **Skill noise is nearly free on the envelope; passion noise is the whole story.** Per-skill noise
+  is drawn 12 times independently and averaged, so it enters Best-of-N diluted by `√12` and then gets
+  censored by `Clamp(0,20)`. The passion budget is a single per-pawn draw and reaches Best-of-N in
+  full undiluted. A retune that only narrows the skill axis leaves the preset's real dispersion
+  almost untouched.
+- **A metric can pass every offline check and still be wrong in the one place that matters: the
+  realised, clamped population.** `envelope_check.py` and the composite score both read
+  `Lerp(skillShiftMin, skillShiftMax, q)` — the mean band — never a rolled, clamped pawn. See
+  "Left-censoring DESTROYS dispersion" below for the mechanism and the retune history it forced.
 
-**`Wildcard` is outside the ±35% envelope — Rule 1 is currently being violated, and the gate cannot
-see it.** `CalculateCompositeScore` reads six fields; `skillNoise` and `passionNoise` are not among
-them. Best-of-N is a **maximum** statistic and maxima reward dispersion, so a metric blind to spread
-systematically understates the one preset whose noise sits far off the pack:
+Model: a deterministic quadrature (`Source/DispersionModel.cs`, mirrored in
+`grid_moments`/`make_grid_score` in `envelope_check.py`) treats the composite as
+`Normal(μ(q), σ(q))` conditional on the Beta-distributed quality roll `q`, and integrates that
+mixture to get `F(x)` for Best-of-N. An independent Monte Carlo ground truth
+(`docs/tools/dispersion_mc.py`) validates the quadrature offline; it cannot ship in the gate itself
+because the gate needs both sides deterministic. See "What the model cannot see" below for where the
+approximation is known to drift.
 
-| `Wildcard` | reported today | measured with dispersion | understated by |
-|---|---|---|---|
-| N=1 | −4.7% | −1.4% | 3.2pp |
-| N=25 | +19.4% | **+44.3%** | 24.9pp |
-| N=50 | +22.3% | **+49.0%** | 26.6pp |
+**In-game verification, run by the controller, not predicted:**
+- `Verify Best-of-N against envelope_check.py` passes **32/32** against the shipped build, worst
+  displayed divergence 0.01pp.
+- A 1000-pawn `Wildcard` dump confirmed the shipped band resolves correctly
+  (`ACTUALLY RESOLVED TO: Wildcard x1000`).
+- The noise-field rename (`skillNoise`/`passionNoise` → `skillSpread`/`passionSpread`, now real
+  units) moved no distribution figure: per-skill sd 3.47 vs 3.51 pre-rename, per-pawn sd 1.26 vs
+  1.30 — run-to-run noise on an unseeded dump, against which a dropped `√6` conversion would have
+  read ~2.4× narrower. It did not.
+- Zeroing both spread fields moved `Best of 25` from +23% to +9%, proving the readout now actually
+  responds to dispersion rather than only to the mean band.
 
-The 32/32 green gate below is therefore **not evidence that the envelope holds.** It proves the two
-implementations agree with each other; both are measuring the wrong quantity. Every other preset
-moves ≤1.5pp, so this is `Wildcard`-specific — but it is a live Rule 1 breach, not a scope limit.
-
-Two findings that shape the fix, so a reader does not re-derive them:
-
-- **`skillNoise` is nearly free on the envelope; `passionNoise` is the whole story.** Taking
-  `Wildcard`'s `skillNoise` from 0.85 to **0.00** moves N=50 by 0.3pp. Skill noise is drawn
-  per-skill, so the pawn's average over 12 carries only `variance/12` and is then censored by
-  `Clamp(0,20)`. The passion budget is a single per-pawn draw and reaches Best-of-N in full. **The
-  retune therefore leaves `Wildcard`'s within-pawn skill chaos completely intact.**
-- **The retune is `passionNoise` 0.85 → 0.50, `passionMajorBias` 0.6 → 0.35, and the skill band
-  −5.0/4.2 → −4.0/4.2.** Lands at −2.6/+13.7/+23.0/+25.9%, 9.1pp of margin, still below
-  `Faithful` at N=1.
-  > **The plan proposed `skillShiftMax` 4.2 → 2.0 and that was measured wrong in game** — it
-  > pushed the band under the clamp and left `Wildcard` *narrower* than `Faithful`
-  > (per-pawn skill sd 1.03 against ~1.19). The shipped band was picked from three 1000-pawn
-  > dumps; the comparison table and the reasoning are on the `WildSpread` preset in
-  > `Source/VarianceProfile.cs`. Read it before touching the band.
-
-### What it also delivers
-
-Noise sliders in real units (levels and pips, replacing the meaningless 0–1 scalars), and a header
-curve that plots the **realised outcome distribution** instead of the Beta density of `q` — so the
-spread sliders visibly move it and left-censoring shows as a pile at the left edge. That censoring
-is invisible everywhere in the UI today and is the failure mode that already cost this project a
-full retune.
-
-### Before you start
-
-- **Rule 8 sign-off is GRANTED** for the five `DONE (REVIEWED)` files the plan names, and for those
-  only. **`Source/SettingsTransfer.cs` is NOT covered** — it is `[x]` reviewed and the plan
-  deliberately does not touch it. **Re-read the code review status list below rather than trusting
-  any summary of it.**
-- **Rule 6 and Rule 7 both fire.** Every pasted table in this document regenerates, including the
-  bias-indexed `R` table under "The skill ↔ passion exchange rate" — `passionMajorBias` 0.6 → 0.35
-  moves `R` 1.99 → 1.91 while touching none of the three global constants. Plan Task 4 Step 6a.
-- **Tasks 2 and 3 of the spec are fused into one commit (plan Task 4), deliberately.** Switching the
-  metric on before the retune puts `Wildcard` at ≈+48%, and `envelope_check.py` exits 1 on any Rule 1
-  breach — that boundary cannot be green by construction. Land the metric first *within* the commit,
-  then tune against it.
-- The plan was reviewed by two Gemini reviewers on 2026-08-07 and revised. The statistical model was
-  found sound; the fixes were a `private static` that would not compile, a nested-loop blowup in
-  `OutcomeDensity`, three `CalculateCompositeScore` call sites where the plan said "wherever", and
-  preset literals that needed six decimals to survive the plan's own no-figure-moved check.
+**Affordance worth knowing:** the profile editor can be opened directly via GABS with
+`rimworld/open_mod_settings`, `modId: mod-settings:kalas.pawnvariance:28ba19877e53c641` — far faster
+than clicking through Options when verifying a UI change in game.
 
 ## 1. Carried items — known, quantified, not fixed
 
-**The Best-of-N gate and the preset retune are both DONE** — under the *current* metric, with the
-caveat in §0 above. The in-game `Varied Pawns > Verify Best-of-N against envelope_check.py` gate
-passes **32/32** against the shipped build: worst displayed divergence 0.26pp against the 0.50pp
-tolerance, worst raw 0.94% against the 3% guard, every `N=1` row bit-identical. `envelope_check.py`
-PASSes Rule 1 and Rule 2 at N = 1, 5, 25, 50 and reports `EnvelopeFigures.g.cs: unchanged`.
+The in-game `Varied Pawns > Verify Best-of-N against envelope_check.py` gate passes **32/32** against
+the shipped build: worst displayed divergence 0.26pp against the 0.50pp tolerance, worst raw 0.94%
+against the 3% guard, every `N=1` row bit-identical. `envelope_check.py` PASSes Rule 1 and Rule 2 at
+N = 1, 5, 25, 50 and reports `EnvelopeFigures.g.cs: unchanged`.
 
-Neither is a standing task. **Re-running both after any scoring change is Rule 6**, and the tuning
-constraints that used to sit here have moved to "Tuning constraints" below — they govern every future
-retune, not the finished one.
+**Re-running both after any scoring change is Rule 6**, and the tuning constraints that used to sit
+here have moved to "Tuning constraints" below — they govern every future retune.
 
 | Item | Why it is carried |
 |---|---|
 | **The shared right-edge CDF is first-order accurate.** Both `envelope_check.py`'s `beta_grid` and `CalculateBestOfNScoreCore` do `run += v * dq` *before* appending. Error ∝ `dq`, so 1024 and 20000 nodes differ by up to ~0.9% at N=50. | Both sides have it, so they agree with each other and **nothing on screen is wrong** (the gap cancels in the ratio to `Faithful`). **DECIDED 2026-08-07: carried permanently — do not raise it again.** See "Why the integration slip is carried" below for the argument and for what fixing it would cost. |
 | **Are Milians reachable by race override?** `Milian_Race` does not appear in the Add menu: its only def, `Milian_Base`, is `Abstract="True"` with zero concrete children, so no `PawnKindDef` spawns it and the traversal filter drops it. The filter is behaving as specified. | If Milians are spawned in code rather than through a `PawnKindDef`, they are unreachable by race override and the traversal needs a second source. Owner question. |
-| **Init-vs-`Scribe` default mismatch on skill and trait fields** — `skillNoise` 1.0 init vs 0.2 Scribe, `skillShift` −4/6 vs −3/3, `traitCount` 1/6 vs 2/3 on `VarianceProfileValues`. | Unreachable either way (every creation path passes explicit values), but they read as live defaults that contradict `Faithful`. The passion fields were aligned; the rest were left alone as out of scope. **The noise half of this resolves in §0's plan (Task 5 Step 4), which rescales both pairs — do not fix it separately first.** The `skillShift` and `traitCount` halves stay carried. |
+| **Init-vs-`Scribe` default mismatch on skill and trait fields** — `skillShift` −4/6 vs −3/3, `traitCount` 1/6 vs 2/3 on `VarianceProfileValues`. Also `skillSpread`/`passionSpread`: the field initialiser is `skillSpread = 0.857321f` (rescaled `Distinct`) while the `Scribe` default is `0.489898f` (rescaled `Faithful`), and the in-file comment on the fields still claims all four defaults match `Faithful` — they do not, the noise pair was rescaled faithfully by the dispersion-aware-scoring work but left mismatched, same as before. | Unreachable either way (every creation path passes explicit values), but they read as live defaults that contradict `Faithful`, and the comment overstates what was fixed. **Still harmless dead code — correct the claim, do not chase the mismatch.** |
 | **`CopyFrom` does not validate imported profile ids** (T5-M1, Minor). | Belongs with the load-validation cluster, not worth fixing piecemeal. |
 | **Single-slot cache thrashing in `CalculateBestOfNScore`** (Minor). | UI-only path. |
 | Five further Minor findings | In `.superpowers/sdd/progress.md`. |
@@ -116,7 +93,7 @@ retune, not the finished one.
 Settled properties of the code that a retune has to work with. **Tuning without knowing these will
 fight the implementation** — each one has bitten at least once.
 
-- **No downside floor on skills, and do not add one.** `skillShiftMin` and `skillNoise` are the
+- **No downside floor on skills, and do not add one.** `skillShiftMin` and `skillSpread` are the
   downside controls. See "Why a clamp is the wrong tool" below.
 - **Noise floors are `0f`.** Both noise constants are Lerp *low endpoints*, so dropping them
   rescaled dispersion at every setting, hardest at the quiet end (`Faithful` −25%). Read the
@@ -154,12 +131,16 @@ in this document must be regenerated together. The tool prints
 # 🔒 MANDATORY ARCHITECTURAL RULES
 
 1. **Mean-power envelope (±35%)** — every preset MUST stay within ±35% of `Faithful` **at every
-   batch size** (N = 1, 5, 25, 50), not only at Best-of-1. Read "mean-power" as a scope limit, not
-   decoration: the rule does not constrain dispersion at all.
-   > **`Wildcard` currently breaches this and the gate cannot see it — see §0.** The rule itself is
-   > unchanged; what changes is that the metric enforcing it becomes dispersion-aware, at which
-   > point "mean-power" stops being an accurate name for the scope limit. Do not weaken the rule to
-   > accommodate a variance preset; §0's plan retunes the preset instead.
+   batch size** (N = 1, 5, 25, 50), not only at Best-of-1. "Mean-power" is a legacy name for the
+   scope limit: the enforcing metric is now dispersion-aware (see §0), so the rule also bounds the
+   part of a preset's power that comes from spread, not literally just its mean. It still does not
+   constrain dispersion *as its own axis* — there is no Rule 1 equivalent for spread, see "The
+   dispersion axis" below.
+   > **`Wildcard` breached this once, at −20.8%/+22.3% under the old mean-only metric measuring
+   > +49.0% at N=50 with dispersion accounted for — the gate could not see the breach because it
+   > read a metric blind to the axis that caused it.** Fixed by making the metric dispersion-aware
+   > and retuning the preset against it (§0). Do not weaken the rule to accommodate a variance
+   > preset if this recurs on a future profile — retune the preset instead.
 2. **Monotonic power-tier ordering at any N** —
    `Desperate < Scavenger < Faithful < Specialist < Elite < Sovereign`.
    **`Distinct` and `Wildcard` are exempt** — they are *variance* presets, not power tiers. They sit
@@ -387,17 +368,17 @@ Tightest envelope margins:
   Wildcard @ N=25: +23.0%  (12.0pp of headroom)
 
 Within-pawn dispersion (REPORTED, NOT ENFORCED -- invisible to every % above):
-  profile      skillNoise   per-skill sd  vs Faithful  passionNoise   budget sd
-  Faithful           0.20        0.49 lv        1.00x          0.25     1.00 pips
-  Distinct           0.35        0.86 lv        1.75x          0.35     1.40 pips
-  Wildcard           0.85        2.08 lv        4.25x          0.50     2.00 pips
-  Desperate          0.25        0.61 lv        1.25x          0.25     1.00 pips
-  Elite              0.22        0.54 lv        1.10x          0.25     1.00 pips
-  Sovereign          0.24        0.59 lv        1.20x          0.25     1.00 pips
-  Specialist         0.25        0.61 lv        1.25x          0.25     1.00 pips
-  Scavenger          0.25        0.61 lv        1.25x          0.25     1.00 pips
+  profile     skillSpread   per-skill sd  vs Faithful passionSpread   budget sd
+  Faithful           0.49        0.49 lv        1.00x          1.00     1.00 pips
+  Distinct           0.86        0.86 lv        1.75x          1.40     1.40 pips
+  Wildcard           2.08        2.08 lv        4.25x          2.00     2.00 pips
+  Desperate          0.61        0.61 lv        1.25x          1.00     1.00 pips
+  Elite              0.54        0.54 lv        1.10x          1.00     1.00 pips
+  Sovereign          0.59        0.59 lv        1.20x          1.00     1.00 pips
+  Specialist         0.61        0.61 lv        1.25x          1.00     1.00 pips
+  Scavenger          0.61        0.61 lv        1.25x          1.00     1.00 pips
   A profile can be flat in the table above and 3x wider here. Wildcard is exactly
-  that case: its 2026-08-04 retune narrowed skillShift (the mean band), not skillNoise.
+  that case: its 2026-08-04 retune narrowed skillShift (the mean band), not skillSpread.
 
 Source/EnvelopeFigures.g.cs: unchanged.
 
@@ -469,11 +450,11 @@ satisfy for any profile with real dispersion. **The enforceable reading is same-
 >   `SkillRecord.LearnRateFactor` — which is exactly the drift the in-game check exists to catch,
 >   since nothing else here would notice.
 > - any preset's `averageQuality`, `skillShiftMin/Max`, `passionCountMin/Max`, `passionMajorBias`
->
-> **`skillNoise` and `passionNoise` are deliberately absent, and §0's plan adds them (Task 8 Step 3).**
-> They are exempt today *only* because the composite cannot read them — which is precisely the
-> defect §0 fixes. Once plan Task 4 lands, changing either one moves every figure, and omitting them
-> from this list would recreate the same silent-staleness trap Rule 7 was corrected to close.
+> - **`skillSpread`, `passionSpread`** — now scoring inputs, not just reported dispersion. This is
+>   the single most important line in this list: they used to be exempt precisely because the
+>   composite could not read them, which is the defect the dispersion-aware scoring work fixed.
+>   Changing either one now moves every figure, and omitting them from this list would recreate the
+>   same silent-staleness trap Rule 7 was corrected to close.
 >
 > The tool **parses `Source/Constants.cs` and `Source/VarianceProfile.cs` directly** rather than
 > hardcoding values, so it cannot drift from what ships. Deterministic integration, not sampling.
@@ -482,50 +463,65 @@ satisfy for any profile with real dispersion. **The enforceable reading is same-
 > hand-edited). If `git status` shows that file dirty after a run, the shipped figures were stale —
 > commit it.
 >
-> **Why this matters more than it looks:** the tightest preset has **10.3pp** of headroom. A change
-> that *feels* cosmetic — nudging one preset's `averageQuality` by 0.02, or "tidying" a normalizer —
-> can breach the envelope without touching the preset that breaks, because the weights are shared.
+> **Why this matters more than it looks:** the tightest preset has **9.1pp** of headroom
+> (`Wildcard` @ N=50 — `Sovereign` @ N=1 is second-tightest at 10.3pp). A change that *feels*
+> cosmetic — nudging one preset's `averageQuality` by 0.02, or "tidying" a normalizer — can breach
+> the envelope without touching the preset that breaks, because the weights are shared.
 
-## What the envelope does NOT measure — `skillNoise` and `passionNoise`
+## The dispersion axis — `skillSpread` and `passionSpread` — and what the model still cannot see
 
-> [!IMPORTANT]
-> **This section describes the state §0's plan exists to end, and it is scheduled for rewrite
-> (plan Task 8 Step 1).** Read it for the *mechanism* — why per-skill noise averages down by `√12`,
-> and why you cannot read dispersion out of the mean band. Those parts stay true and stay in the
-> document. The claim that **no percentage responds to the noise scalars** stops being true the
-> moment plan Task 4 lands, and the two fields become scoring inputs on Rule 6's
-> recalculate-trigger list.
+**The envelope is now dispersion-aware.** Both `CalculateCompositeScore`/`DispersionModel` and
+`envelope_check.py`'s `grid_moments` treat the composite as `Normal(μ(q), σ(q))` conditional on the
+Beta-distributed quality roll `q`, where `σ(q)` is built from `skillSpread` and `passionSpread`, and
+integrate that mixture into Best-of-N. Every percentage in the envelope table now responds to both
+fields — this used to be false and was the whole reason `Wildcard` breached Rule 1 invisibly; see
+§0 above for that history.
 
-**The model treats a pawn as fully determined by its quality roll `q`.** `CalculateCompositeScore`
-reads exactly six fields: `averageQuality`, `skillShiftMin/Max`, `passionCountMin/Max`,
-`passionMajorBias`. **`skillNoise` and `passionNoise` are not inputs**, and no percentage in the
-envelope table responds to them.
+**The mechanism worth keeping in mind when reading the numbers, because it still shapes them:**
+`skillSpread` drives the per-skill excursion in `SkillVarianceApplier.Shift` —
+`magnitude = Lerp(0, 6, SkillNoiseScalar)`, so up to **±6 levels per skill**
+(`Constants.MaxMagnitude`) — but it is drawn **12 times independently, once per skill**, and the
+pawn's Best-of-N-relevant quantity is the *average* over those 12 draws. Averaging divides the
+variance by 12, so per-skill spread reaches the composite diluted by `√12` — a `skillSpread` swing
+that looks dramatic per-skill barely moves the pawn's aggregate. `passionSpread` is a single
+per-pawn draw with no such averaging, so it reaches Best-of-N in full. **This is why the Wildcard
+retune spent its budget on `passionSpread`, not `skillSpread`** — moving `skillSpread` to 0 shifts
+N=50 by only 0.3pp.
 
-That is a real gap. `skillNoise` drives the per-skill excursion in `SkillVarianceApplier.Shift` —
-`magnitude = Lerp(0, 6, skillNoise)`, so up to **±6 levels per skill** (`Constants.MaxMagnitude`).
-Two profiles with identical envelope percentages can produce visibly different populations:
+**Do not read dispersion out of the mean band.** `skillShiftMin/Max` set where a profile's *average*
+skill sits; `skillSpread` sets how far an individual pawn strays from that average. "Narrowing a
+profile's dispersion" by narrowing `skillShift` alone changes the mean band, not the noise — and,
+as "Left-censoring DESTROYS dispersion" below documents in detail, narrowing the band from the wrong
+side (the floor, against the `Clamp(0,20)` wall) can *reduce* realised spread while every offline
+number suggests the opposite.
 
-| Profile | `skillNoise` | per-skill sd | vs `Faithful` |
-|---|---|---|---|
-| Faithful | 0.20 | 0.49 levels | 1.00× |
-| Distinct | 0.35 | 0.86 levels | 1.75× |
-| **Wildcard** | **0.85** | **2.08 levels** | **4.25×** |
+**Reported, not enforced.** `envelope_check.py`'s dispersion table (per-skill sd, budget sd) is
+diagnostic, not a Rule 1 axis — there is no percentage-envelope equivalent for spread and none is
+wanted. Observed (as opposed to derived) dispersion comes from the `Roll pawns and dump distribution`
+debug action, which is the only place censoring against the `Clamp(0,20)` floor is visible at all.
 
-(`sd = magnitude/√6`; the `TriangularSample()*2−1` term is triangular on [−1,1], variance 1/6.)
+### What the model cannot see — three limits, read before trusting a custom profile
 
-**Two consequences:**
-
-1. **Do not cite the envelope as a general safety guarantee.** It bounds *mean power*. A profile can
-   pass Rule 1 at every N and still be far swingier than `Faithful`.
-2. **"Narrowing a profile's dispersion" usually means narrowing `skillShift`, which is the mean
-   band, not the noise.** The Wildcard retune did exactly this: it moved `skillShiftMin/Max` and
-   left `skillNoise` at `0.85`. The envelope figures improved; actual dispersion did not move.
-
-These figures are printed by `envelope_check.py` as a dispersion table but are **reported, not
-enforced** — deliberately. There is no Rule 1 equivalent for spread and none is wanted: the point is
-to make the axis visible to whoever reaches for `skillNoise`, not to add another architectural rule.
-Observed (as opposed to derived) dispersion comes from the `Roll pawns and dump distribution` debug
-action.
+1. **The `Normal(μ(q), σ(q))` approximation degrades at high `passionSpread`.** Validated against
+   `docs/tools/dispersion_mc.py`'s independent Monte Carlo: **0.08pp** of drift at the shipped
+   `Wildcard` value, but **1.5pp** at `PassionNoiseScalar` 0.85 (Wildcard's pre-retune spread,
+   before `passionSpread` moved 3.4 → 2.0 pips) — heavy `±4σ` clamping and floor-forcing pull the
+   real distribution away from a clean Gaussian. **A custom profile with a very high `passionSpread`
+   will drift from what pawns actually roll while `Verify Best-of-N` stays green**, because the
+   in-game gate only checks that the C# quadrature agrees with the Python quadrature — both share
+   the identical approximation, so they agree with each other to ~0.000pp while both sit up to
+   ~1.5pp from reality at the extreme.
+2. **The Monte Carlo is an independent numerical *method*, not independent *verification*.**
+   `dispersion_mc.py`, `DispersionModel.Moments` and `grid_moments` all substitute a flat
+   `Constants.AssumedVanillaSkillBaseline` for every skill's real vanilla level rather than each
+   skill's actual generated value — a shared modeling assumption, not a coincidence of
+   implementation. Agreement between the Monte Carlo and the quadrature rules out an *integration*
+   bug; it proves nothing about whether the flat-baseline assumption itself is accurate.
+3. **`DispersionModel.OutcomeDensity` (the header curve) has no Python counterpart at all**, unlike
+   `Moments` and `BestOfN`, which are both mirrored in `envelope_check.py` and cross-checked by the
+   in-game gate. It is UI-only — nothing consumes it outside `ProfileEditorTab.cs` — but that also
+   means nothing cross-checks it. It sits outside the "two implementations of one integral" contract
+   the 0.5pp gate enforces; a bug there would not be caught by any existing verification.
 
 **The scope limit is stated to the player too.** The Row 3 power readout's tooltip says the figure
 is *"Based on starting skill levels and the passion budget only. It does not include traits, and it
@@ -725,8 +721,8 @@ was wrong, both of which apply to *any* variant of the idea:
 > 0**, which is itself an endpoint pile; a second clamp above it would have created a second pile.
 
 **Stated honestly:** on a low-quality `Wildcard` pawn, many skills pin at 0. That is a tuning
-outcome, not a safety hole, and the levers are `skillShiftMin` and `skillNoise`. If pinning is judged
-too aggressive, **narrow the band or the noise — do not add a clamp.**
+outcome, not a safety hole, and the levers are `skillShiftMin` and `skillSpread`. If pinning is
+judged too aggressive, **narrow the band or the noise — do not add a clamp.**
 
 ## ⚠️ Left-censoring: a band below the floor DESTROYS dispersion, it does not create it
 
@@ -762,9 +758,9 @@ arriving through the band instead of through a new clamp.
 > same. Neither models the per-pawn `Clamp(0, 20)`, because neither generates a pawn. `Wildcard`
 > passes Rule 1 comfortably at −20.8% while its actual population is censored. **A preset can be
 > inside the envelope, inside the dispersion table, and still be broken in the only place it
-> matters.** The dispersion table's `per-skill sd` column is derived from `skillNoise` alone and is
+> matters.** The dispersion table's `per-skill sd` column is derived from `skillSpread` alone and is
 > equally blind — it reports `2.08 lv` for `Wildcard`, four times `Faithful`, which is true of the
-> *intended* noise and false of the delivered population.
+> *intended* noise and false of the delivered population once the band censors it.
 
 **Rules that follow — apply these before moving any `skillShiftMin`:**
 
@@ -772,49 +768,49 @@ arriving through the band instead of through a new clamp.
    base is ~3.4, so a band floor much past that guarantees a pile at zero rather than a wide preset.
 2. **Widening a band downward past the floor REDUCES dispersion.** It looks like more variance in
    every number this project computes offline and delivers less in game. If the goal is spread, the
-   levers are `skillNoise` and the *upper* handle.
+   levers are `skillSpread` and the *upper* handle.
 3. **Never judge a skill band from `envelope_check.py` alone.** Run
    `Roll pawns and dump distribution` and read the **median** and the per-pawn sd, not the mean. A
    median of 0 means the band is under the floor.
-4. This is a property of the *band*, not of noise. `Wildcard`'s `skillNoise = 0.85` is not the cause
-   and narrowing it would not fix it.
+4. This is a property of the *band*, not of noise. `Wildcard`'s `skillSpread` is not the cause and
+   narrowing it would not fix it.
 
-### The fix, and what it did NOT fix
+### The fix, and the trap that recurred through the CEILING this time
 
-`skillShiftMin` went `−8.7 → −5.0` on 2026-08-07. Re-measured at 1000 pawns:
+`skillShiftMin` first went `−8.7 → −5.0` (ceiling still `4.2`), which cleared most but not all of the
+censoring — median rose from `0.0` to `1.0`, but per-pawn skill sd read `1.21`–`1.31` against
+`Faithful`'s `1.19`–`1.23` across two 1000-pawn runs, comparable at best, not decisively wider. The
+section's own rule 3 was the tool that caught it: read the median and the per-pawn sd, not the
+envelope.
 
-| `Wildcard` | at `−8.7` | at **`−5.0`** | `Faithful` |
-|---|---|---|---|
-| per-skill median | 0.0 | **1.0** | 3.0 |
-| per-skill mean | 1.42 | **2.52** | 3.37 |
-| per-skill p90 | 5.0 | **8.0** | 8.0 |
-| per-skill sd | 2.66 | **3.31** | 3.41 |
-| per-pawn mean skill sd | 1.10 | **1.21** | 1.23 |
-| bottom histogram bucket | 249 pawns | **22** | 18 |
+**The trap then recurred, even with this section already written, and arrived through the ceiling,
+not the floor.** The dispersion-aware scoring work's own first retune proposal for `Wildcard` — part
+of tightening the preset back inside the ±35% envelope once the metric could see dispersion — lowered
+`skillShiftMax` (the *ceiling*) rather than the floor. **That failed in game for exactly this
+section's reason, from the other wall**: dropping the ceiling while the floor still sat at `−5.0`
+narrowed the band enough that most rolls landed near zero again, and per-skill median and p10 both
+returned to `0.0`. A second, less aggressive ceiling change was tried and measured *worse*, not
+better — narrowing a band removes quality-driven pawn-to-pawn spread faster than raising the floor
+alone restores it, so the floor and ceiling both have to move together. Only the band that raised
+**both** the floor (to `−4.0`) and the ceiling (kept at `4.2`, i.e. widened relative to the failed
+proposals) cleared the censoring while landing wider than `Faithful` on both the per-skill and
+per-pawn spread measures — the only one of three measured bands to do so.
 
-`−5.0` rather than `−4.0` because `−4.0` lifts `Wildcard` to `−0.7%` at N=1, which destroys the
-documented property that a variance preset sits *below* `Faithful` at N=1 and crosses as N rises.
+**The full three-band comparison table, the exact figures, and the reasoning are on the `WildSpread`
+preset in `Source/VarianceProfile.cs` — read it before touching this band again rather than
+re-deriving it or trusting a summary, including this one.** In outline: the shipped band is
+`skillShiftMin = −4.0`, `skillShiftMax = 4.2`, measured at 1000 pawns with per-skill median `2.0`,
+per-skill sd `3.51` (vs `Faithful`'s `3.41`–`3.43`, now genuinely above), per-pawn mean-skill sd
+`1.30` (vs `Faithful`'s `1.19`–`1.23`, also genuinely above). It buys that with envelope headroom —
+`Wildcard` is now the **single tightest preset** in the mod at 9.1pp, ahead of `Sovereign`'s 10.3pp —
+and it still sits below `Faithful` at N=1 (`−2.6%`), preserving the documented crossing property,
+because the passion axis was retuned in the same pass (`passionSpread` 3.4 → 2.0 pips,
+`passionMajorBias` 0.6 → 0.35) rather than the skill band alone having to carry that constraint.
 
-> [!IMPORTANT]
-> **The residual is real: `Wildcard` is roughly COMPARABLE to `Faithful` in skill spread, not
-> decisively wider.** Per-skill sd `3.31` against `Faithful`'s `3.41`–`3.43` — still *below*. If the
-> noise were landing cleanly on top of vanilla's own spread you would expect roughly
-> `sqrt(3.43² + 2.08²) ≈ 4.0`. It reads 3.31, so **censoring is still eating dispersion** — `p10` is
-> still `0.0`, i.e. the bottom decile of quality still lands under the floor.
->
-> On the *per-pawn* measure the final shipped build reads `1.31` against `Faithful`'s `1.19`, i.e.
-> genuinely wider. **Do not lean on that margin.** Two runs at 1000 pawns with an identical skill
-> band gave `1.21` and `1.31`, which brackets `Faithful` — run-to-run variation is the same size as
-> the effect. If this number ever matters, sample more than 1000 pawns before believing it.
->
-> Two levers remain, and they are a genuine trade, not an oversight:
-> - **Raise the floor further** (`−4.0`): fully clears the censoring, costs the below-`Faithful`-at-N=1
->   property.
-> - **Raise `skillNoise` above 0.85**: costs **nothing** on the envelope, since the composite does not
->   read it — but `Constants.MaxMagnitude = 6` caps the gain (at `1.0`, per-skill sd goes 2.08 → 2.45).
->
-> Left as an owner decision. **Do not "fix" it by lowering `skillShiftMin` again** — that is the move
-> this entire section exists to prevent.
+**Do not "fix" this by lowering `skillShiftMin` again**, and do not assume narrowing the ceiling is
+safe just because it looks like the smaller move — that assumption is exactly what failed. **Neither
+`envelope_check.py` nor the dispersion table can see censoring.** If you move this band, dump 1000
+pawns and read the median and the per-pawn sd, on both the floor and the ceiling side.
 
 ## Why the passion budget is not clamped to capacity
 
@@ -1334,40 +1330,64 @@ lines dirty in the working tree.
 Files marked `DONE (REVIEWED)` are protected by Rule 8 — no modification without explicit permission.
 
 > [!IMPORTANT]
-> **This list is the authority; §0's plan and its spec are not.** An earlier draft of that spec
-> described `Source/SettingsTransfer.cs` as unreviewed — it is `[x]` below and therefore gated, and
-> the Rule 8 sign-off does **not** cover it. `Source/PassionVarianceApplier.cs` also flipped to `[x]`
-> part-way through that design session. **Re-read the entries here before touching anything, rather
-> than trusting any summary of them, including this one.** Six files land edits under §0 and will
-> need re-review afterwards: `VarianceProfile.cs`, `PawnVarianceSettings.cs`, `ProfileEditorTab.cs`,
-> `SkillVarianceApplier.cs`, `PassionVarianceApplier.cs`, `DebugActions.cs`.
+> **This list is the authority; plan and spec documents are not.** An earlier draft of the
+> dispersion-aware-scoring spec described `Source/SettingsTransfer.cs` as unreviewed — it is `[x]`
+> below and therefore gated, and **it was NOT touched by that work and keeps its reviewed status
+> unchanged.** `Source/PassionVarianceApplier.cs` also flipped to `[x]` part-way through an earlier
+> design session. **Re-read the entries here before touching anything, rather than trusting any
+> summary of them, including this one.**
+>
+> **Needs re-review** after the dispersion-aware scoring work: `Source/VarianceProfile.cs`,
+> `Source/PawnVarianceSettings.cs`, `Source/ProfileEditorTab.cs` — all previously `DONE (REVIEWED)`,
+> all edited to add the dispersion model, real-unit sliders and the outcome-density curve.
+> `Source/DebugActions.cs` was also edited (Best-of-N verifier, distribution dump) but was already
+> unreviewed. `Source/SkillVarianceApplier.cs` and `Source/PassionVarianceApplier.cs` each took a
+> one-line accessor change only (`skillNoise`/`passionNoise` → `SkillNoiseScalar`/
+> `PassionNoiseScalar`) — flagged below rather than flipped, since the change is a rename at the call
+> site, not new logic. **Two new files ship unreviewed**: `Source/DispersionModel.cs` and
+> `Source/MathUtil.cs`.
 
-- [x] `Source/VarianceProfile.cs` — legacy enum/comment cleanup, `IExposable` parameterless
-  `ExposeData()`, `distributionParamsDirty` cache, `MakeValues()`.
-- [x] `Source/PawnVarianceSettings.cs` — Overrides tab UX safety, button colors & dialogs, dynamic
-  scroll view height, explicit Normal priority handling, percentage readout vs Faithful.
-- [x] `Source/ProfileEditorTab.cs` — layout redesign, partial class, pinned header, delete cascade,
-  Best-of-25 readout math, Beta curve plotting.
+- [ ] `Source/VarianceProfile.cs` — **NEEDS RE-REVIEW.** Was: legacy enum/comment cleanup,
+  `IExposable` parameterless `ExposeData()`, `distributionParamsDirty` cache, `MakeValues()`. Added:
+  `skillSpread`/`passionSpread` real-unit fields and their `SkillNoiseScalar`/`PassionNoiseScalar`
+  accessors, the retuned `WildSpread` preset.
+- [ ] `Source/PawnVarianceSettings.cs` — **NEEDS RE-REVIEW.** Was: Overrides tab UX safety, button
+  colors & dialogs, dynamic scroll view height, explicit Normal priority handling, percentage readout
+  vs Faithful. Added: `PassionPipEfficiency`, dispersion-aware readout wiring.
+- [ ] `Source/ProfileEditorTab.cs` — **NEEDS RE-REVIEW.** Was: layout redesign, partial class, pinned
+  header, delete cascade, Best-of-25 readout math, Beta curve plotting. Added: levels/pips sliders
+  with derived readouts, the realised-outcome-distribution curve replacing the Beta density.
 - [x] `Source/Dialog_RenameProfile.cs` — rename modal subclassing `Dialog_Rename<CustomProfile>`.
 - [x] `Source/SettingsTransfer.cs` — Scribe export/import, `ForceStop` safety, `XmlDocument`
-  pre-validation, atomic `CopyFrom` swap.
+  pre-validation, atomic `CopyFrom` swap. **Not touched by the dispersion-aware scoring work.**
 - [x] `Source/QualityRoller.cs` — `Beta(a,b)` via Gamma variates (Marsaglia-Tsang, Stuart's theorem,
   Box-Muller), 0/0 NaN underflow guard.
 - [x] `Source/SkillVarianceApplier.cs` — baseline lerp + triangular noise, generation vs age-13 split,
-  Biotech gene aptitude fix reading `levelInt` directly.
+  Biotech gene aptitude fix reading `levelInt` directly. **One-line accessor change** (reads
+  `SkillNoiseScalar` instead of `skillNoise`) — not flipped, but re-check the line if you touch this
+  file for anything else.
 - [x] `Source/TraitProtection.cs` — Biotech gene DNA protection, `ScenForced`, multi-source forced
   trait capture, relationship-aware sexuality protection.
 - [x] `Source/TraitVarianceApplier.cs` — in-place reconciliation, safe `RemoveTrait` cleanup, 4-source forced trait degree fallback (`FirstValidDegree`).
 - [x] `Source/TraitAgeCap.cs` — dynamic `GrowthUtility.GrowthMomentAges` milestone lookup, adult uncapped sentinel.
 - [x] `Source/TraitTrace.cs` — single-buffer atomic logging per pawn, degree and age cap formatting.
-- [x] `Source/PassionVarianceApplier.cs` — 2-pass budget/level walk, forced trait queue jump, Biotech gene floor restoration & stale preAdd fix.
+- [x] `Source/PassionVarianceApplier.cs` — 2-pass budget/level walk, forced trait queue jump, Biotech
+  gene floor restoration & stale preAdd fix. **One-line accessor change** (reads
+  `PassionNoiseScalar` instead of `passionNoise`) — not flipped, same caveat as
+  `SkillVarianceApplier.cs`.
 - [ ] `Source/GrowUpVariance.cs` — **NEXT UP**
 - [ ] `Source/GrowthUpPatch.cs`
 - [ ] `Source/GrowUpPendingComponent.cs`
 - [ ] `Source/HarmonyPatches.cs`
 - [ ] `Source/PawnVarianceMod.cs`
 - [ ] `Source/Constants.cs`
-- [ ] `Source/DebugActions.cs` — dev menu actions, Best-of-N verifier UI/action, pawn profile simulation tools.
+- [ ] `Source/DebugActions.cs` — dev menu actions, Best-of-N verifier UI/action, pawn profile
+  simulation tools. Already unreviewed; also touched by the dispersion-aware scoring work (verify
+  gate and distribution dump wiring).
+- [ ] `Source/DispersionModel.cs` — **new, unreviewed.** Quadrature model: `Moments`, `BuildCdf`,
+  `BestOfN`, `TypicalAt`, `OutcomeDensity`. Mirrors `grid_moments`/`make_grid_score` in
+  `envelope_check.py`.
+- [ ] `Source/MathUtil.cs` — **new, unreviewed.** `Erf`/`NormalCdf` used by `DispersionModel`.
 - [x] `Source/EnvelopeFigures.g.cs` — auto-generated envelope constants baseline (generated by envelope_check.py).
 
 ---
