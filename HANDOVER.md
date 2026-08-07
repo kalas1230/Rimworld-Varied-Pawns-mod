@@ -705,11 +705,16 @@ arriving through the band instead of through a new clamp.
 documented property that a variance preset sits *below* `Faithful` at N=1 and crosses as N rises.
 
 > [!IMPORTANT]
-> **The residual is real: `Wildcard` is now COMPARABLE to `Faithful` in skill spread, not wider.**
-> Per-skill sd `3.31` against `Faithful`'s `3.41`, and per-pawn sd `1.21` against `1.23`. If the noise
-> were landing cleanly on top of vanilla's own spread you would expect roughly
-> `sqrt(3.41² + 2.08²) ≈ 4.0`. It reads 3.31, so **censoring is still eating dispersion** — `p10` is
+> **The residual is real: `Wildcard` is roughly COMPARABLE to `Faithful` in skill spread, not
+> decisively wider.** Per-skill sd `3.31` against `Faithful`'s `3.41`–`3.43` — still *below*. If the
+> noise were landing cleanly on top of vanilla's own spread you would expect roughly
+> `sqrt(3.43² + 2.08²) ≈ 4.0`. It reads 3.31, so **censoring is still eating dispersion** — `p10` is
 > still `0.0`, i.e. the bottom decile of quality still lands under the floor.
+>
+> On the *per-pawn* measure the final shipped build reads `1.31` against `Faithful`'s `1.19`, i.e.
+> genuinely wider. **Do not lean on that margin.** Two runs at 1000 pawns with an identical skill
+> band gave `1.21` and `1.31`, which brackets `Faithful` — run-to-run variation is the same size as
+> the effect. If this number ever matters, sample more than 1000 pawns before believing it.
 >
 > Two levers remain, and they are a genuine trade, not an oversight:
 > - **Raise the floor further** (`−4.0`): fully clears the censoring, costs the below-`Faithful`-at-N=1
