@@ -25,20 +25,38 @@ namespace PawnVarianceMod
     public class VarianceProfileValues : IExposable
     {
         public float averageQuality = 0.5f;
-        public float skillNoise = 0.35f;
+        public float skillSpread = 0.857321f;
         // These four match the Scribe_Values defaults in ExposeData below, which in turn match
         // Faithful. They are effectively unreachable -- every creation path passes explicit values
         // (PawnVarianceSettings.cs:1096/1106, Clone), and the parameterless ctor is only used by
         // Scribe, which overwrites all four on load -- but they used to read 1.0/7.0/0.35/0.8, a
         // stale copy of an older Distinct that matched no shipped preset. Keep them in step with
         // the Scribe defaults so nothing here can be mistaken for a live default.
-        public float passionNoise = 0.25f;
+        public float passionSpread = 1.0f;
         public float passionMajorBias = 0.5f;
 
         // Indirection so DispersionModel and the appliers do not care whether the stored field is
         // a 0-1 scalar or a real-unit spread. Task 5 of the dispersion plan changes ONLY these.
-        public float SkillNoiseScalar => skillNoise;
-        public float PassionNoiseScalar => passionNoise;
+        //
+        // skillSpread stores a STANDARD DEVIATION in levels. The applier's triangular term
+        // (Rand.Value+Rand.Value-1) has variance 1/6, so sd = magnitude/sqrt(6) and the Lerp
+        // scalar is sd*sqrt(6)/MaxMagnitude. Getting this wrong divides all skill noise by 2.449
+        // and NOTHING would catch it.
+        //
+        // Valid ONLY while the Lerp low endpoint is 0. If MinMagnitudeFloor ever goes non-zero
+        // again (it was 0.5f before 2026-08-06), this must become
+        //   (skillSpread*sqrt(6) - MinMagnitudeFloor) / (MaxMagnitude - MinMagnitudeFloor).
+        // Nothing in any gate would catch the omission: both implementations read this accessor.
+        public float SkillNoiseScalar => skillSpread * Mathf.Sqrt(6f) / Constants.MaxMagnitude;
+
+        // passionSpread is already the Gaussian's sigma in pips -- no conversion. The two fields
+        // are NOT symmetric; do not merge these into one helper.
+        //
+        // Valid ONLY while the Lerp low endpoint is 0. If PassionBudgetSpreadMin ever goes
+        // non-zero again, this must become
+        //   (passionSpread - PassionBudgetSpreadMin) / (PassionBudgetSpreadMax - PassionBudgetSpreadMin).
+        // Nothing in any gate would catch the omission: both implementations read this accessor.
+        public float PassionNoiseScalar => passionSpread / Constants.PassionBudgetSpreadMax;
         public float skillShiftMin = -4f;
         public float skillShiftMax = 6f;
 
@@ -99,8 +117,9 @@ namespace PawnVarianceMod
         public void ClampAndSwap()
         {
             averageQuality = Mathf.Clamp01(averageQuality);
-            skillNoise = Mathf.Clamp01(skillNoise);
-            passionNoise = Mathf.Clamp01(passionNoise);
+            skillSpread = Mathf.Clamp(skillSpread, 0f,
+                                      Constants.MaxMagnitude / Mathf.Sqrt(6f));
+            passionSpread = Mathf.Clamp(passionSpread, 0f, Constants.PassionBudgetSpreadMax);
             passionMajorBias = Mathf.Clamp01(passionMajorBias);
 
             if (skillShiftMin > skillShiftMax) { var t = skillShiftMin; skillShiftMin = skillShiftMax; skillShiftMax = t; }
@@ -127,8 +146,8 @@ namespace PawnVarianceMod
         public void ExposeData()
         {
             Scribe_Values.Look(ref averageQuality, "averageQuality", 0.5f);
-            Scribe_Values.Look(ref skillNoise, "skillNoise", 0.2f);
-            Scribe_Values.Look(ref passionNoise, "passionNoise", 0.25f);
+            Scribe_Values.Look(ref skillSpread, "skillSpread", 0.489898f);
+            Scribe_Values.Look(ref passionSpread, "passionSpread", 1.0f);
             Scribe_Values.Look(ref passionMajorBias, "passionMajorBias", 0.5f);
             Scribe_Values.Look(ref skillShiftMin, "skillShiftMin", -3f);
             Scribe_Values.Look(ref skillShiftMax, "skillShiftMax", 3f);
@@ -229,8 +248,8 @@ namespace PawnVarianceMod
             new VarianceProfileValues
             {
                 averageQuality = 0.5f,
-                skillNoise = 0.2f,
-                passionNoise = 0.25f,
+                skillSpread = 0.489898f,
+                passionSpread = 1.0f,
                 passionMajorBias = 0.5f,
                 skillShiftMin = -3f,
                 skillShiftMax = 3f,
@@ -252,8 +271,8 @@ namespace PawnVarianceMod
             new VarianceProfileValues
             {
                 averageQuality = 0.32f,
-                skillNoise = 0.35f,
-                passionNoise = 0.35f,
+                skillSpread = 0.857321f,
+                passionSpread = 1.4f,
                 passionMajorBias = 0.8f,
                 skillShiftMin = -3.3f,
                 skillShiftMax = 6.5f,
@@ -277,17 +296,18 @@ namespace PawnVarianceMod
             new VarianceProfileValues
             {
                 averageQuality = 0.37f,
-                skillNoise = 0.85f,
-                passionNoise = 0.50f,
+                skillSpread = 2.082066f,
+                passionSpread = 2.0f,
                 passionMajorBias = 0.35f,
                 // Retuned 2026-08-07 for the dispersion-aware envelope. Under the old mean-band
                 // metric Wildcard read +22.3% at N=50; measured with dispersion it was +49.0%,
                 // OUTSIDE the +-35% envelope. Rule 1 passed only because the metric could not see
                 // the axis that broke it.
                 //
-                // passionNoise 0.85 -> 0.50 is the load-bearing change: passion budget is a single
-                // per-pawn draw, so it reaches Best-of-N in full. skillNoise is deliberately LEFT
-                // at 0.85 -- taking it to 0.00 moves N=50 by only 0.3pp, because per-skill noise
+                // passionSpread 3.4 -> 2.0 (as passionNoise 0.85 -> 0.50) is the load-bearing
+                // change: passion budget is a single per-pawn draw, so it reaches Best-of-N in
+                // full. skillSpread is deliberately LEFT at 2.082066 (skillNoise 0.85) -- taking
+                // it to 0.00 moves N=50 by only 0.3pp, because per-skill noise
                 // averages down by sqrt(12) and is then censored by Clamp(0,20).
                 //
                 // passionMajorBias 0.6 -> 0.35 nerfs through the pip EXCHANGE RATE, not through
@@ -340,8 +360,8 @@ namespace PawnVarianceMod
             new VarianceProfileValues
             {
                 averageQuality = 0.37f,
-                skillNoise = 0.25f,
-                passionNoise = 0.25f,
+                skillSpread = 0.612372f,
+                passionSpread = 1.0f,
                 passionMajorBias = 0.35f,
                 // Retuned 2026-08-04: translated up to -20.6% at Best-of-25 (was -27.3%), which
                 // also lifts N=1 from a very tight -33.2% to -24.2%. This preset had only 1.8pp
@@ -365,8 +385,8 @@ namespace PawnVarianceMod
             new VarianceProfileValues
             {
                 averageQuality = 0.53f,
-                skillNoise = 0.22f,
-                passionNoise = 0.25f,
+                skillSpread = 0.538888f,
+                passionSpread = 1.0f,
                 passionMajorBias = 0.65f,
                 skillShiftMin = -0.8f,
                 skillShiftMax = 4.0f,
@@ -386,14 +406,14 @@ namespace PawnVarianceMod
             new VarianceProfileValues
             {
                 averageQuality = 0.55f,
-                skillNoise = 0.24f,
-                passionNoise = 0.25f,
+                skillSpread = 0.587878f,
+                passionSpread = 1.0f,
                 passionMajorBias = 0.70f,
                 // Retuned 2026-08-04 to +18.9% at Best-of-25 (was +16.2%). The skill range is
                 // deliberately UNCHANGED -- skillShiftMin stays at 0 to keep the preset's mean band
                 // at or above the vanilla baseline, which is its identity. NB this is a bound on
                 // the BAND, not a per-skill guarantee: SkillVarianceApplier.Apply adds an unclamped
-                // noise term (magnitude ~1.8 at skillNoise 0.24) on top of the band, so an
+                // noise term (magnitude ~1.8 at skillSpread 0.587878) on top of the band, so an
                 // individual skill on a low-quality roll can still land below vanilla's level. The
                 // entire increase comes from widening the passion budget (3.0-6.2 -> 2.2-6.6).
                 // Translating the whole profile up instead would have hit +34.5% at N=1, leaving
@@ -416,8 +436,8 @@ namespace PawnVarianceMod
             new VarianceProfileValues
             {
                 averageQuality = 0.50f,
-                skillNoise = 0.25f,
-                passionNoise = 0.25f,
+                skillSpread = 0.612372f,
+                passionSpread = 1.0f,
                 passionMajorBias = 0.60f,
                 skillShiftMin = -1.8f,
                 skillShiftMax = 3.7f,
@@ -437,8 +457,8 @@ namespace PawnVarianceMod
             new VarianceProfileValues
             {
                 averageQuality = 0.43f,
-                skillNoise = 0.25f,
-                passionNoise = 0.25f,
+                skillSpread = 0.612372f,
+                passionSpread = 1.0f,
                 passionMajorBias = 0.45f,
                 skillShiftMin = -2.9f,
                 skillShiftMax = 2.6f,

@@ -323,7 +323,7 @@ namespace PawnVarianceMod
         // 2. Roll a batch of pawns and dump the distribution.
         // ------------------------------------------------------------------------------------
         // Answers the questions the composite score cannot: what the population actually looks
-        // like once skillNoise, the passion spend loop, trait protection and the age cap have all
+        // like once skillSpread, the passion spend loop, trait protection and the age cap have all
         // had their say. Every one of those is invisible to the +-35% envelope, which is a
         // MEAN-POWER model -- it sees averageQuality, the skill-shift band and the passion budget,
         // and nothing else. This is the only place dispersion can be observed rather than derived.
@@ -718,8 +718,9 @@ namespace PawnVarianceMod
             sb.AppendLine();
 
             // The whole point of the run: an observed sd to hold the tool's DERIVED sd against.
-            // envelope_check.py predicts per-skill sd = magnitude/sqrt(6) from skillNoise alone;
-            // the observed figure also carries the quality-driven spread of the baseline, so it
+            // envelope_check.py predicts per-skill sd = skillSpread directly (the field now STORES
+            // that sd rather than deriving it from a 0-1 scalar); the observed figure also carries
+            // the quality-driven spread of the baseline, so it
             // should sit ABOVE that prediction. If it sits below, the noise term is not reaching
             // the pawns and something upstream is clamping it.
             sb.AppendLine("  Compare 'per-skill level' sd against the 'per-skill sd' column in");

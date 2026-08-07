@@ -331,9 +331,9 @@ namespace PawnVarianceMod
             Rect noiseLabelRect = noiseRow.LeftPart(0.42f);
             // Vertically centre the label against the range control.
             noiseLabelRect.y += 4f;
-            Widgets.Label(noiseLabelRect, $"Skill noise:  {v.skillNoise:F2}");
-            float sNoiseVal = Widgets.HorizontalSlider(noiseRow.RightPart(0.56f), v.skillNoise, 0f, 1f);
-            if (EditingCustom) v.skillNoise = sNoiseVal;
+            Widgets.Label(noiseLabelRect, $"Skill noise:  {v.skillSpread:F2}");
+            float sNoiseVal = Widgets.HorizontalSlider(noiseRow.RightPart(0.56f), v.skillSpread, 0f, 1f);
+            if (EditingCustom) v.skillSpread = sNoiseVal;
             // "within a pawn" vs Passion noise's "between pawns" is the real distinction and is
             // easy to lose: this magnitude is drawn independently per skill around one shared
             // baseline, so it separates a pawn's own skills. Passion noise perturbs a single
@@ -392,9 +392,9 @@ namespace PawnVarianceMod
             Rect passionNoiseLabelRect = leftHalf.LeftPart(0.52f);
             // Vertically centre the label against the range control.
             passionNoiseLabelRect.y += 4f;
-            Widgets.Label(passionNoiseLabelRect, $"Passion noise:  {v.passionNoise:F2}");
-            float pNoiseVal = Widgets.HorizontalSlider(leftHalf.RightPart(0.46f), v.passionNoise, 0f, 1f);
-            if (EditingCustom) v.passionNoise = pNoiseVal;
+            Widgets.Label(passionNoiseLabelRect, $"Passion noise:  {v.passionSpread:F2}");
+            float pNoiseVal = Widgets.HorizontalSlider(leftHalf.RightPart(0.46f), v.passionSpread, 0f, 1f);
+            if (EditingCustom) v.passionSpread = pNoiseVal;
             TooltipHandler.TipRegion(leftHalf,
                 "How much the total passion budget varies between pawns.\n\n"
                 + "The opposite of Skill noise: this one perturbs a single per-pawn budget, so it "

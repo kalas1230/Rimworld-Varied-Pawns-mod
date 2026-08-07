@@ -79,10 +79,8 @@ def simulate(p, C, realised, n_skills, with_noise):
     m = min(max(p["averageQuality"], eps), 1.0 - eps)
     a, b = m * K, (1.0 - m) * K
 
-    mag = (C["MinMagnitudeFloor"] + (C["MaxMagnitude"] - C["MinMagnitudeFloor"])
-           * p["skillNoise"]) if with_noise else 0.0
-    sig = (C["PassionBudgetSpreadMin"] + (C["PassionBudgetSpreadMax"]
-           - C["PassionBudgetSpreadMin"]) * p["passionNoise"]) if with_noise else 0.0
+    mag = (p["skillSpread"] * math.sqrt(6.0)) if with_noise else 0.0
+    sig = p["passionSpread"] if with_noise else 0.0
     window = sig * C["PassionBudgetClampFactor"]
 
     smin, smax = p["skillShiftMin"], p["skillShiftMax"]

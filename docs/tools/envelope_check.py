@@ -24,9 +24,9 @@ Method (mirrors HANDOVER.md "How the percentages are derived"):
 SCOPE -- READ THIS BEFORE TRUSTING THE TABLE:
   Every figure here is a MEAN-POWER figure. The model treats a pawn as fully determined by
   its quality roll q, so it sees averageQuality, skillShiftMin/Max, passionCountMin/Max and
-  passionMajorBias -- and NOTHING ELSE. skillNoise and passionNoise are not inputs to
+  passionMajorBias -- and NOTHING ELSE. skillSpread and passionSpread are not inputs to
   CalculateCompositeScore and no percentage in this table responds to them, even though
-  skillNoise drives up to +-6 levels of per-skill excursion (Constants.MaxMagnitude).
+  skillSpread drives up to +-6 levels of per-skill excursion (Constants.MaxMagnitude).
   The "spread" columns below exist to make that invisible axis visible. They are REPORTED,
   NOT ENFORCED -- there is no Rule 1 equivalent for dispersion.
 
@@ -68,7 +68,7 @@ FIELDS = ("averageQuality", "skillShiftMin", "skillShiftMax",
           "passionCountMin", "passionCountMax", "passionMajorBias",
           # Not scored -- read only for the reported-not-enforced spread columns. See SCOPE
           # in the module docstring for why these are absent from the composite.
-          "skillNoise", "passionNoise")
+          "skillSpread", "passionSpread")
 
 
 def read(path):
@@ -190,13 +190,11 @@ def make_spread(C):
 
     Passion spread is the budget Gaussian's sigma (PassionVarianceApplier), already in pips.
     """
-    mag_lo, mag_hi = C["MinMagnitudeFloor"], C["MaxMagnitude"]
-    pass_lo, pass_hi = C["PassionBudgetSpreadMin"], C["PassionBudgetSpreadMax"]
     root6 = math.sqrt(6.0)
 
     def spread(p):
-        magnitude = mag_lo + (mag_hi - mag_lo) * p["skillNoise"]
-        budget_sigma = pass_lo + (pass_hi - pass_lo) * p["passionNoise"]
+        magnitude = p["skillSpread"] * math.sqrt(6.0)
+        budget_sigma = p["passionSpread"]
         return magnitude / root6, budget_sigma
 
     return spread
@@ -249,10 +247,8 @@ def grid_moments(C):
     wsum = wS + wP
 
     def moments(p, q, with_noise=True):
-        mag = (C["MinMagnitudeFloor"] + (C["MaxMagnitude"] - C["MinMagnitudeFloor"])
-               * p["skillNoise"]) if with_noise else 0.0
-        sig = (C["PassionBudgetSpreadMin"] + (C["PassionBudgetSpreadMax"]
-               - C["PassionBudgetSpreadMin"]) * p["passionNoise"]) if with_noise else 0.0
+        mag = (p["skillSpread"] * math.sqrt(6.0)) if with_noise else 0.0
+        sig = p["passionSpread"] if with_noise else 0.0
 
         baseline = p["skillShiftMin"] + (p["skillShiftMax"] - p["skillShiftMin"]) * q
         s1 = s2 = 0.0
@@ -507,20 +503,20 @@ def main():
         print(f"  {n} @ N={N}: {dev[(n, N)]:+.1f}%  ({margin:.1f}pp of headroom)")
 
     # Dispersion. Deliberately printed AFTER the envelope table and deliberately unenforced:
-    # the point is to make the axis visible to whoever reaches for skillNoise, not to add an
+    # the point is to make the axis visible to whoever reaches for skillSpread, not to add an
     # eighth architectural rule. Nothing above responds to either column.
     spread = make_spread(C)
     ref_skill, ref_passion = spread(P["Faithful"])
     print("\nWithin-pawn dispersion (REPORTED, NOT ENFORCED -- invisible to every % above):")
-    print(f"  {'profile':<12}{'skillNoise':>11}{'per-skill sd':>15}{'vs Faithful':>13}"
-          f"{'passionNoise':>14}{'budget sd':>12}")
+    print(f"  {'profile':<12}{'skillSpread':>11}{'per-skill sd':>15}{'vs Faithful':>13}"
+          f"{'passionSpread':>14}{'budget sd':>12}")
     for n in order:
         s_sd, p_sd = spread(P[n])
-        print(f"  {n:<12}{P[n]['skillNoise']:>11.2f}{s_sd:>12.2f} lv"
-              f"{s_sd / ref_skill:>12.2f}x{P[n]['passionNoise']:>14.2f}"
+        print(f"  {n:<12}{P[n]['skillSpread']:>11.2f}{s_sd:>12.2f} lv"
+              f"{s_sd / ref_skill:>12.2f}x{P[n]['passionSpread']:>14.2f}"
               f"{p_sd:>9.2f} pips")
     print("  A profile can be flat in the table above and 3x wider here. Wildcard is exactly")
-    print("  that case: its 2026-08-04 retune narrowed skillShift (the mean band), not skillNoise.")
+    print("  that case: its 2026-08-04 retune narrowed skillShift (the mean band), not skillSpread.")
 
     state = write_generated(C, P, score, order)
     notes = {

@@ -54,7 +54,7 @@ namespace PawnVarianceMod
             if (pawn?.skills?.skills == null) return;
 
             float baseline = Mathf.Lerp(shiftMin, shiftMax, quality);
-            float magnitude = Mathf.Lerp(Constants.MinMagnitudeFloor, Constants.MaxMagnitude, v.skillNoise);
+            float magnitude = Mathf.Lerp(Constants.MinMagnitudeFloor, Constants.MaxMagnitude, v.SkillNoiseScalar);
 
             foreach (SkillRecord record in pawn.skills.skills)
             {

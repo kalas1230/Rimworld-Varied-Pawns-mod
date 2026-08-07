@@ -59,7 +59,7 @@ namespace PawnVarianceMod
             var trace = settings.verboseLogging ? new System.Text.StringBuilder() : null;
 
             float budgetMean = Mathf.Lerp(v.passionCountMin, v.passionCountMax, quality);
-            float spread = Mathf.Lerp(Constants.PassionBudgetSpreadMin, Constants.PassionBudgetSpreadMax, v.passionNoise);
+            float spread = Mathf.Lerp(Constants.PassionBudgetSpreadMin, Constants.PassionBudgetSpreadMax, v.PassionNoiseScalar);
             float clampWindow = spread * Constants.PassionBudgetClampFactor;
             float budget = budgetMean + Mathf.Clamp(Rand.Gaussian(0f, spread), -clampWindow, clampWindow) - alreadyCommittedPips;
 
