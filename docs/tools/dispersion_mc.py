@@ -105,10 +105,13 @@ def simulate(p, C, realised, n_skills, with_noise):
             elif g < -window:
                 g = -window
             budget += g
-            if budget < 1.0 and bmin > 0.0:
-                budget = 1.0
-            if budget < 0.0:
-                budget = 0.0
+        # Vanilla's floor sits OUTSIDE the `if sig` -- PassionVarianceApplier applies it whenever
+        # the budget lands under 1 and passionCountMin > 0, spread or no spread. Must stay
+        # identical to DispersionModel.cs and envelope_check.py, and to the applier itself.
+        if budget < 1.0 and bmin > 0.0:
+            budget = 1.0
+        if budget < 0.0:
+            budget = 0.0
         out.append(realised(shifts, budget, p))
 
     out.sort()

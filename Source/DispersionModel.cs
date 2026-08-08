@@ -21,6 +21,7 @@ namespace PawnVarianceMod
         public const int XNodesDrag = 128;
 
         private static float[] triT, triW, gaussZ, gaussW;
+        private static float[] densityWq, densityMus, densitySds;
 
         private static void EnsureNodes()
         {
@@ -91,7 +92,13 @@ namespace PawnVarianceMod
             for (int i = 0; i < GaussNodes; i++)
             {
                 float b = bmean + gaussZ[i] * sig;
-                if (sig > 0f && b < 1f && v.passionCountMin > 0f) b = 1f;   // vanilla's floor
+                // Vanilla's floor. NOT gated on sig: PassionVarianceApplier applies it whenever
+                // the budget lands under 1 and passionCountMin > 0, spread or no spread. Gating it
+                // here diverged from the generator on any profile with passionCountMin > 0 and a
+                // mean budget under 1 pip at zero spread -- reachable in two slider moves and worth
+                // ~6.6pp on the readout, which the in-game gate could not see because every model
+                // side shared the gate. Keep this condition identical to the applier's.
+                if (b < 1f && v.passionCountMin > 0f) b = 1f;
                 if (b < 0f) b = 0f;
                 if (b > capacity) b = capacity;
                 float u = Mathf.Min(1f, b * eff / pdiv);
@@ -176,9 +183,16 @@ namespace PawnVarianceMod
             int qNodes = QNodes, xNodes = into.Length;
             float dq = 1f / qNodes;
 
-            var wq = new float[qNodes];
-            var mus = new float[qNodes];
-            var sds = new float[qNodes];
+            // Reused across calls rather than reallocated: this runs every IMGUI frame the editor
+            // tab is open. Same pattern as ProfileEditorTab's curveDensityScratch. qNodes is the
+            // QNodes const, so these are allocated once and never resized.
+            if (densityWq == null || densityWq.Length != qNodes)
+            {
+                densityWq = new float[qNodes];
+                densityMus = new float[qNodes];
+                densitySds = new float[qNodes];
+            }
+            float[] wq = densityWq, mus = densityMus, sds = densitySds;
             float total = 0f;
             for (int i = 0; i < qNodes; i++)
             {

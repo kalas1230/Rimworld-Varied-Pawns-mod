@@ -22,13 +22,16 @@ Method (mirrors HANDOVER.md "How the percentages are derived"):
   N * F(q)^(N-1) * f(q) -- not by sampling, so results are exactly reproducible.
 
 SCOPE -- READ THIS BEFORE TRUSTING THE TABLE:
-  Every figure here is a MEAN-POWER figure. The model treats a pawn as fully determined by
-  its quality roll q, so it sees averageQuality, skillShiftMin/Max, passionCountMin/Max and
-  passionMajorBias -- and NOTHING ELSE. skillSpread and passionSpread are not inputs to
-  CalculateCompositeScore and no percentage in this table responds to them, even though
-  skillSpread drives up to +-6 levels of per-skill excursion (Constants.MaxMagnitude).
-  The "spread" columns below exist to make that invisible axis visible. They are REPORTED,
-  NOT ENFORCED -- there is no Rule 1 equivalent for dispersion.
+  The model is DISPERSION-AWARE. grid_moments treats the composite as Normal(mu(q), sigma(q))
+  conditional on the quality roll q and integrates that mixture into Best-of-N, so it reads
+  averageQuality, skillShiftMin/Max, passionCountMin/Max, passionMajorBias AND both spread
+  fields. skillSpread and passionSpread ARE inputs and every percentage in this table responds
+  to them -- changing either one is a Rule 6 trigger like any other scoring constant.
+  This paragraph used to say the opposite, and that was true only until the dispersion-aware
+  scoring work landed: Best-of-N is a MAXIMUM statistic, maxima reward dispersion, and a metric
+  blind to spread let Wildcard breach the +-35% envelope while this tool reported PASS.
+  The "spread" columns below are a separate matter: raw dispersion is still REPORTED, NOT
+  ENFORCED -- there is no Rule 1 equivalent bounding spread as its own axis.
 
 SIDE EFFECT: regenerates Source/EnvelopeFigures.g.cs (checked in). That file is what the
 in-game "Verify Best-of-N against envelope_check.py" debug action diffs the mod's own
@@ -267,7 +270,10 @@ def grid_moments(C):
         p1 = p2 = 0.0
         for z, w in zip(ZS, ZW):
             b = bmean + z * sig
-            if sig > 0.0 and b < 1.0 and p["passionCountMin"] > 0.0:
+            # Vanilla's floor. NOT gated on sig -- PassionVarianceApplier applies it whenever the
+            # budget lands under 1 and passionCountMin > 0, spread or no spread. Must stay
+            # identical to DispersionModel.cs and dispersion_mc.py, and to the applier itself.
+            if b < 1.0 and p["passionCountMin"] > 0.0:
                 b = 1.0
             if b < 0.0:
                 b = 0.0
