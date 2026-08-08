@@ -1,5 +1,42 @@
 # Single-Implementation Scoring Implementation Plan
 
+> [!CAUTION]
+> # ⛔ SHELVED — REJECTED 2026-08-08, BEFORE ANY CODE WAS WRITTEN
+>
+> **Do not execute this plan. It is kept as a record of a decision, not as queued work.**
+>
+> **Why it was rejected.** The plan's premise is that two implementations of one integral (the C#
+> `DispersionModel` and `docs/tools/envelope_check.py`) are a liability to be eliminated. Checked
+> against this project's actual defect history, that premise is wrong:
+>
+> - The mirror has **caught two real defects** — both Best-of-N integrator bugs, which survived
+>   clean builds and static review and were caught by the in-game `Verify Best-of-N` action, i.e.
+>   by the two sides disagreeing.
+> - The mirror has **caused zero.** Every other defect this project shipped — the sig-gated passion
+>   floor (`52602f7`), the `Wildcard` band retune, both "24-pip era" recurrences — was *both sides
+>   jointly wrong relative to the game*, which collapsing to one implementation does nothing about.
+>
+> **Mirror drift is the one failure mode that has never happened here.** Phase 1 would retire a
+> defence with a proven record to eliminate a risk that has never materialised.
+>
+> **Phase 1 also would not have caught the bug that prompted this plan** — that was scoring-model
+> vs pawn-generator, genuinely different code. This was stated twice in the plan below and remains
+> true; it is what makes Phase 2 the only part with real value, and Phase 2 depends on Phase 1's
+> harness, so it cannot be salvaged on its own.
+>
+> **What to do instead.** Aim at the model-vs-generator gap: an in-game debug action that rolls N
+> pawns and prints their realised mean composite beside `DispersionModel`'s prediction. Directly
+> measures the quantity that has failed four times, costs one debug action rather than nine tasks,
+> and touches no Rule 8 file.
+>
+> **Worth keeping from this document regardless:** the `Mathf`-semantics trap table under "The risk
+> this plan exists to manage" (`Mathf.Lerp` clamps `t`; `Mathf.RoundToInt` is banker's rounding;
+> `Mathf.Exp` and friends round back to `float` immediately). Anyone writing float code that must
+> agree with Unity's should read it.
+>
+> Full reasoning: `HANDOVER.md` → "Settled and not to be relitigated" → "Why the C#/Python
+> duplication STAYS".
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** Retire the C#/Python mirror by making the offline envelope gate run the *same source* as the shipped mod, then extend the same treatment to the pawn generator so the Monte Carlo exercises real applier code instead of a copy of it.

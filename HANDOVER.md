@@ -892,6 +892,44 @@ but `eligible` is not built until ~`:79`, so either needs a reorder.
 | User-facing derivation write-up in the settings UI | **No.** If wanted, it belongs in the mod's About/description or `docs/`, not a tooltip. |
 | Exposing the exchange rate `R` as a player setting | **Rejected.** A control that changes nothing (the score is display-only) while visibly breaking the ±35% envelope the mod advertises. |
 | Making the Best-of-N integration midpoint-correct | **Rejected — carried permanently.** Both implementations share the slip so it cancels in every displayed figure, `N=1` is exact, and fixing it repastes every table for a difference no player can see. Argument in full under "Why the integration slip is carried". |
+| **Collapsing `envelope_check.py` and the C# into one shared implementation** | **Rejected 2026-08-08 — the redundancy is load-bearing.** Plan written, costed and then shelved. See below. |
+
+### Why the C#/Python duplication STAYS — do not "fix" it
+
+It looks like an obvious smell: two implementations of one integral, kept in step by an
+`IF YOU CHANGE ONE, CHANGE BOTH` comment and policed by a 0.5pp gate. A plan to collapse them into
+one platform-free source folder compiled into both the mod and a C# harness was written in full
+(`docs/superpowers/plans/2026-08-08-single-implementation-scoring.md`) and **rejected before any
+code was written.** The reasoning, so nobody re-derives the wrong answer:
+
+**Count what the mirror has actually done.** It has caught **two** real defects — both Best-of-N
+integrator bugs, which "survived clean builds and static review" and were caught by the in-game
+`Verify Best-of-N` action, i.e. by the C# disagreeing with the Python. It has caused **zero**.
+
+**Now count the defects this project HAS shipped, and check which failure mode each one was:**
+
+| Defect | Failure mode |
+|---|---|
+| Both Best-of-N integrator bugs | one side wrong → **the mirror caught them** |
+| The sig-gated passion floor (`52602f7`) | all three model sides agreed, all disagreed with the generator |
+| The `Wildcard` band retune | every offline instrument green, the realised population censored |
+| The two "24-pip era" recurrences | correct arithmetic on the wrong vanilla scale |
+
+**Every shipped defect except the integrator bugs is "both sides jointly wrong relative to the
+game" — never "the two sides disagree."** Mirror drift is the one failure mode that has never
+happened here. Collapsing to a single implementation would retire the defence with the proven
+record in order to eliminate a risk that has never materialised.
+
+**The corollary, which is the useful part:** effort aimed at correctness here should go at the
+**model-vs-generator** gap — the thing that predicts versus the thing that rolls — not at the
+C#-vs-Python gap. Nothing offline can close that gap, because the model never generates a pawn.
+The cheap instrument is an in-game action that rolls N pawns and prints their realised mean
+composite beside `DispersionModel`'s prediction. That is worth building; the refactor is not.
+
+**What the shelved plan does still contain, if any of it is ever wanted separately:** the exact
+`Mathf`-semantics trap table (`Mathf.Lerp` clamps `t`; `Mathf.RoundToInt` is banker's rounding;
+`Mathf.Exp` and friends round back to `float` immediately). Anyone writing float code that has to
+agree with Unity's should read that table.
 
 ---
 
