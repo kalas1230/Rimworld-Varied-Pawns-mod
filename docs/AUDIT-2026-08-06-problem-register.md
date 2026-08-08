@@ -19,6 +19,41 @@ it is wrong, when it bites, and what was actually verified versus inferred.
 >   left uncommitted at the owner's instruction.
 > - **Deferred by the owner:** everything retune-facing — P-02, P-03, P-05, P-06, P-08, P-09.
 
+> [!TIP]
+> ## Re-checked 2026-08-08, after the dispersion-aware scoring batch
+>
+> **Both remaining Majors are now CLOSED, and the retune-facing deferrals closed with them.**
+> Newly fixed since the audit was written, each verified against the current tree:
+>
+> | # | Was | Now |
+> |---|---|---|
+> | **P-02** (Major) | baseline "exactly 0.2500", weight-independent | `HANDOVER.md:107` states `0.2571` and records that an exactly-`0.2500` baseline was **rejected**, with the reasoning |
+> | **P-03** (Major) | `R = 1.94` scalar, Rule 7 names three inputs | Rule 7 (`:161`) carries the four-input formula incl. `PassionPipEfficiency(bias)`, `R` is a function with a published bias table, and the old "three inputs" wording is explicitly called out as having been wrong |
+> | **P-04** | two rules numbered 6 | rules 1–8 are unique |
+> | **P-05** | canonical `passionNorm = pips/18` | `:202` carries both the capacity cap and the efficiency term |
+> | **P-08** | fallback documented `0.2778` vs implemented `0.2609` | `HANDOVER.md` states `0.2609` and flags `0.2778` as the pre-efficiency error |
+> | **P-10** | silent `composite(averageQuality)` fallback | gone — `CalculateBestOfNScoreCore` is now a one-line delegate to `DispersionModel.BestOfN`, no NaN/zero-total fallback anywhere |
+> | **P-12** | Python clamped one side, C# both | `envelope_check.py:326` — the `[0,1]` integration bound *is* the `Clamp01`, stated in the code |
+>
+> **P-06 has RECURRED in a new form and is the one thing this re-check found.** The stale
+> headroom figure was fixed in Rule 6's callout (`:466`, correctly `9.1pp`) but
+> `HANDOVER.md:403` still calls `Sovereign` @ N=1 *"the tightest figure in this project"* at
+> `10.3pp`. Since the `Wildcard` retune, `Wildcard` @ N=50 at **9.1pp** is the tightest and
+> `Sovereign` is second — the document now contradicts itself two sections apart. The
+> surrounding argument (that `N=1` is exact and so the slip is harmless) is unaffected; only
+> the superlative is wrong.
+>
+> **Still open, all Minor or Cosmetic, none retune-related** — re-verified present in the tree:
+> P-06 (above), P-07 (`About/About.xml` still advertises `1.5`), P-11, P-13
+> (`Constants.cs:166` still says "seven presets"; there are eight), P-17 (the
+> "Verbose logging **(dev mode)**" checkbox is a plain `CheckboxLabeled` with no `Prefs.DevMode`
+> gate, and still rethrows), P-18, P-19, P-20 (no exception guard on the life-stage postfix),
+> P-21, P-22 (`DateTime.Now.Ticks` ids at `PawnVarianceSettings.cs:1138` and `:1148`), P-23,
+> P-24 (`ProfileEditorTab.cs:239` still writes unconditionally), P-25.
+>
+> **P-01 is worse, not better:** `main` is now **27 commits ahead** of `origin/main` and still
+> unpushed.
+
 **Ground state this audit was taken against**
 
 | | |
@@ -48,17 +83,17 @@ occasions where an unchecked citation sent someone editing the wrong code.
 | # | Area | Finding | Severity |
 |---|---|---|---|
 | [P-01](#p-01) | Process | The entire STEP 1 passion-axis rework is uncommitted, unreviewed and unpushed, while the handover says the tree is clean | **Major** — ✅ docs fixed |
-| [P-02](#p-02) | Docs | `HANDOVER.md` states the `Faithful` baseline is "exactly 0.2500" and that it "no longer depends on the weights at all" — both are false since STEP 1 | **Major** |
-| [P-03](#p-03) | Docs | The exchange rate `R = 1.94` and Rule 7 were not updated for the pip-efficiency term; `R` is now bias-dependent | **Major** |
-| [P-04](#p-04) | Docs | Two different rules are both numbered **6**, and the document cites rules by number | **Minor** |
-| [P-05](#p-05) | Docs | The canonical model statement still reads `passionNorm = pips/18`, omitting both STEP 1 terms | **Minor** |
-| [P-06](#p-06) | Docs | Headroom is quoted as `6.5pp` in the mandatory rule and `6.6pp` in the tool output it points at | **Cosmetic** |
+| [P-02](#p-02) | Docs | `HANDOVER.md` states the `Faithful` baseline is "exactly 0.2500" and that it "no longer depends on the weights at all" — both are false since STEP 1 | **Major** — ✅ FIXED 2026-08-08 |
+| [P-03](#p-03) | Docs | The exchange rate `R = 1.94` and Rule 7 were not updated for the pip-efficiency term; `R` is now bias-dependent | **Major** — ✅ FIXED 2026-08-08 |
+| [P-04](#p-04) | Docs | Two different rules are both numbered **6**, and the document cites rules by number | **Minor** — ✅ FIXED 2026-08-08 |
+| [P-05](#p-05) | Docs | The canonical model statement still reads `passionNorm = pips/18`, omitting both STEP 1 terms | **Minor** — ✅ FIXED 2026-08-08 |
+| [P-06](#p-06) | Docs | Headroom is quoted as `6.5pp` in the mandatory rule and `6.6pp` in the tool output it points at | **Cosmetic** — ⚠️ RECURRED, see 2026-08-08 note |
 | [P-07](#p-07) | Packaging | `About.xml` claims RimWorld **1.5** support that nothing in this repo builds or tests | **Minor** |
-| [P-08](#p-08) | Docs vs code | The passion-variance-OFF fallback is documented as `0.2778` and implemented as `0.2609` | **Minor** |
-| [P-09](#p-09) | Model drift | `Constants.QualityClampEpsilon` is applied in C# but absent from `envelope_check.py` and from the drift check | **Minor** |
-| [P-10](#p-10) | Scoring | `CalculateBestOfNScoreCore` has a silent fallback that returns the exact quantity Defect A was deleted for | **Minor** |
+| [P-08](#p-08) | Docs vs code | The passion-variance-OFF fallback is documented as `0.2778` and implemented as `0.2609` | **Minor** — ✅ FIXED 2026-08-08 |
+| [P-09](#p-09) | Model drift | `Constants.QualityClampEpsilon` is applied in C# but absent from `envelope_check.py` and from the drift check | **Minor** — ✅ RESOLVED 2026-08-07 |
+| [P-10](#p-10) | Scoring | `CalculateBestOfNScoreCore` has a silent fallback that returns the exact quantity Defect A was deleted for | **Minor** — ✅ FIXED 2026-08-08 |
 | [P-11](#p-11) | Naming | `MinMagnitudeFloor` is not a floor and is no longer a minimum; the name invites the mistake its own comment warns about | **Cosmetic** |
-| [P-12](#p-12) | Model drift | Python clamps the composite on one side, C# on both | **Cosmetic** |
+| [P-12](#p-12) | Model drift | Python clamps the composite on one side, C# on both | **Cosmetic** — ✅ FIXED 2026-08-08 |
 | [P-13](#p-13) | Comments | `Constants.cs:142` says the integration nodes were measured "across all seven presets"; there are eight | **Cosmetic** |
 | [P-14](#p-14) | Settings | `Resolve()` answers a dangling id with an **unrelated profile's live values**, and corrupts that profile's label on the way out | **Major** — ✅ FIXED |
 | [P-15](#p-15) | Passions | `gene.passionPreAdd` is snapshotted **after** the bump, so a removed passion gene leaves its passion behind permanently | **Major** — ✅ FIXED |
