@@ -3,8 +3,10 @@
   <packageId>kalas.pawnvariance</packageId>
   <name>Varied Pawns</name>
   <author>kalas</author>
+  <!-- 1.6 only. 1.5 was advertised here but nothing in this repo builds or tests against it:
+       the csproj references a single RimWorld install and there is no 1.5 CI or manual pass.
+       Claiming a version the mod has never been run on is worse than not claiming it. -->
   <supportedVersions>
-    <li>1.5</li>
     <li>1.6</li>
   </supportedVersions>
   <description>Adds configurable, randomized variance to a pawn's skill levels, trait count/quality, and passion assignment at generation time.</description>

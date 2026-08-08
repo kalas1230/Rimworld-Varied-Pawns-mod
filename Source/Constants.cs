@@ -13,7 +13,7 @@ namespace PawnVarianceMod
         // not only at 0. Lerp(0.5, 6, t) vs Lerp(0, 6, t) diverge most at low t: skillNoise 0.2
         // went 1.60 -> 1.20 (-25%), 0.85 went 5.18 -> 5.10 (-1.4%). Every preset except Wildcard
         // sits in the 0.20-0.35 band, so this narrowed per-skill dispersion across the board.
-        public const float MinMagnitudeFloor = 0f;
+        public const float MagnitudeLerpLow = 0f;
         public const float MaxMagnitude = 6f;
         public const float SmallRandomJitter = 0.5f;
 
@@ -21,7 +21,7 @@ namespace PawnVarianceMod
         // PawnGenerator.GenerateSkills' own passion-budget roll — `5f + clamp(Rand.Gaussian(), -4f,
         // 4f)` — but with the Gaussian's width factor and clamp window driven by passionNoise instead
         // of vanilla's hardcoded 1 and 4, so the setting controls "how much the total passion budget
-        // 0f as of 2026-08-06, same reasoning as MinMagnitudeFloor above: a Lerp low endpoint, so
+        // 0f as of 2026-08-06, same reasoning as MagnitudeLerpLow above: a Lerp low endpoint, so
         // passionNoise 0.25 went sigma 1.19 -> 1.00 (-16%), not just the zero case. At
         // passionNoise = 0 the budget is now exactly its quality-lerped mean, with no roll at all.
         public const float PassionBudgetSpreadMin = 0f;
@@ -163,7 +163,7 @@ namespace PawnVarianceMod
         public const int BestOfNSampleCount = 25;
 
         // Midpoint-rule nodes for the Best-of-N integral. Measured against the 20000-node
-        // reference in docs/tools/envelope_check.py across all seven presets: 512 nodes lands
+        // reference in docs/tools/envelope_check.py across all eight presets: 512 nodes lands
         // 0.35pp off, which can flip a whole-percent readout; 1024 lands 0.17pp. Do not lower it.
         public const int BestOfNIntegrationNodes = 1024;
     }

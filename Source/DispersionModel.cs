@@ -65,7 +65,7 @@ namespace PawnVarianceMod
             float pdiv = Constants.MaxPassionPips;
             int nSkills = Mathf.RoundToInt(pdiv / Constants.MajorPassionCost);
 
-            float mag = Mathf.Lerp(Constants.MinMagnitudeFloor, Constants.MaxMagnitude,
+            float mag = Mathf.Lerp(Constants.MagnitudeLerpLow, Constants.MaxMagnitude,
                                    v.SkillNoiseScalar);
             float baseline = Mathf.Lerp(v.skillShiftMin, v.skillShiftMax, q);
 

@@ -26,6 +26,15 @@ namespace PawnVarianceMod
             // mod's own target applies in full (this is what lets adults exceed vanilla's max of 3).
             if (age >= momentAges.Max()) return int.MaxValue;
 
+            // UNREACHABLE UNDER VANILLA GROWTH AGES, and that is expected rather than dead code.
+            // Both callers are gated to pawns aged 13+ (generation via HarmonyPatches'
+            // VanillaAdultPassionAge check, the growth moment via GrowthUpPatch's Adult check), and
+            // vanilla's GrowthMomentAges = { 7, 10, 13 } makes Max() 13 -- so the line above returns
+            // first, every time. This branch exists because the thresholds are read from
+            // GrowthUtility at runtime: a mod adding a growth moment at 16 makes Max() 16 and this
+            // binds immediately at 13-15, as would a HAR race reaching Adult before 13.
+            // Consequence worth knowing: nothing in the shipped configuration exercises this line,
+            // so a bug in it would not surface in normal play.
             return momentAges.Count(a => a <= age);
         }
     }

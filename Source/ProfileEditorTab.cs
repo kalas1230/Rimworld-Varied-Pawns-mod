@@ -235,8 +235,25 @@ namespace PawnVarianceMod
                 : $"Average pawn quality:  {v.averageQuality:F2}  (read-only)");
             Text.WordWrap = prevQualityWordWrap;
 
+            // Belt AND braces, matching every other editable control in this file: GUI.enabled
+            // greys the slider, the explicit EditingCustom guard is what actually prevents the
+            // write. GUI.enabled alone was trusted here and nowhere else; note that GABS's
+            // get_ui_layout cannot observe ambient GUI.enabled, so no automated check in this
+            // project could catch a regression in the greying half.
             GUI.enabled = outerEnabled && EditingCustom;
-            v.averageQuality = Widgets.HorizontalSlider(qSlider, v.averageQuality, 0f, 1f);
+            float qualityVal = Widgets.HorizontalSlider(qSlider, v.averageQuality, 0f, 1f);
+            if (EditingCustom && qualityVal != v.averageQuality)
+            {
+                v.averageQuality = qualityVal;
+                // MUST invalidate: GetBetaAlphaBeta caches alpha/beta and only re-derives them when
+                // this flag is set. The flag is otherwise set in Clone(), ClampAndSwap() and
+                // ExposeData() -- none of which run while the editor is open, because
+                // MarkDirtyOnWrite fires from WriteSettings() on window CLOSE. Resolve() hands back
+                // custom profiles un-cloned (see the aliasing note on Resolve), so without this the
+                // curve and the power readout would keep integrating the OLD Beta shape for the
+                // rest of the editing session and only catch up after a close/reopen.
+                v.MarkDistributionParamsDirty();
+            }
             GUI.enabled = outerEnabled;
 
             // 0.66 against qReadout's RightPart(0.34f): those two must stay disjoint (0.66 + 0.34

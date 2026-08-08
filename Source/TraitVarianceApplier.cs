@@ -141,6 +141,15 @@ namespace PawnVarianceMod
                 foreach (var t in pawn.kindDef.forcedTraits)
                     forced[t.def] = t.degree ?? FirstValidDegree(t.def); // TraitRequirement.degree is nullable — null means "any degree", so fall back to a real defined one
 
+            // PRECEDENCE, stated because the write order decides it and the ordering would
+            // otherwise read as incidental: when a PawnKindDef and an active GeneDef force the SAME
+            // TraitDef at DIFFERENT degrees, the GENE WINS, because it is written second. That is
+            // the intended rule -- a gene is an intrinsic property of the pawn, while kindDef
+            // forcing is a role default. TraitProtection.Build agrees: it labels the source with
+            // FindForcingGene rather than with this dictionary's write order, so a collision is
+            // reported as "gene forcedTraits" and carries the gene's degree. If you reorder these
+            // two loops you silently flip the rule and desynchronise that label from the degree.
+            // Narrow in practice -- it needs mod content on both sides; nothing vanilla ships hits it.
             if (ModsConfig.BiotechActive && pawn.genes != null)
                 foreach (var gene in pawn.genes.GenesListForReading)
                     if (gene.def.forcedTraits != null)

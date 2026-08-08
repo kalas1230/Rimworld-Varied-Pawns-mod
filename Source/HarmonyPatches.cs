@@ -61,7 +61,12 @@ namespace PawnVarianceMod
             }
             catch (Exception ex)
             {
-                if (settings.verboseLogging) throw;
+                // Prefs.DevMode as well as the toggle: the checkbox is only drawn in dev mode, but
+                // the setting persists, so a player who ticked it before this gate existed (or
+                // imported someone else's settings) would otherwise still get a thrown exception
+                // inside pawn generation. The sibling GrowthMomentMakeChoices_Postfix catches
+                // unconditionally for the same class of reason.
+                if (settings.verboseLogging && Prefs.DevMode) throw;
                 Log.ErrorOnce($"[PawnVarianceMod] Exception applying variance to {pawn.LabelShort}: {ex}", (ex.GetType().FullName + ex.StackTrace).GetHashCode());
             }
         }

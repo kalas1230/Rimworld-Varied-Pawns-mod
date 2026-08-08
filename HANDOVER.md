@@ -399,8 +399,11 @@ one was kept**. `N=1` is "took the first". `N=25` is "looked at 25, kept the bes
 thin slices and add up their contributions. Each slice is counted as very slightly too big — half a
 slice too big. That is the whole defect.
 
-**Why it is harmless.** At `N=1` the slip does not enter the arithmetic at all, so the tightest
-figure in this project (`Sovereign` at N=1, the one with 10.3pp of headroom) is exact. For larger `N`
+**Why it is harmless.** At `N=1` the slip does not enter the arithmetic at all, so `Sovereign` at
+N=1 — the tightest figure at that batch size, with 10.3pp of headroom — is exact. (Since the
+`Wildcard` retune the tightest figure *overall* is `Wildcard` at N=50 with 9.1pp; it is an `N≥2`
+figure, so it does carry the slip. That does not change the argument: the slip cancels in the ratio
+to `Faithful`.) For larger `N`
 the error compounds to at most ~0.9% at `N=50`. But `envelope_check.py` and the C# integrator make
 the **identical** slip, and every figure a player ever sees is a comparison against `Faithful`, which
 carries the same slip. It cancels. **Nothing displayed is wrong, and no decision has ever been made

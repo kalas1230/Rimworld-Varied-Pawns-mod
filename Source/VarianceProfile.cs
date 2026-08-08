@@ -43,9 +43,9 @@ namespace PawnVarianceMod
         // scalar is sd*sqrt(6)/MaxMagnitude. Getting this wrong divides all skill noise by 2.449
         // and NOTHING would catch it.
         //
-        // Valid ONLY while the Lerp low endpoint is 0. If MinMagnitudeFloor ever goes non-zero
+        // Valid ONLY while the Lerp low endpoint is 0. If MagnitudeLerpLow ever goes non-zero
         // again (it was 0.5f before 2026-08-06), this must become
-        //   (skillSpread*sqrt(6) - MinMagnitudeFloor) / (MaxMagnitude - MinMagnitudeFloor).
+        //   (skillSpread*sqrt(6) - MagnitudeLerpLow) / (MaxMagnitude - MagnitudeLerpLow).
         // Nothing in any gate would catch the omission: both implementations read this accessor.
         public float SkillNoiseScalar => skillSpread * Mathf.Sqrt(6f) / Constants.MaxMagnitude;
 

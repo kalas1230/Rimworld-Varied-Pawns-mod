@@ -464,8 +464,7 @@ namespace PawnVarianceMod
                     hostileProfileId = VarianceProfiles.DistinctId;
 
                 factionOverrides = new Dictionary<string, string>();
-                if (factionOverrideKeys != null && factionOverrideValues != null
-                    && factionOverrideKeys.Count == factionOverrideValues.Count)
+                if (PairLoadable("Faction overrides", factionOverrideKeys, factionOverrideValues))
                 {
                     for (int i = 0; i < factionOverrideKeys.Count; i++)
                     {
@@ -474,8 +473,7 @@ namespace PawnVarianceMod
                 }
 
                 xenotypeOverrides = new Dictionary<string, string>();
-                if (xenotypeOverrideKeys != null && xenotypeOverrideValues != null
-                    && xenotypeOverrideKeys.Count == xenotypeOverrideValues.Count)
+                if (PairLoadable("Xenotype overrides", xenotypeOverrideKeys, xenotypeOverrideValues))
                 {
                     for (int i = 0; i < xenotypeOverrideKeys.Count; i++)
                     {
@@ -484,8 +482,7 @@ namespace PawnVarianceMod
                 }
 
                 factionPriorities = new Dictionary<string, OverridePriority>();
-                if (factionPriorityKeys != null && factionPriorityValues != null
-                    && factionPriorityKeys.Count == factionPriorityValues.Count)
+                if (PairLoadable("Faction priorities", factionPriorityKeys, factionPriorityValues))
                 {
                     for (int i = 0; i < factionPriorityKeys.Count; i++)
                     {
@@ -494,8 +491,7 @@ namespace PawnVarianceMod
                 }
 
                 xenotypePriorities = new Dictionary<string, OverridePriority>();
-                if (xenotypePriorityKeys != null && xenotypePriorityValues != null
-                    && xenotypePriorityKeys.Count == xenotypePriorityValues.Count)
+                if (PairLoadable("Xenotype priorities", xenotypePriorityKeys, xenotypePriorityValues))
                 {
                     for (int i = 0; i < xenotypePriorityKeys.Count; i++)
                     {
@@ -504,8 +500,7 @@ namespace PawnVarianceMod
                 }
 
                 raceOverrides = new Dictionary<string, string>();
-                if (raceOverrideKeys != null && raceOverrideValues != null
-                    && raceOverrideKeys.Count == raceOverrideValues.Count)
+                if (PairLoadable("Race overrides", raceOverrideKeys, raceOverrideValues))
                 {
                     for (int i = 0; i < raceOverrideKeys.Count; i++)
                     {
@@ -514,8 +509,7 @@ namespace PawnVarianceMod
                 }
 
                 racePriorities = new Dictionary<string, OverridePriority>();
-                if (racePriorityKeys != null && racePriorityValues != null
-                    && racePriorityKeys.Count == racePriorityValues.Count)
+                if (PairLoadable("Race priorities", racePriorityKeys, racePriorityValues))
                 {
                     for (int i = 0; i < racePriorityKeys.Count; i++)
                     {
@@ -575,6 +569,27 @@ namespace PawnVarianceMod
             editingValues = null;
 
             MarkDirtyOnWrite();
+        }
+
+        // Whether a flattened key/value pair from the save is safe to rebuild a dictionary from.
+        //
+        // The count guard has to exist -- mismatched lists would pair the wrong key with the wrong
+        // value, which is worse than dropping the axis. What was missing is the WARNING. A silent
+        // drop presents to the player as "I never configured these", not "these were discarded",
+        // and it is not recoverable: PopulateDefaultOverrides runs afterwards but re-seeds only the
+        // default set, and early-returns entirely once hasInitializedDefaultOverrides is true,
+        // which it will be for any existing save.
+        //
+        // null is the normal fresh-save case and is not warned about; only a genuine mismatch is.
+        private static bool PairLoadable<T>(string axis, List<string> keys, List<T> values)
+        {
+            if (keys == null || values == null) return false;
+            if (keys.Count == values.Count) return true;
+            Log.Warning($"[PawnVarianceMod] {axis}: the saved settings hold {keys.Count} keys "
+                        + $"against {values.Count} values. This axis has been DISCARDED rather "
+                        + "than risk pairing the wrong key with the wrong value -- the overrides "
+                        + "on it will need to be set up again.");
+            return false;
         }
 
         public void MarkDirtyOnWrite()
@@ -1133,9 +1148,25 @@ namespace PawnVarianceMod
             Find.WindowStack.Add(new FloatMenu(options));
         }
 
+        // Ticks alone is not a uniqueness guarantee: DateTime.Now's nominal unit is 100ns but its
+        // real resolution on Windows is commonly 1-15ms, so two creations inside one timer tick
+        // collide. GetCustomProfile resolves by Find(p => p.id == id) -- FIRST match wins -- so the
+        // loser stays visible and selectable in the menu while activeProfileId silently resolves to
+        // the other one. Improbable from human clicking; the defect was the absent check, not the
+        // odds. Suffixes on collision rather than looping on the clock, which could spin.
+        private string NewCustomProfileId()
+        {
+            string baseId = "custom_" + DateTime.Now.Ticks;
+            if (customProfiles == null) return baseId;
+            string candidate = baseId;
+            for (int suffix = 2; customProfiles.Any(p => p.id == candidate); suffix++)
+                candidate = baseId + "_" + suffix;
+            return candidate;
+        }
+
         private void CreateNewCustomProfile()
         {
-            string newId = "custom_" + DateTime.Now.Ticks;
+            string newId = NewCustomProfileId();
             string newName = "Custom " + (customProfiles.Count + 1);
             var profile = new CustomProfile(newId, newName, VarianceProfiles.VanillaLike.MakeValues());
             customProfiles.Add(profile);
@@ -1145,7 +1176,7 @@ namespace PawnVarianceMod
 
         private void DuplicateCurrentProfile()
         {
-            string newId = "custom_" + DateTime.Now.Ticks;
+            string newId = NewCustomProfileId();
             string newName = LabelFor(EditorProfileId) + " Copy";
             var profile = new CustomProfile(newId, newName, Resolve(EditorProfileId).Clone());
             customProfiles.Add(profile);
@@ -1180,10 +1211,18 @@ namespace PawnVarianceMod
                     "Apply variance to children growing up",
                     ref applyVarianceToChildren,
                     "Applies trait and passion variance when a child turns 13. The mod waits for growth choices to resolve, then tops up traits and passions to match profile targets. Existing traits and passions are never removed.");
-            listing.CheckboxLabeled(
-                "Verbose logging (dev mode)",
-                ref verboseLogging,
-                "Rethrows exceptions instead of swallowing them, and logs a per-pawn breakdown of how traits and passions were assigned. Leave off for normal play.");
+            // Gated on Prefs.DevMode, the same way the row above is gated on ModsConfig.BiotechActive.
+            // The label said "(dev mode)" while the control was drawn for everyone, so the setting a
+            // player reaches for BECAUSE something is going wrong was the one that turns a logged,
+            // survivable error into a thrown one -- during world generation, a raid, or a starting
+            // scenario. The rethrow itself is deliberate and disclosed, so it is kept; it is now
+            // reachable only by someone who has dev mode on. HarmonyPatches re-checks Prefs.DevMode
+            // at the throw site so an already-ticked setting cannot fire for a normal player.
+            if (Prefs.DevMode)
+                listing.CheckboxLabeled(
+                    "Verbose logging (dev mode)",
+                    ref verboseLogging,
+                    "Rethrows exceptions instead of swallowing them, and logs a per-pawn breakdown of how traits and passions were assigned. Leave off for normal play.");
 
             DrawShareSettingsSection(listing);
 

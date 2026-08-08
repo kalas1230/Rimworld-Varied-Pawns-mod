@@ -37,7 +37,29 @@ namespace PawnVarianceMod
         // vanilla's), which resync noise for an already-adult pawn can never satisfy.
         private static readonly Dictionary<int, DevelopmentalStage> LastKnownStage = new Dictionary<int, DevelopmentalStage>();
 
+        // Guarded for the same reason GrowthMomentMakeChoices_Postfix is, and arguably a stronger
+        // one: this is a postfix on PostResolveLifeStageChange, whose only caller is
+        // AgeTickInterval, and it re-fires once on the first tick after any save load for
+        // potentially every pawn on the map. An escaping exception would land in vanilla's
+        // life-stage plumbing during load. ValuesFor is the widest-surface call in the mod --
+        // it walks the faction, race and xenotype dictionaries -- so it is the realistic thrower.
+        // This is defence in depth, not a fix for a demonstrated crash; the two sibling postfixes
+        // both had it and this one did not.
         public static void Postfix(Pawn ___pawn)
+        {
+            try { PostfixInner(___pawn); }
+            catch (Exception ex)
+            {
+                // Salted so this key cannot collide with another ErrorOnce keyed on the same
+                // thingIDNumber. Parenthesised because ^ binds tighter than ??.
+                int key = (___pawn?.thingIDNumber ?? 0) ^ 0x5B1F3A2D;
+                Log.ErrorOnce(
+                    $"[PawnVarianceMod] Exception in the life-stage postfix for "
+                    + $"{___pawn?.LabelShort ?? "(null pawn)"}: {ex}", key);
+            }
+        }
+
+        private static void PostfixInner(Pawn ___pawn)
         {
             var settings = PawnVarianceMod.Settings;
             if (!settings.applyVarianceToChildren) return;

@@ -5,7 +5,10 @@ Best-of-N envelope + power-tier ordering check for the composite pawn-quality sc
 RUN THIS AFTER CHANGING ANY OF:
   - Constants.CompositeSkillWeight / CompositePassionWeight / MaxPassionPips
   - Constants.AssumedVanillaSkillBaseline / AssumedMaxSkillLevel / BetaConcentrationK
+  - Constants.MajorPassionCost / MinorPassionCost / PassionLearnRateNone|Minor|Major
+  - Constants.MagnitudeLerpLow / MaxMagnitude / PassionBudgetSpreadMin|Max
   - any preset's averageQuality / skillShiftMin/Max / passionCountMin/Max / passionMajorBias
+  - any preset's skillSpread / passionSpread -- these ARE scoring inputs, see SCOPE below
 
     python docs/tools/envelope_check.py
 
@@ -69,8 +72,9 @@ BATCHES = (1, 5, 25, 50)
 ENVELOPE = 35.0
 FIELDS = ("averageQuality", "skillShiftMin", "skillShiftMax",
           "passionCountMin", "passionCountMax", "passionMajorBias",
-          # Not scored -- read only for the reported-not-enforced spread columns. See SCOPE
-          # in the module docstring for why these are absent from the composite.
+          # SCORED. grid_moments reads both to build sigma(q), so every percentage responds to
+          # them. They also feed the reported-not-enforced spread columns. This comment used to
+          # say "not scored"; that was true only before the dispersion-aware work.
           "skillSpread", "passionSpread")
 
 
@@ -97,8 +101,10 @@ def parse_constants(src):
                 # Only used to anchor the printed exchange rate. R is bias-dependent, so a single
                 # quoted figure has to say which bias it is at, and vanilla's 50/50 is the anchor.
                 "VanillaMajorBias",
-                # Spread columns only -- these never enter the composite score.
-                "MinMagnitudeFloor", "MaxMagnitude",
+                # Skill-noise Lerp endpoints. These DO enter the score now: grid_moments builds
+                # the per-skill excursion from them via SkillNoiseScalar. They were spread-column
+                # only before the dispersion-aware work.
+                "MagnitudeLerpLow", "MaxMagnitude",
                 "PassionBudgetSpreadMin", "PassionBudgetSpreadMax"]
     missing = [r for r in required if r not in out]
     if missing:

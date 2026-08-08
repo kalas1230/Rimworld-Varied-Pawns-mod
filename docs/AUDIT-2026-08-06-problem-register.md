@@ -87,29 +87,30 @@ occasions where an unchecked citation sent someone editing the wrong code.
 | [P-03](#p-03) | Docs | The exchange rate `R = 1.94` and Rule 7 were not updated for the pip-efficiency term; `R` is now bias-dependent | **Major** — ✅ FIXED 2026-08-08 |
 | [P-04](#p-04) | Docs | Two different rules are both numbered **6**, and the document cites rules by number | **Minor** — ✅ FIXED 2026-08-08 |
 | [P-05](#p-05) | Docs | The canonical model statement still reads `passionNorm = pips/18`, omitting both STEP 1 terms | **Minor** — ✅ FIXED 2026-08-08 |
-| [P-06](#p-06) | Docs | Headroom is quoted as `6.5pp` in the mandatory rule and `6.6pp` in the tool output it points at | **Cosmetic** — ⚠️ RECURRED, see 2026-08-08 note |
-| [P-07](#p-07) | Packaging | `About.xml` claims RimWorld **1.5** support that nothing in this repo builds or tests | **Minor** |
+| [P-06](#p-06) | Docs | Headroom is quoted as `6.5pp` in the mandatory rule and `6.6pp` in the tool output it points at | **Cosmetic** — ✅ FIXED 2026-08-08 |
+| [P-07](#p-07) | Packaging | `About.xml` claims RimWorld **1.5** support that nothing in this repo builds or tests | **Minor** — ✅ FIXED 2026-08-08 |
 | [P-08](#p-08) | Docs vs code | The passion-variance-OFF fallback is documented as `0.2778` and implemented as `0.2609` | **Minor** — ✅ FIXED 2026-08-08 |
 | [P-09](#p-09) | Model drift | `Constants.QualityClampEpsilon` is applied in C# but absent from `envelope_check.py` and from the drift check | **Minor** — ✅ RESOLVED 2026-08-07 |
 | [P-10](#p-10) | Scoring | `CalculateBestOfNScoreCore` has a silent fallback that returns the exact quantity Defect A was deleted for | **Minor** — ✅ FIXED 2026-08-08 |
-| [P-11](#p-11) | Naming | `MinMagnitudeFloor` is not a floor and is no longer a minimum; the name invites the mistake its own comment warns about | **Cosmetic** |
+| [P-11](#p-11) | Naming | `MinMagnitudeFloor` is not a floor and is no longer a minimum; the name invites the mistake its own comment warns about | **Cosmetic** — ✅ FIXED 2026-08-08 |
 | [P-12](#p-12) | Model drift | Python clamps the composite on one side, C# on both | **Cosmetic** — ✅ FIXED 2026-08-08 |
-| [P-13](#p-13) | Comments | `Constants.cs:142` says the integration nodes were measured "across all seven presets"; there are eight | **Cosmetic** |
+| [P-13](#p-13) | Comments | `Constants.cs:142` says the integration nodes were measured "across all seven presets"; there are eight | **Cosmetic** — ✅ FIXED 2026-08-08 |
 | [P-14](#p-14) | Settings | `Resolve()` answers a dangling id with an **unrelated profile's live values**, and corrupts that profile's label on the way out | **Major** — ✅ FIXED |
 | [P-15](#p-15) | Passions | `gene.passionPreAdd` is snapshotted **after** the bump, so a removed passion gene leaves its passion behind permanently | **Major** — ✅ FIXED |
 | [P-16](#p-16) | Robustness | All three appliers dereference `pawn.skills` / `pawn.story` unguarded, while guarding `pawn.genes` everywhere | **Major** — ✅ FIXED |
-| [P-17](#p-17) | Robustness | "Verbose logging **(dev mode)**" is not gated on dev mode, and one of its two effects rethrows inside the pawn-generation postfix | **Minor** |
-| [P-18](#p-18) | Dead code | `TraitAgeCap`'s age 7–9 and 10–12 branches cannot be reached under vanilla growth ages | **Minor** |
-| [P-19](#p-19) | Settings | `Resolve()` clones presets but aliases custom profiles, so `Active`, `Hostile` and `Editing` can be one object | **Minor** |
-| [P-20](#p-20) | Robustness | The life-stage postfix has no exception guard, unlike both sibling postfixes | **Minor** |
-| [P-21](#p-21) | Persistence | A parallel-list count mismatch discards an entire override axis **silently** | **Minor** |
-| [P-22](#p-22) | Settings | Custom profile ids come from `DateTime.Now.Ticks` with no uniqueness check | **Minor** |
-| [P-23](#p-23) | Traits | Gene `forcedTraits` overwrite `kindDef` `forcedTraits` degree without any precedence rule | **Minor** |
-| [P-24](#p-24) | UI | The quality slider writes unconditionally, breaking the file's own double-guard pattern | **Minor** |
-| [P-25](#p-25) | Memory | `LastKnownStage` never drops entries for dead pawns | **Cosmetic** |
+| [P-17](#p-17) | Robustness | "Verbose logging **(dev mode)**" is not gated on dev mode, and one of its two effects rethrows inside the pawn-generation postfix | **Minor** — ✅ FIXED 2026-08-08 |
+| [P-18](#p-18) | Dead code | `TraitAgeCap`'s age 7–9 and 10–12 branches cannot be reached under vanilla growth ages | **Minor** — ✅ DOCUMENTED (live code, not deleted) |
+| [P-19](#p-19) | Settings | `Resolve()` clones presets but aliases custom profiles, so `Active`, `Hostile` and `Editing` can be one object | **Minor** — ✅ already documented on Resolve() |
+| [P-20](#p-20) | Robustness | The life-stage postfix has no exception guard, unlike both sibling postfixes | **Minor** — ✅ FIXED 2026-08-08 |
+| [P-21](#p-21) | Persistence | A parallel-list count mismatch discards an entire override axis **silently** | **Minor** — ✅ FIXED 2026-08-08 |
+| [P-22](#p-22) | Settings | Custom profile ids come from `DateTime.Now.Ticks` with no uniqueness check | **Minor** — ✅ FIXED 2026-08-08 |
+| [P-23](#p-23) | Traits | Gene `forcedTraits` overwrite `kindDef` `forcedTraits` degree without any precedence rule | **Minor** — ✅ DOCUMENTED (precedence now stated) |
+| [P-24](#p-24) | UI | The quality slider writes unconditionally, breaking the file's own double-guard pattern | **Minor** — ✅ FIXED 2026-08-08 |
+| [P-25](#p-25) | Memory | `LastKnownStage` never drops entries for dead pawns | **Cosmetic** — ⛔ WON'T FIX (audit: "no action implied") |
 | [P-26](#p-26) | Overrides | "This mod never touches them" is enforced by a weaker faction test than the one that decides the override — hostile pawns can be varied with the toggle off | **Major** — ✅ FIXED |
 | [P-27](#p-27) | Robustness | Three of four `HostileTo(Faction.OfPlayerSilentFail)` call sites omit the null check the fourth has — during world gen, which is exactly when it is null | **Minor** — ✅ FIXED |
 
+| [P-28](#p-28) | Scoring | The Beta cache is never invalidated when the quality slider moves, so a custom profile's curve and power readout integrate a stale distribution for the rest of the editing session | **Major** — ✅ FIXED 2026-08-08 |
 *(Entries below are added as the audit proceeds; the index is kept in sync.)*
 
 ### What was checked and found clean
@@ -1434,3 +1435,58 @@ not re-covered.
 | *"`Constants.cs` contains malformed `\` comment markers"* | A tool rendering artifact. `cat -A` confirms the bytes are `//` throughout. |
 | *"`zzz-Do-Not-Commit/test_race_resolution.py` is a dangling reference"* | The file exists; `HANDOVER.md:1849` is correct. |
 | *"`EnvelopeFigures.g.cs` may be stale against the current constants"* | Running `python docs/tools/envelope_check.py` reports `Source/EnvelopeFigures.g.cs: unchanged` and `PASS`. The generated table is current. |
+
+
+---
+
+<a id="p-28"></a>
+## P-28 — The Beta cache is never invalidated when the quality slider moves
+
+**Severity: Major.  Confidence: high (code trace; not observed in game).**
+**Found 2026-08-08 while fixing P-24, which is adjacent to it in the same three lines.**
+
+### What
+
+`VarianceProfileValues.GetBetaAlphaBeta` (`VarianceProfile.cs:96`) caches `alpha`/`beta` and
+re-derives them only when `distributionParamsDirty` is set. That flag is set in exactly three
+places:
+
+| Site | When it runs |
+|---|---|
+| `Clone()` (`:121`) | preset resolution — presets are cloned every `Resolve` |
+| `ClampAndSwap()` (`:152`) | only via `MarkDirtyOnWrite()` |
+| `ExposeData()` (`:174`) | save/load and `SettingsTransfer` import |
+
+`MarkDirtyOnWrite()` has two callers: `PawnVarianceMod.WriteSettings()` — which RimWorld fires when
+the settings window **closes** — and the import path.
+
+`MarkDistributionParamsDirty()` (`:94`) existed and **had no callers anywhere in the assembly**.
+
+The editor writes `v.averageQuality` directly from the slider each frame, and `Resolve()` returns a
+custom profile's values **un-cloned** by design (see the comment on `Resolve`, and P-19). So for a
+custom profile there is no path that invalidates the cache between the slider moving and the window
+closing.
+
+### Consequence
+
+Drag the quality slider on a custom profile and `alpha`/`beta` stay frozen at whatever quality was
+current when the cache was first populated. `DispersionModel.BuildCdf` and `OutcomeDensity` both
+call `GetBetaAlphaBeta`, so **the header curve and the Best-of-N power readout keep integrating the
+old distribution for the rest of the editing session**, catching up only after a close/reopen. The
+Best-of-N cache keys on `averageQuality`, so it correctly recomputes — against stale Beta
+parameters, which is what makes this silent rather than obviously frozen.
+
+Presets are unaffected: `Resolve` clones them, and `Clone()` sets the flag.
+
+### Fix
+
+`ProfileEditorTab.cs` — write the slider value only on an actual change, and call
+`v.MarkDistributionParamsDirty()` when it does. This is the call the method was evidently written
+for and never wired to.
+
+### What was not verified
+
+Not reproduced in game — the session's RimWorld instance had already been stopped when this was
+found. The code trace is unambiguous, but **the in-game check is still owed**: open a custom
+profile, drag `Average pawn quality` across its range, and confirm the curve and the
+`Best of 25 rerolls` figure track it continuously rather than jumping after a close/reopen.
