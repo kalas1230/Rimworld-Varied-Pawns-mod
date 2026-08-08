@@ -497,6 +497,14 @@ fields — this used to be false and was the whole reason `Wildcard` breached Ru
 > metric is right."** The gate can only ever prove the model sides consistent with each other.
 > Anything the *generator* does that no model mirrors is invisible to it. When touching any
 > budget-shaping branch, diff all four sites by hand.
+>
+> **Verified in game 2026-08-08.** `Verify Best-of-N` 32/32 PASS, worst shown 0.01pp — the fix
+> disturbs no shipped preset, as predicted. The fix itself was checked on the one configuration
+> that reaches the branch: a custom profile at `passionCountMin/Max = 0.5`, `passionSpread = 0`
+> reads **`Typical −53% (0.12)` / `Best of 25 −57% (0.15)`**, matching the model exactly. The
+> pre-fix build read **−60%** at the same config. **Note that 32/32 does NOT test this fix** — no
+> shipped preset has `passionCountMin < 1`, so the custom profile is the only instrument that
+> does.
 
 **The mechanism worth keeping in mind when reading the numbers, because it still shapes them:**
 `skillSpread` drives the per-skill excursion in `SkillVarianceApplier.Shift` —
