@@ -477,6 +477,27 @@ integrate that mixture into Best-of-N. Every percentage in the envelope table no
 fields — this used to be false and was the whole reason `Wildcard` breached Rule 1 invisibly; see
 §0 above for that history.
 
+> [!CAUTION]
+> **The vanilla passion floor is written in FOUR places and they must stay identical.**
+> `PassionVarianceApplier` (the generator), `DispersionModel.Moments`, `envelope_check.py`'s
+> `grid_moments`, and `dispersion_mc.py`'s `simulate`. The condition is
+> `budget < 1 && passionCountMin > 0` — the generator adds `alreadyCommittedPips <= 0` because
+> the growth-up path tops up a pawn who already has passions; the three models are
+> generation-only and do not need that term.
+>
+> **The three model sides once gated it behind `spread > 0` and the generator did not.** All
+> three agreed with each other, so the in-game gate stayed green while every one of them
+> disagreed with the pawns actually being rolled. A custom profile at `passionCountMin/Max = 0.5`
+> with `passionSpread = 0` — two slider moves, both values inside the shipped slider bounds —
+> scored a budget of `0.5` against a delivered `1.0`, worth **6.6pp** on the readout, or ~13× the
+> 0.5pp tolerance the gate is built to catch. No shipped preset reached it (all have
+> `passionCountMin ≥ 2.2`), which is why `EnvelopeFigures.g.cs` was byte-unchanged by the fix.
+>
+> **This is the §0 failure recurring in miniature: "both implementations agree" is not "the
+> metric is right."** The gate can only ever prove the model sides consistent with each other.
+> Anything the *generator* does that no model mirrors is invisible to it. When touching any
+> budget-shaping branch, diff all four sites by hand.
+
 **The mechanism worth keeping in mind when reading the numbers, because it still shapes them:**
 `skillSpread` drives the per-skill excursion in `SkillVarianceApplier.Shift` —
 `magnitude = Lerp(0, 6, SkillNoiseScalar)`, so up to **±6 levels per skill**
@@ -670,7 +691,8 @@ Harmless on the shipped presets — that is *not* the argument. Two things kill 
 
 1. **The noise slider inverts.** The pin rate is driven by `magnitude ÷ range width`, which no UI
    surfaces. On a custom profile with a narrow band (range `1.0–3.0`), pinning goes 18% at
-   `skillNoise` 0.20 → **49% at 0.50** → **70% at 1.00**, split evenly between the handles. Past
+   `skillSpread` 0.49 lv → **49% at 1.22 lv** → **70% at 2.45 lv**, split evenly between the
+   handles (measured on the old 0–1 scalars at 0.20/0.50/1.00, converted here by `×√6`). Past
    roughly half travel, *raising* the variance knob makes pawns **more alike**: a 12-skill pawn ends
    with ~4 skills at exactly the min shift and ~4 at exactly the max. A control that reverses
    direction halfway along is worse than one whose range is a soft target.
