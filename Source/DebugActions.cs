@@ -1059,12 +1059,15 @@ namespace PawnVarianceMod
                 + $"({100f * passionless / perPawnMeans.Count:F1}%)");
             sb.AppendLine();
 
-            // The whole point of the run: an observed sd to hold the tool's DERIVED sd against.
-            // envelope_check.py predicts per-skill sd = skillSpread directly (the field now STORES
-            // that sd rather than deriving it from a 0-1 scalar); the observed figure also carries
-            // the quality-driven spread of the baseline, so it
-            // should sit ABOVE that prediction. If it sits below, the noise term is not reaching
-            // the pawns and something upstream is clamping it.
+            // The skill axis stays REPORTED, not asserted. The 'per-skill level' sd in the table
+            // above is still worth reading against the 'per-skill sd' column in
+            // `python docs/tools/envelope_check.py`: the tool predicts per-skill sd = skillSpread
+            // directly, while the observed figure also carries the quality-driven spread of the
+            // baseline, so it should sit ABOVE the prediction. Sitting BELOW means the noise term is
+            // not reaching the pawns and something upstream is clamping it. That comparison is by
+            // eye on purpose -- see the note on the passion axis below for why it is the axis that
+            // gets an assertion and this one does not.
+            //
             // GENERATOR vs MODEL. This is the only check in the project that compares rolled pawns
             // against the scoring model; everything else compares one model to another, which
             // cannot catch a branch both models are missing (see the note on VerifyBestOfN).
