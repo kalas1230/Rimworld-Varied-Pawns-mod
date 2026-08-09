@@ -1516,7 +1516,8 @@ all and rely on the `Clamp01` at the very end to catch anything that overshoots.
 ### Why it matters
 
 It is inert today, and only by luck of the current constants. `Constants.VanillaPassionBudget = 5.0`
-sits far below `capacity` at vanilla's own Major bias (`≈12` pips), so vanilla's outcome pips never
+sits far below `capacity` at vanilla's own Major bias (**15.00 pips**, measured: 12 skills at a
+price of `Minor + (Major - Minor) * 0.5 = 1.25`), so vanilla's outcome pips never
 approach `capacity` in the first place — the missing cap in the first pair of mirrors is a cap that
 never had anything to clamp. The four mirrors agree with each other today because the input never
 exercises the divergence, not because the formulas match.
@@ -1533,21 +1534,37 @@ This is the same shape as Q-04 and Q-14: the generator-agreement story ("all fou
 true only because none of them is actually being exercised on the branch that would expose the
 difference, which is exactly the failure mode this whole audit series exists to catch.
 
-**Task 2's `check_mean_band_consistency` (`docs/tools/envelope_check.py`, its `_probe-both-off`,
-`_probe-skill-off` and `_probe-passion-off` probes) does NOT catch this either.** All three probes
-compare `grid_moments` (uncapped-first) against `make_composite` (capped-first) at zero spread —
-i.e. they compare exactly the two branches that disagree on capping order — but they do so at the
-CURRENT constants, where the divergence is a no-op. The probes exercise the branch on **both sides
-of the split equally**, so a new gate built the same way the Task 2 gate was would not close this
-gap; closing it needs a probe that raises the effective budget past capacity specifically, which is
-a scoring-constant change, not a profile-field probe.
+**Task 2's `check_mean_band_consistency` DOES catch this the moment it becomes live — measured, see
+below.** Its `_probe-both-off` probe compares `grid_moments` (uncapped-first) against
+`make_composite` (capped-first) at zero spread, which is exactly the two branches that disagree on
+capping order. At the CURRENT constants the gap is `0.00e+00` because the cap has nothing to clamp,
+so the probe reads as passing — but the gate is re-evaluated on every run, so a retune past the
+threshold fails it immediately and by a wide margin. **This entry originally claimed the opposite
+("does NOT catch this either"); that claim was wrong and is corrected here.** It was reasoning from
+"both sides are exercised equally at today's constants" to "the gate is structurally blind", which
+does not follow: the gate is not blind, the input is merely below the threshold.
 
-### What was not verified
+That materially lowers the risk. The remaining exposure is narrow but real: `Moments` and
+`grid_moments` are *mutually* consistent, so the in-game `Verify Best-of-N` 32/32 gate — which
+compares those two — stays green through the divergence. Only the offline
+`check_mean_band_consistency` sees it.
 
-Whether raising `VanillaPassionBudget` past capacity in a scratch run actually produces a numeric
-divergence between the two mirror pairs — this entry states the mechanism and the exact trigger
-condition from reading the four sites, but no offline run forced the constants past the threshold to
-confirm the predicted divergence numerically.
+### Verified — the divergence was forced numerically
+
+Measured 2026-08-09 with a read-only probe that raised `VanillaPassionBudget` **in memory only**
+(`zzz-Do-Not-Commit/q17_probe.py`; nothing on disk was changed). `grid_moments` vs `make_composite`
+on a both-axes-off Faithful at `q = 0.50`:
+
+| `VanillaPassionBudget` | `grid_moments` | `make_composite` | gap |
+|---|---|---|---|
+| 5.00 (shipped) | 0.250709 | 0.250709 | `0.00e+00` |
+| 14.00 (just under capacity) | 0.556521 | 0.556521 | `0.00e+00` |
+| 20.00 (past capacity 15.00) | 0.739130 | 0.597353 | **`1.42e-01`** |
+
+So the mechanism is confirmed, the trigger is exactly the capacity threshold as predicted, and the
+magnitude is large — 0.142 on a `[0,1]` axis, roughly 14pp. Against
+`check_mean_band_consistency`'s `1e-9` threshold that is eight orders of magnitude over the line,
+so the failure would be unmissable rather than marginal.
 
 ### Not fixed — filed only
 
