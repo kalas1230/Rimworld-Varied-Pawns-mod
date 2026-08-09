@@ -57,6 +57,11 @@ approximation is known to drift.
   read ~2.4× narrower. It did not.
 - Zeroing both spread fields moved `Best of 25` from +23% to +9%, proving the readout now actually
   responds to dispersion rather than only to the mean band.
+- [ ] **`Roll pawns and dump distribution` at 1000 pawns, on `Faithful`, with no overrides
+  active.** Expected: `GENERATOR vs MODEL` reports `model predicts ~4.55` and
+  `pawns delivered` within tolerance. A delta beyond tolerance on a preset means a
+  generator branch has no mirror. **This has never been run** — until it is, the
+  assertion is argued, not measured.
 
 **Affordance worth knowing:** the profile editor can be opened directly via GABS with
 `rimworld/open_mod_settings`, `modId: mod-settings:kalas.pawnvariance:28ba19877e53c641` — far faster
