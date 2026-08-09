@@ -1411,6 +1411,68 @@ namespace PawnVarianceMod
             return (gainPerPassion / pricePerPassion) / (majorGain / Constants.MajorPassionCost);
         }
 
+        // A passion budget in pips -> the normalised passion axis. Mirror of `passion_from` in
+        // docs/tools/envelope_check.py's make_composite; DispersionModel.Moments does the same
+        // thing node by node. IF YOU CHANGE ONE, CHANGE ALL THREE.
+        //
+        // Four terms, and they are four genuinely different things. Do not collapse them.
+        //   budget      — pips the profile targets at this quality.
+        //   spend loop  — how many of those pips a pawn ACTUALLY receives. Whole passions only,
+        //                 remainder discarded. See PassionSpend for why this is not the same as
+        //                 the budget and why the difference does not cancel (finding Q-14).
+        //   capacity    — the most pips the pawn's skills can physically absorb.
+        //   efficiency  — what a pip is WORTH at this Major bias. See PassionPipEfficiency.
+        //
+        // The loop runs BEFORE the capacity limit, which is the generator's order: it spends the
+        // whole budget into whole passions and only discovers how many eligible skills exist at
+        // assignment, discarding the surplus there.
+        //
+        // Capacity is what actually caps the axis: each skill holds at most one passion, and a
+        // passion costs on average Minor + (Major - Minor) * majorBias, so a profile can place one
+        // per skill and no more. Budget above that is rolled and then discarded by the applier
+        // (open decision 2 — deliberately not clamped at roll time), so the score must not keep
+        // counting it. Without this cap a custom profile at budget 18 and Major bias 0 would score
+        // a saturated 1.0 while only 12 pips are spendable — 12 Minors fill all 12 skills.
+        //
+        // The skill count is DERIVED, not a constant: MaxPassionPips is 12 skills x a Major, so
+        // dividing it back out gives 12 exactly and cannot drift out of step with the ceiling. See
+        // the note on Constants.MaxPassionPips before replacing this with a named 12.
+        //
+        // This whole expression once read `budget * (1f + 0.25f * v.passionMajorBias)`, a 24-pip-era
+        // leftover. When it was written the denominator was 12 (the SKILL COUNT), so the budget was
+        // being read as a COUNT OF PASSIONS and the 1.25 was the quality premium of an all-Major set
+        // over an all-Minor set of the same size — coherent in count units. The denominator was
+        // later corrected to 18 pips; that numerator was not, and a count-unit premium inflated a
+        // pip-unit quantity by up to 25% until 2026-08-06. It also ran backwards at the top end: it
+        // made a LOW Major bias saturate LATE (18 pips at bias 0) when a low bias is exactly the
+        // case that saturates EARLY, since 12 Minors fill all 12 skills for 12 pips. The instinct
+        // behind it was sound and is now expressed properly by `efficiency`: a Major really is
+        // worth more than its 1.5-pip price. What was wrong was the units, the anchor (it scaled
+        // above the ceiling instead of discounting below it) and the magnitude (1.25 from nowhere,
+        // against 1.18 derived from the game's own XP rates).
+        private static float PassionNormFor(float budget, float majorBias)
+        {
+            float skillCount = Constants.MaxPassionPips / Constants.MajorPassionCost;
+            float capacity = skillCount
+                * (Constants.MinorPassionCost
+                   + (Constants.MajorPassionCost - Constants.MinorPassionCost) * majorBias);
+            float efficiency = PassionPipEfficiency(majorBias);
+
+            // Averaged over the spend loop's own coin flips, with capacity and Clamp01 applied per
+            // OUTCOME rather than to the mean. This function only needs the first moment, but
+            // DispersionModel.Moments needs the second from the same outcomes, so both are written
+            // the same way — a mean-then-clamp shortcut here would silently stop mirroring it.
+            var outcomes = PassionSpend.Outcomes(budget, majorBias);
+            float acc = 0f;
+            for (int i = 0; i < outcomes.Length; i++)
+            {
+                float pips = Mathf.Min(outcomes[i].Pips, capacity);
+                acc += outcomes[i].Weight
+                       * Mathf.Clamp01(pips * efficiency / Constants.MaxPassionPips);
+            }
+            return acc;
+        }
+
         private static float CalculateCompositeScore(float q, VarianceProfileValues v)
         {
             // Skill variance off => the pawn keeps vanilla's levels, i.e. AssumedVanillaSkillBaseline
@@ -1443,52 +1505,20 @@ namespace PawnVarianceMod
             // skill axis's baseline (5/20) copied across, which is right there and only
             // coincidentally near-right here. Scored through the same efficiency term as every
             // other profile, or this branch would silently sit on a different scale.
-            float passionNorm = Constants.VanillaPassionBudget
-                * PassionPipEfficiency(Constants.VanillaMajorBias) / Constants.MaxPassionPips;
+            // Runs through the spend loop as well, because vanilla's own generator discretizes
+            // exactly the way ours does. Scoring this branch continuously while the live branch
+            // below discretizes would put the two on different scales and break the both-axes-off
+            // invariant Q-16 turns on -- Faithful's band at q = 0.50 is VanillaPassionBudget pips
+            // at VanillaMajorBias, so the two paths must agree term for term.
+            float passionNorm = PassionNormFor(Constants.VanillaPassionBudget,
+                                               Constants.VanillaMajorBias);
             if (v.enablePassionVariance)
             {
-                // Three terms, and they are three genuinely different things. Do not collapse them.
-                //   budget      — pips the profile targets at this quality. The spend loop charges
-                //                 Majors MajorPassionCost and Minors MinorPassionCost out of it.
-                //   capacity    — the most pips the pawn's skills can physically absorb.
-                //   efficiency  — what a pip is WORTH at this Major bias. See PassionPipEfficiency.
-                //
-                // This line used to read `budget * (1f + 0.25f * v.passionMajorBias)`, a 24-pip-era
-                // leftover. When it was written the denominator was 12 (the SKILL COUNT), so the
-                // budget was being read as a COUNT OF PASSIONS and the 1.25 was the quality premium
-                // of an all-Major set over an all-Minor set of the same size — coherent in count
-                // units. The denominator was later corrected to 18 pips; that numerator was not,
-                // and a count-unit premium inflated a pip-unit quantity by up to 25% until
-                // 2026-08-06. It also ran backwards at the top end: it made a LOW Major bias
-                // saturate LATE (18 pips at bias 0) when a low bias is exactly the case that
-                // saturates EARLY, since 12 Minors fill all 12 skills for 12 pips.
-                //
-                // The instinct behind it was sound and is now expressed properly by `efficiency`:
-                // a Major really is worth more than its 1.5-pip price. What was wrong was the
-                // units (a count premium on a pip quantity), the anchor (it scaled above the
-                // ceiling instead of discounting below it) and the magnitude (1.25 from nowhere,
-                // against 1.18 derived from the game's own XP rates).
-                //
-                // Capacity is what actually caps the axis: each skill holds at most one passion,
-                // and a passion costs on average Minor + (Major - Minor) * majorBias, so a profile
-                // can place one per skill and no more. Budget above that is rolled and then
-                // discarded by the applier (open decision 2 — deliberately not clamped at roll
-                // time), so the score must not keep counting it. Without this cap a custom profile
-                // at budget 18 and Major bias 0 would score a saturated 1.0 while only 12 pips are
-                // spendable — 12 Minors fill all 12 skills.
-                //
-                // The skill count is DERIVED, not a constant: MaxPassionPips is 12 skills x a
-                // Major, so dividing it back out gives 12 exactly and cannot drift out of step
-                // with the ceiling. See the note on Constants.MaxPassionPips before replacing this
-                // with a named 12.
-                float skillCount = Constants.MaxPassionPips / Constants.MajorPassionCost;
+                // Pips the profile targets at this quality. Everything that turns pips into a
+                // normalised axis — the spend loop, capacity, efficiency — is in PassionNormFor,
+                // which the disabled-axis fallback above shares so the two cannot drift apart.
                 float budget = Mathf.Lerp(v.passionCountMin, v.passionCountMax, q);
-                float capacity = skillCount
-                    * (Constants.MinorPassionCost
-                       + (Constants.MajorPassionCost - Constants.MinorPassionCost) * v.passionMajorBias);
-                float efficiency = PassionPipEfficiency(v.passionMajorBias);
-                passionNorm = Mathf.Clamp01(
-                    Mathf.Min(budget, capacity) * efficiency / Constants.MaxPassionPips);
+                passionNorm = PassionNormFor(budget, v.passionMajorBias);
             }
 
             // These two weights and Constants.MaxPassionPips jointly set the skill/passion exchange
@@ -1510,9 +1540,16 @@ namespace PawnVarianceMod
             //
             // The check that settles it: with BOTH axes off every pawn is untouched vanilla, so the
             // score must be exactly the Faithful baseline. Keeping the weights gives
-            //     (0.8 x 0.25 + 1.5 x 0.260870) / 2.3 = 0.257089
+            //     (0.8 x 0.25 + 1.5 x 0.251087) / 2.3 = 0.250709
             // which is FaithfulBaseline() to six decimals. The old code returned `q` there — the
             // raw quality roll, on no meaningful scale at all.
+            //
+            // The passion term is 0.251087 rather than the 0.260870 it was until 2026-08-09
+            // because vanilla's 5-pip budget now runs through vanilla's own discretizing spend
+            // loop like every other budget (4.8125 pips delivered, not 5.0 — see PassionSpend and
+            // finding Q-14). BOTH sides of this equality moved together, which is exactly why it
+            // still holds: a fix that discretized the live branch and not the fallback would put
+            // the two on different scales, and this is the check that would have caught it.
             //
             // No shipped figure moves: all eight presets set both flags true, so this is reachable
             // only from a custom profile. DispersionModel.Moments mirrors this; keep them in step.

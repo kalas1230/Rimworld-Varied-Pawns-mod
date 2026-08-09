@@ -309,10 +309,22 @@ namespace PawnVarianceMod
             // must be vanilla's own -- which is the Faithful baseline -- for EVERY profile and at
             // EVERY quality. Anything else means a disabled axis is being scored, or being dropped
             // from the weighted average instead of falling back to vanilla.
+            //
+            // The passion term runs through PassionSpend, because the pawn a disabled axis leaves
+            // alone is a VANILLA pawn and vanilla's generator discretizes its own budget the same
+            // way ours does (finding Q-14). Scoring vanilla's 5 pips continuously here while
+            // CalculateCompositeScore scores them through the loop would make this invariant fail
+            // for a correct implementation. That does cost some of this expression's independence
+            // -- it now shares the spend table with the code it checks -- so invariant 1b below
+            // restores a cross-branch comparison that does not.
             float vanillaSkillNorm = Constants.AssumedVanillaSkillBaseline / Constants.AssumedMaxSkillLevel;
-            float vanillaPassionNorm = Constants.VanillaPassionBudget
-                * PawnVarianceSettings.PassionPipEfficiency(Constants.VanillaMajorBias)
-                / Constants.MaxPassionPips;
+            float vanillaPassionNorm = 0f;
+            var vanillaOutcomes = PassionSpend.Outcomes(Constants.VanillaPassionBudget,
+                                                        Constants.VanillaMajorBias);
+            float vanillaEff = PawnVarianceSettings.PassionPipEfficiency(Constants.VanillaMajorBias);
+            for (int k = 0; k < vanillaOutcomes.Length; k++)
+                vanillaPassionNorm += vanillaOutcomes[k].Weight
+                    * Mathf.Clamp01(vanillaOutcomes[k].Pips * vanillaEff / Constants.MaxPassionPips);
             float vanillaComposite =
                 (Constants.CompositeSkillWeight * vanillaSkillNorm
                  + Constants.CompositePassionWeight * vanillaPassionNorm)
@@ -338,6 +350,52 @@ namespace PawnVarianceMod
                             + $"expected {vanillaComposite:F6}  *** TOGGLE MISMATCH ***");
                         toggleFailures++;
                     }
+                }
+            }
+
+            // Invariant 1b: the same equality, reached down a genuinely different code path. The
+            // both-axes-OFF score above is the two fallback branches; Faithful with both axes ON
+            // is the two live branches, evaluated on the profile built to mimic vanilla. Those
+            // share no arithmetic beyond the weights, so agreement is real evidence and not a
+            // tautology -- and it is the exact claim Q-16 turned on, which invariant 1 alone can
+            // no longer make now that it reads the shared spend table.
+            //
+            // This is also the one place the DISCRETIZATION is checked against a number nobody
+            // typed in: Faithful's band at q = 0.50 is VanillaPassionBudget pips at
+            // VanillaMajorBias, so the live branch must spend the identical budget through the
+            // identical loop and land on the identical value. If either branch ever stops running
+            // the loop -- or starts running a different one -- these two separate.
+            //
+            // BOTH SPREADS ARE ZEROED, and that is required rather than tidy. TypicalAt is
+            // dispersion-aware: it returns E[f(X)] over the budget Gaussian, while the fallback is
+            // f(E[X]) at the mean band. Those are two different estimators (finding Q-03) and they
+            // now differ by 8.5e-3 on Faithful -- so comparing them at Faithful's real spread
+            // would fail against a CORRECT implementation. At zero spread the mixture collapses to
+            // its centre and the two estimators must coincide exactly, which is the comparison
+            // that actually has meaning here.
+            VarianceProfile faithful = VarianceProfiles.Presets
+                .FirstOrDefault(x => x.label == "Faithful");
+            if (faithful == null)
+            {
+                sb.AppendLine("  NOTE  Faithful missing; the cross-branch baseline check was skipped.");
+            }
+            else
+            {
+                VarianceProfileValues flat = faithful.MakeValues();
+                flat.skillSpread = 0f;
+                flat.passionSpread = 0f;
+                flat.MarkDistributionParamsDirty();
+                float live = DispersionModel.TypicalAt(flat, 0.50f);
+                if (Mathf.Abs(live - vanillaComposite) > ToggleTolerance)
+                {
+                    sb.AppendLine($"  Faithful@0.50 flat, axes ON -> {live:F6}, both OFF -> "
+                        + $"{vanillaComposite:F6}  *** FALLBACK/LIVE BRANCH MISMATCH ***");
+                    toggleFailures++;
+                }
+                else
+                {
+                    sb.AppendLine($"  cross-branch OK: Faithful@0.50 at zero spread, live = "
+                        + $"fallback = {live:F6} (delta {Mathf.Abs(live - vanillaComposite):E2})");
                 }
             }
 

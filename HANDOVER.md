@@ -104,17 +104,25 @@ fight the implementation** — each one has bitten at least once.
 - **No passion-budget clamp.** A rolled budget above what the pawn's eligible skills can hold is
   discarded, and that is what lets restricted-skill pawns max out. Widening `passionCountMax` past
   ~12 buys progressively less. See "Why the budget is not clamped".
-- **The `Faithful` baseline is `0.2571`, and an exactly-`0.2500` baseline was rejected.**
+- **The `Faithful` baseline is `0.2507`, and an exactly-`0.2500` baseline was rejected.**
   `Faithful`'s budget midpoint is `5.0` to match **vanilla's own flat budget**, which is what the
   vanilla-like preset should have carried all along. Chasing a round `0.2500` reference instead
   would have needed a `4.79`-pip midpoint — a number picked to make a readout tidy rather than to
   match the game. The round number is cosmetic and nothing depends on it. Measured at 1000 pawns,
   `Faithful`'s realised budget is `4.59` pips mean over a `1.0–9.0` range, which **is** vanilla's
   `5 + Clamp(Gaussian(0,1), ±4)` range exactly.
+  > The baseline read `0.2571` until 2026-08-09 and the near-miss on a round `0.2500` is now a
+  > near-miss from the other side. It moved because the score started spending the budget through
+  > the generator's own loop instead of continuously (finding Q-14) — `5.0` pips targeted, `4.81`
+  > delivered at the mean band. **The `4.59` measurement above did not change and was never
+  > wrong**; what changed is that the model finally agrees with it. That figure was sitting in this
+  > document as evidence of vanilla parity while the score assumed `5.001`, which is exactly how
+  > the defect survived. Do not "restore" `0.2571`.
 - **Every preset's passion band carries the same `+1` pip offset**, not just `Faithful`'s. Raising
   the reference alone put `Faithful` *above* `Specialist` (a Rule 2 violation) and left `Desperate`
   1.3pp inside the envelope. A uniform shift preserves every relative difference; it is what widened
-  the tightest margin to 10.3pp. **If `Faithful` moves again, move all eight.**
+  the tightest margin to 10.3pp — since re-measured at **8.5pp**, see below. **If `Faithful` moves
+  again, move all eight.**
 
 **Two hard gates on any retune:** `envelope_check.py` must still PASS Rule 1 and Rule 2 at
 N = 1, 5, 25, 50; and if any figure moves, `Source/EnvelopeFigures.g.cs` **and** every pasted table
@@ -199,9 +207,30 @@ any high-dispersion profile.
 
 ## The passion axis
 
-`passionNorm = min(pips, capacity) / MaxPassionPips · PassionPipEfficiency(majorBias)`.
+`passionNorm = E[ min(spend(budget), capacity) ] / MaxPassionPips · PassionPipEfficiency(majorBias)`.
 
-Two terms, each with a reason:
+Three terms, each with a reason:
+
+**The spend loop** — `spend(budget)` is how many pips a pawn *actually receives*, which is not the
+budget. `PassionVarianceApplier` buys whole passions at 1.5 / 1.0 pips until it cannot afford a
+Minor and **discards the remainder**, so a 4.8-pip budget delivers 4. Every model side scored the
+continuous budget until 2026-08-09, i.e. scored a pawn richer than any that gets rolled — `Faithful`
+assumed `5.001` and delivers `4.551`, which is the same ~0.45-pip gap the 1000-pawn dump recorded as
+`4.59` (audit finding Q-14). The loss is near-identical on every profile, so most of it cancels in
+the ratio to `Faithful`; what does *not* cancel is signed by tier, pushing each preset further from
+`Faithful` in the direction it already sits.
+
+`Source/PassionSpend.cs` computes the loop's outcome distribution **exactly** rather than sampling
+it — every branch tests the remaining budget against one of the two costs, so the distribution is
+constant between consecutive thresholds and a table indexed by threshold is the answer, not an
+approximation of it. Delivered pips always lie in `(budget − 1, budget]`, so at most three outcomes
+carry mass and the capacity cap can be applied per outcome, which keeps the *variance* exact too.
+**Order matters: spend first, cap second** — the generator spends the whole budget into whole
+passions and only discards the surplus when it runs out of eligible skills.
+
+Mirrored in `make_spend` (`envelope_check.py`) and executed for real, sampled, in `dispersion_mc.py`
+— which is the only place the loop actually runs, and therefore the only thing that can catch the
+table being wrong. **Change one, change all three.**
 
 **Capacity cap** — `skills × (MinorCost + (MajorCost − MinorCost) · bias)` = 12 / 15 / 18 pips at
 bias 0 / 0.5 / 1. A *low* Major bias saturates *early* (12 Minors fill all 12 skills for 12 pips),
@@ -315,9 +344,16 @@ constant, so it contributes nothing to σ.
 >
 > **The invariant that catches this:** with both axes off the mod changes nothing, so the score must
 > be exactly the `Faithful` baseline.
-> `(0.8 × 0.25 + 1.5 × 0.260870) / 2.3 = 0.257089 = FaithfulBaseline()`. The old code returned `q`
-> there. `Faithful` must also score `0.257089` in **all four** flag combinations, being the
+> `(0.8 × 0.25 + 1.5 × 0.251087) / 2.3 = 0.250709 = FaithfulBaseline()`. The old code returned `q`
+> there. `Faithful` must also score `0.250709` in **all four** flag combinations, being the
 > vanilla-mimicking preset. Both are checked by the in-game verify action.
+>
+> The passion term is `0.251087`, not the `0.260870` this line carried until 2026-08-09, because
+> vanilla's 5-pip budget is now spent through vanilla's own discretizing loop like every other
+> budget (Q-14): `4.8125` pips delivered, not `5.0`. **Both sides of the invariant moved together,
+> which is why it still holds exactly** — and that is the point, since a fix that discretized the
+> live branch but not the fallback would have put the two on different scales and this equality is
+> what would have caught it.
 >
 > **No preset exercises this** — all eight leave both flags `true`, so `envelope_check.py`'s 32/32
 > and `EnvelopeFigures.g.cs` are blind to it by construction, and the toggle gate is a set of
@@ -374,32 +410,32 @@ Verbatim output of `python docs/tools/envelope_check.py` (deterministic integrat
 Pasted, not hand-edited — Rule 6.
 
 ```
-dispersion model self-check (zero noise vs analytic): 2.13e-04
+dispersion model self-check (zero noise vs analytic): 4.10e-04
 wS=0.8  wP=1.5  pips/18  skill/20  K=8
 Exchange rate R(bias) = (20/18) * (1.5/0.8) * eff(bias)
   R = 1.96 skill levels per passion pip at vanilla bias 0.5   (range 1.77 at bias 0 .. 2.08 at bias 1)
-Faithful baseline @ q=0.50: 0.2571
+Faithful baseline @ q=0.50: 0.2507
 
 profile                     N=1                N=5               N=25               N=50
-Faithful        0.2571   +0.0%     0.3184   +0.0%     0.3589   +0.0%     0.3727   +0.0% 
-Distinct        0.2354   -8.4%     0.3264   +2.5%     0.3924   +9.3%     0.4155  +11.5%   (variance)
-Wildcard        0.2505   -2.6%     0.3620  +13.7%     0.4417  +23.0%     0.4693  +25.9%   (variance)
-Desperate       0.2036  -20.8%     0.2588  -18.7%     0.2976  -17.1%     0.3111  -16.5% 
-Elite           0.3107  +20.8%     0.3682  +15.7%     0.4064  +13.2%     0.4194  +12.5% 
-Sovereign       0.3205  +24.7%     0.3793  +19.1%     0.4179  +16.4%     0.4310  +15.7% 
-Specialist      0.2796   +8.8%     0.3403   +6.9%     0.3807   +6.1%     0.3944   +5.8% 
-Scavenger       0.2230  -13.3%     0.2804  -11.9%     0.3197  -10.9%     0.3332  -10.6% 
+Faithful        0.2418   +0.0%     0.3041   +0.0%     0.3455   +0.0%     0.3595   +0.0% 
+Distinct        0.2207   -8.7%     0.3117   +2.5%     0.3783   +9.5%     0.4015  +11.7%   (variance)
+Wildcard        0.2358   -2.5%     0.3470  +14.1%     0.4271  +23.6%     0.4550  +26.5%   (variance)
+Desperate       0.1884  -22.1%     0.2445  -19.6%     0.2840  -17.8%     0.2978  -17.2% 
+Elite           0.2954  +22.2%     0.3541  +16.4%     0.3931  +13.8%     0.4065  +13.1% 
+Sovereign       0.3053  +26.3%     0.3651  +20.1%     0.4046  +17.1%     0.4181  +16.3% 
+Specialist      0.2644   +9.3%     0.3261   +7.2%     0.3673   +6.3%     0.3813   +6.1% 
+Scavenger       0.2077  -14.1%     0.2661  -12.5%     0.3062  -11.4%     0.3200  -11.0% 
 
 Rule 2 - power-tier ordering at the same N:
-  N=1   Desperate(0.204) < Scavenger(0.223) < Faithful(0.257) < Specialist(0.280) < Elite(0.311) < Sovereign(0.321)   OK
-  N=5   Desperate(0.259) < Scavenger(0.280) < Faithful(0.318) < Specialist(0.340) < Elite(0.368) < Sovereign(0.379)   OK
-  N=25  Desperate(0.298) < Scavenger(0.320) < Faithful(0.359) < Specialist(0.381) < Elite(0.406) < Sovereign(0.418)   OK
-  N=50  Desperate(0.311) < Scavenger(0.333) < Faithful(0.373) < Specialist(0.394) < Elite(0.419) < Sovereign(0.431)   OK
+  N=1   Desperate(0.188) < Scavenger(0.208) < Faithful(0.242) < Specialist(0.264) < Elite(0.295) < Sovereign(0.305)   OK
+  N=5   Desperate(0.245) < Scavenger(0.266) < Faithful(0.304) < Specialist(0.326) < Elite(0.354) < Sovereign(0.365)   OK
+  N=25  Desperate(0.284) < Scavenger(0.306) < Faithful(0.345) < Specialist(0.367) < Elite(0.393) < Sovereign(0.405)   OK
+  N=50  Desperate(0.298) < Scavenger(0.320) < Faithful(0.360) < Specialist(0.381) < Elite(0.406) < Sovereign(0.418)   OK
 
 Tightest envelope margins:
-  Wildcard @ N=50: +25.9%  (9.1pp of headroom)
-  Sovereign @ N=1: +24.7%  (10.3pp of headroom)
-  Wildcard @ N=25: +23.0%  (12.0pp of headroom)
+  Wildcard @ N=50: +26.5%  (8.5pp of headroom)
+  Sovereign @ N=1: +26.3%  (8.7pp of headroom)
+  Wildcard @ N=25: +23.6%  (11.4pp of headroom)
 
 Within-pawn dispersion (REPORTED, NOT ENFORCED -- invisible to every % above):
   profile     skillSpread   per-skill sd  vs Faithful passionSpread   budget sd
@@ -434,8 +470,8 @@ thin slices and add up their contributions. Each slice is counted as very slight
 slice too big. That is the whole defect.
 
 **Why it is harmless.** At `N=1` the slip does not enter the arithmetic at all, so `Sovereign` at
-N=1 — the tightest figure at that batch size, with 10.3pp of headroom — is exact. (Since the
-`Wildcard` retune the tightest figure *overall* is `Wildcard` at N=50 with 9.1pp; it is an `N≥2`
+N=1 — the tightest figure at that batch size, with 8.7pp of headroom — is exact. (Since the
+`Wildcard` retune the tightest figure *overall* is `Wildcard` at N=50 with 8.5pp; it is an `N≥2`
 figure, so it does carry the slip. That does not change the argument: the slip cancels in the ratio
 to `Faithful`.) For larger `N`
 the error compounds to at most ~0.9% at `N=50`. But `envelope_check.py` and the C# integrator make
@@ -500,8 +536,8 @@ satisfy for any profile with real dispersion. **The enforceable reading is same-
 > hand-edited). If `git status` shows that file dirty after a run, the shipped figures were stale —
 > commit it.
 >
-> **Why this matters more than it looks:** the tightest preset has **9.1pp** of headroom
-> (`Wildcard` @ N=50 — `Sovereign` @ N=1 is second-tightest at 10.3pp). A change that *feels*
+> **Why this matters more than it looks:** the tightest preset has **8.5pp** of headroom
+> (`Wildcard` @ N=50 — `Sovereign` @ N=1 is second-tightest at 8.7pp). A change that *feels*
 > cosmetic — nudging one preset's `averageQuality` by 0.02, or "tidying" a normalizer — can breach
 > the envelope without touching the preset that breaks, because the weights are shared.
 
@@ -885,8 +921,8 @@ re-deriving it or trusting a summary, including this one.** In outline: the ship
 `skillShiftMin = −4.0`, `skillShiftMax = 4.2`, measured at 1000 pawns with per-skill median `2.0`,
 per-skill sd `3.51` (vs `Faithful`'s `3.41`–`3.43`, now genuinely above), per-pawn mean-skill sd
 `1.30` (vs `Faithful`'s `1.19`–`1.23`, also genuinely above). It buys that with envelope headroom —
-`Wildcard` is now the **single tightest preset** in the mod at 9.1pp, ahead of `Sovereign`'s 10.3pp —
-and it still sits below `Faithful` at N=1 (`−2.6%`), preserving the documented crossing property,
+`Wildcard` is now the **single tightest preset** in the mod at 8.5pp, ahead of `Sovereign`'s 8.7pp —
+and it still sits below `Faithful` at N=1 (`−2.5%`), preserving the documented crossing property,
 because the passion axis was retuned in the same pass (`passionSpread` 3.4 → 2.0 pips,
 `passionMajorBias` 0.6 → 0.35) rather than the skill band alone having to carry that constraint.
 

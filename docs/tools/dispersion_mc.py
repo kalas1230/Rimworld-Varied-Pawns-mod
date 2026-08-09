@@ -33,7 +33,25 @@ def make_realised(C):
     skills = pdiv / major
     efficiency = ec.make_efficiency(C)
 
-    def realised(shifts, budget, p):
+    def spend(budget, bias, rnd):
+        """The generator's spend loop, run for real -- PassionVarianceApplier.cs:81-93.
+
+        Deliberately NOT the exact table envelope_check.make_spend builds. This file's job is to
+        be a different numerical method, so it samples the same state machine the game runs and
+        lets the law of large numbers reproduce what the quadrature computes in closed form. If
+        the two disagree, one of them is wrong, which is the whole point of keeping this file.
+        """
+        pips = 0.0
+        while budget >= minor:
+            if budget >= major and rnd.random() < bias:
+                pips += major
+                budget -= major
+            else:
+                pips += minor
+                budget -= minor
+        return pips
+
+    def realised(shifts, budget, p, rnd):
         acc = 0.0
         for s in shifts:
             lvl = base + s
@@ -48,7 +66,10 @@ def make_realised(C):
 
         capacity = skills * (minor + (major - minor) * p["passionMajorBias"])
         eff = efficiency(p["passionMajorBias"])
-        b = budget if budget < capacity else capacity
+        # Spend first, cap second -- the generator's order. It buys whole passions out of the full
+        # budget and only discards the surplus when it runs out of eligible skills.
+        pips = spend(budget, p["passionMajorBias"], rnd)
+        b = pips if pips < capacity else capacity
         passion_norm = b * eff / pdiv
         if passion_norm < 0.0:
             passion_norm = 0.0
@@ -112,7 +133,7 @@ def simulate(p, C, realised, n_skills, with_noise):
             budget = 1.0
         if budget < 0.0:
             budget = 0.0
-        out.append(realised(shifts, budget, p))
+        out.append(realised(shifts, budget, p, rnd))
 
     out.sort()
     return out
@@ -125,17 +146,33 @@ def main():
     realised = make_realised(C)
     n_skills = int(round(C["MaxPassionPips"] / C["MajorPassionCost"]))
 
+    # Self-check: at zero SPREAD the realised composite must reproduce the analytic one.
+    #
+    # This used to be exact to 1e-12 and deliberately is not any more. Since 2026-08-09 both sides
+    # model the generator's passion spend loop (audit finding Q-14), and that loop flips a coin per
+    # passion, so it is a source of randomness that survives setting both spread fields to zero.
+    # `realised` samples the loop; `composite` integrates it in closed form. They can now agree
+    # only in expectation, so the check averages and carries a Monte-Carlo tolerance.
+    #
+    # This is still a real check of exactly the thing that matters: make_spend's table claims to be
+    # the exact distribution of a loop it never runs, and this is the only place the loop is
+    # actually executed. A table that is merely self-consistent fails here.
+    SELF_M = 20_000
+    TOL = 1e-3          # ~18x the standard error at SELF_M; see the sd derivation in HANDOVER.
+    rnd = random.Random(SEED)
     worst = 0.0
     for name, p in P.items():
         for i in range(21):
             q = i / 20.0
             baseline = p["skillShiftMin"] + (p["skillShiftMax"] - p["skillShiftMin"]) * q
             budget = p["passionCountMin"] + (p["passionCountMax"] - p["passionCountMin"]) * q
-            got = realised([baseline] * n_skills, budget, p)
+            shifts = [baseline] * n_skills
+            got = sum(realised(shifts, budget, p, rnd) for _ in range(SELF_M)) / SELF_M
             want = composite(q, p)
             worst = max(worst, abs(got - want))
-    print(f"self-check: max |realised - analytic| at zero noise = {worst:.2e}")
-    if worst >= 1e-12:
+    print(f"self-check: max |E[realised] - analytic| at zero spread = {worst:.2e} "
+          f"({SELF_M:,} draws/point, tol {TOL:.0e})")
+    if worst >= TOL:
         print("FAIL: realised composite does not reproduce the analytic one")
         return 1
     print(f"skills={n_skills}  pawns/preset={M:,}  seed={SEED}\n")

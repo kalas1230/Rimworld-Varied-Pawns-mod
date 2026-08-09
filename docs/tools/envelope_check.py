@@ -119,7 +119,12 @@ def parse_constants(src):
                 # the per-skill excursion from them via SkillNoiseScalar. They were spread-column
                 # only before the dispersion-aware work.
                 "MagnitudeLerpLow", "MaxMagnitude",
-                "PassionBudgetSpreadMin", "PassionBudgetSpreadMax"]
+                "PassionBudgetSpreadMin", "PassionBudgetSpreadMax",
+                # Read since 2026-08-09 by make_spend, which needs the widest budget a caller can
+                # present in order to size its table. Q-06 notes this tool used to hardcode the
+                # +-4 sigma window as a literal while dispersion_mc.py derived it from here; the
+                # quadrature nodes in _gauss_nodes still hardcode it, so that half of Q-06 is open.
+                "PassionBudgetClampFactor"]
     missing = [r for r in required if r not in out]
     if missing:
         sys.exit(f"ERROR: {CONSTANTS} is missing: {', '.join(missing)}")
@@ -157,6 +162,97 @@ def parse_profiles(src):
     return out
 
 
+def make_spend(C):
+    """Mirror of PassionVarianceApplier's spend loop. Returns `outcomes(budget, bias)` giving the
+    EXACT distribution of pips the generator actually hands over, as a tuple of (pips, weight).
+
+    The generator does not spend a continuous budget (PassionVarianceApplier.cs:81-93): it buys
+    whole passions at MajorPassionCost / MinorPassionCost until it can no longer afford a Minor,
+    and the remainder in [0, MinorPassionCost) is DISCARDED. Until 2026-08-09 every model side --
+    this tool, DispersionModel.Moments, CalculateCompositeScore and dispersion_mc.py -- scored the
+    continuous budget instead, i.e. scored a pawn richer than any the generator rolls. Faithful:
+    5.000 pips assumed against 4.551 delivered, which is the ~0.45-pip gap the 1000-pawn in-game
+    dump recorded as 4.59 (HANDOVER.md "The Faithful baseline"). Audit finding Q-14.
+
+    Why this can be exact rather than sampled. Every branch in the loop tests the remaining budget
+    against MinorPassionCost or MajorPassionCost, so the whole outcome distribution depends on
+    `budget` ONLY through which of those thresholds it sits between. Between two consecutive
+    breakpoints the distribution is literally constant, so a table indexed by breakpoint is not a
+    discretisation of the answer -- it IS the answer. Breakpoints are enumerated from the reachable
+    spend totals rather than assumed to lie on a fixed grid, so the two costs are not required to
+    be commensurable.
+
+    The table is also tiny: the loop exits holding less than one Minor, so delivered pips always
+    lie in (budget - MinorPassionCost, budget] and at most three distinct totals carry any mass.
+    That is what lets the callers apply the capacity and Clamp01 limits per OUTCOME instead of to
+    a mean, keeping the second moment exact as well.
+    """
+    major, minor = C["MajorPassionCost"], C["MinorPassionCost"]
+    # Widest budget the callers can present: the passion band is clamped to MaxPassionPips
+    # (VarianceProfile.ClampAndSwap) and the Gaussian is truncated at PassionBudgetClampFactor
+    # sigma with sigma at most PassionBudgetSpreadMax.
+    max_budget = (C["MaxPassionPips"]
+                  + C["PassionBudgetSpreadMax"] * C["PassionBudgetClampFactor"])
+    cache = {}
+
+    def dist(budget, bias):
+        """One exact run of the loop's state machine, as a forward pass over (majors, minors)."""
+        out = {}
+        cur = {(0, 0): 1.0}
+        while cur:
+            nxt = {}
+            for (m, n), w in cur.items():
+                left = budget - major * m - minor * n
+                if left < minor:
+                    total = major * m + minor * n
+                    out[total] = out.get(total, 0.0) + w
+                elif left >= major:
+                    nxt[(m + 1, n)] = nxt.get((m + 1, n), 0.0) + w * bias
+                    nxt[(m, n + 1)] = nxt.get((m, n + 1), 0.0) + w * (1.0 - bias)
+                else:
+                    # Cannot afford a Major: the coin is not even flipped.
+                    nxt[(m, n + 1)] = nxt.get((m, n + 1), 0.0) + w
+            cur = nxt
+        return tuple(sorted(out.items()))
+
+    def build(bias):
+        # Reachable spend totals, and the budget values at which the loop's decisions change.
+        totals = {0.0}
+        frontier = [0.0]
+        while frontier:
+            nxt = []
+            for t in frontier:
+                for step in (major, minor):
+                    v = round(t + step, 9)
+                    if v <= max_budget and v not in totals:
+                        totals.add(v)
+                        nxt.append(v)
+            frontier = nxt
+        cuts = sorted({round(t + s, 9) for t in totals for s in (minor, major)
+                       if t + s <= max_budget + major})
+        # Evaluate once per interval, at its left endpoint -- the interval is [cut, next_cut).
+        return cuts, [dist(c, bias) for c in cuts]
+
+    def outcomes(budget, bias):
+        if budget < minor:
+            return ((0.0, 1.0),)
+        entry = cache.get(bias)
+        if entry is None:
+            entry = cache[bias] = build(bias)
+        cuts, table = entry
+        # Rightmost cut <= budget. bisect_right - 1, written out to avoid an import.
+        lo, hi = 0, len(cuts)
+        while lo < hi:
+            mid = (lo + hi) // 2
+            if cuts[mid] <= budget:
+                lo = mid + 1
+            else:
+                hi = mid
+        return table[lo - 1]
+
+    return outcomes
+
+
 def make_efficiency(C):
     """Mirror of PawnVarianceSettings.PassionPipEfficiency. A Major costs 1.5 pips but is worth
     1.769 Minors in XP-rate increment over having no passion, so pips bought at a low Major bias
@@ -185,7 +281,7 @@ def make_composite(C):
     Both enable flags are honoured. A disabled axis is NOT dropped from the weighted average --
     it contributes vanilla's own level, because "passion variance off" means the pawn keeps
     vanilla's passions, not that it has none. The weights therefore stay unconditional. With both
-    axes off the score is exactly the Faithful baseline (0.257089), which is the check that fixes
+    axes off the score is exactly the Faithful baseline (0.250709), which is the check that fixes
     the semantics. See the note on the weights in CalculateCompositeScore.
     """
     wS, wP = C["CompositeSkillWeight"], C["CompositePassionWeight"]
@@ -197,6 +293,25 @@ def make_composite(C):
     skills = pdiv / major
 
     efficiency = make_efficiency(C)
+    outcomes = make_spend(C)
+
+    def passion_from(budget, bias):
+        """Pips -> normalised axis, through the generator's own spend loop.
+
+        The loop is applied BEFORE the capacity limit, which is the generator's order: it spends
+        the whole budget into whole passions and only then discovers how many eligible skills
+        exist, discarding the surplus at assignment time. Capacity and Clamp01 are applied per
+        OUTCOME rather than to the mean, so the second moment stays exact for grid_moments.
+        """
+        eff = efficiency(bias)
+        acc = 0.0
+        for pips, w in outcomes(budget, bias):
+            u = min(pips, capacity_for(bias)) * eff / pdiv
+            acc += w * min(1.0, max(0.0, u))
+        return acc
+
+    def capacity_for(bias):
+        return skills * (minor + (major - minor) * bias)
 
     def composite(q, p):
         if p.get("enableSkillVariance", True):
@@ -210,14 +325,16 @@ def make_composite(C):
         # is the real cap: 12 skills, one passion each, at the bias's average price.
         if p.get("enablePassionVariance", True):
             budget = p["passionCountMin"] + (p["passionCountMax"] - p["passionCountMin"]) * q
-            capacity = skills * (minor + (major - minor) * p["passionMajorBias"])
-            eff = efficiency(p["passionMajorBias"])
-            passion_norm = min(1.0, max(0.0, min(budget, capacity) * eff / pdiv))
+            passion_norm = passion_from(budget, p["passionMajorBias"])
         else:
             # Vanilla's own budget at vanilla's own 50/50 Major flip, scored through the same
-            # efficiency term as every other profile.
-            passion_norm = (C["VanillaPassionBudget"]
-                            * efficiency(C["VanillaMajorBias"]) / pdiv)
+            # efficiency term as every other profile -- AND through the same spend loop, because
+            # vanilla's generator discretizes exactly the way ours does (HANDOVER.md "The Faithful
+            # baseline"). Scoring the fallback continuously while scoring the live axis discretely
+            # would put the two branches on different scales and break the both-axes-off invariant
+            # that Q-16 turns on: Faithful's band at q = 0.50 is VanillaPassionBudget pips at
+            # VanillaMajorBias, so the two paths must agree term for term.
+            passion_norm = passion_from(C["VanillaPassionBudget"], C["VanillaMajorBias"])
         return min(1.0, (wS * skill_norm + wP * passion_norm) / (wS + wP))
 
     return composite
@@ -286,6 +403,7 @@ def grid_moments(C):
     major, minor = C["MajorPassionCost"], C["MinorPassionCost"]
     n_skills = int(round(pdiv / major))
     efficiency = make_efficiency(C)
+    outcomes = make_spend(C)
     TS, TW = _tri_nodes()
     ZS, ZW = _gauss_nodes()
     wsum = wS + wP
@@ -324,16 +442,36 @@ def grid_moments(C):
                     b = 1.0
                 if b < 0.0:
                     b = 0.0
-                if b > capacity:
-                    b = capacity
-                u = b * eff / pdiv
-                if u > 1.0:
-                    u = 1.0
-                p1 += w * u
-                p2 += w * u * u
+                # The generator's spend loop: whole passions only, remainder discarded. Applied
+                # BEFORE the capacity limit because that is the generator's order -- it spends the
+                # whole budget into counts and only discovers how many eligible skills exist at
+                # assignment, discarding the surplus there. Both limits are applied per OUTCOME,
+                # so p2 is the exact second moment and picks up the dispersion the discretization
+                # removes, not merely the shift in the mean. See make_spend (audit finding Q-14).
+                for pips, pw in outcomes(b, p["passionMajorBias"]):
+                    u = min(pips, capacity) * eff / pdiv
+                    if u > 1.0:
+                        u = 1.0
+                    p1 += w * pw * u
+                    p2 += w * pw * u * u
             p_var = max(0.0, p2 - p1 * p1)
+            if not with_noise:
+                # The spend loop flips a coin per passion, so it is a dispersion source that
+                # SURVIVES zeroing both spread fields -- "zero noise" stopped meaning "zero
+                # variance" when the loop was modelled (Q-14). with_noise=False exists for exactly
+                # one caller, main()'s self-check, which asks whether the Normal-mixture Best-of-N
+                # machinery reduces to the analytic composite when there is no dispersion to
+                # integrate. Keeping the loop's variance here would make that comparison a test of
+                # a Normal approximation to a two-point distribution instead, and it fails by
+                # 4.1e-3. The MEAN above still runs through the loop, so the check keeps its teeth:
+                # the analytic side averages the same outcomes and the two must still agree exactly.
+                p_var = 0.0
         else:
-            p1 = C["VanillaPassionBudget"] * efficiency(C["VanillaMajorBias"]) / pdiv
+            # Vanilla's fallback runs through the same loop -- see make_composite's else branch.
+            vb, vbias = C["VanillaPassionBudget"], C["VanillaMajorBias"]
+            veff = efficiency(vbias)
+            p1 = sum(pw * min(1.0, pips * veff / pdiv)
+                     for pips, pw in outcomes(vb, vbias))
             p_var = 0.0
 
         mu = (wS * s1 + wP * p1) / wsum

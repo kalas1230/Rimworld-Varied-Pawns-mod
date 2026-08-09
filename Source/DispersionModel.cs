@@ -126,10 +126,26 @@ namespace PawnVarianceMod
                     // side shared the gate. Keep this condition identical to the applier's.
                     if (b < 1f && v.passionCountMin > 0f) b = 1f;
                     if (b < 0f) b = 0f;
-                    if (b > capacity) b = capacity;
-                    float u = Mathf.Min(1f, b * eff / pdiv);
-                    p1 += gaussW[i] * u;
-                    p2 += gaussW[i] * u * u;
+
+                    // The generator's spend loop: whole passions only, remainder discarded. Run
+                    // BEFORE the capacity limit because that is the generator's order -- it spends
+                    // the whole budget into counts and only discovers how many eligible skills
+                    // exist at assignment, discarding the surplus there.
+                    //
+                    // Both limits are applied per OUTCOME, not to a mean, so p2 stays the exact
+                    // second moment. That matters more than it looks: discretization removes a
+                    // little dispersion as well as shifting the mean, and Best-of-N is a maximum
+                    // statistic, so it reads dispersion directly. See PassionSpend (finding Q-14).
+                    var outcomes = PassionSpend.Outcomes(b, v.passionMajorBias);
+                    for (int k = 0; k < outcomes.Length; k++)
+                    {
+                        float pips = outcomes[k].Pips;
+                        if (pips > capacity) pips = capacity;
+                        float u = Mathf.Min(1f, pips * eff / pdiv);
+                        float w = gaussW[i] * outcomes[k].Weight;
+                        p1 += w * u;
+                        p2 += w * u * u;
+                    }
                 }
                 pVar = Mathf.Max(0f, p2 - p1 * p1);
             }
@@ -137,9 +153,18 @@ namespace PawnVarianceMod
             {
                 // Mirrors CalculateCompositeScore's passion-off fallback exactly: vanilla's own
                 // 5-pip budget at vanilla's 50/50 Major coin flip, scored through the same
-                // efficiency term as every other profile.
-                p1 = Constants.VanillaPassionBudget
-                     * PawnVarianceSettings.PassionPipEfficiency(Constants.VanillaMajorBias) / pdiv;
+                // efficiency term as every other profile -- AND through the same spend loop, since
+                // vanilla's generator discretizes exactly the way ours does. Scoring the fallback
+                // continuously while scoring the live axis discretely would put the two branches
+                // on different scales and break the both-axes-off invariant Q-16 turns on:
+                // Faithful's band at q = 0.50 is VanillaPassionBudget pips at VanillaMajorBias, so
+                // the two paths have to agree term for term.
+                float veff = PawnVarianceSettings.PassionPipEfficiency(Constants.VanillaMajorBias);
+                var vOutcomes = PassionSpend.Outcomes(Constants.VanillaPassionBudget,
+                                                      Constants.VanillaMajorBias);
+                p1 = 0f;
+                for (int k = 0; k < vOutcomes.Length; k++)
+                    p1 += vOutcomes[k].Weight * Mathf.Min(1f, vOutcomes[k].Pips * veff / pdiv);
                 pVar = 0f;
             }
 

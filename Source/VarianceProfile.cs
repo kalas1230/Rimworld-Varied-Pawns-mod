@@ -345,9 +345,13 @@ namespace PawnVarianceMod
                 //
                 // -4.0/4.2 is the only band measured wider than Faithful on BOTH spread measures
                 // while clearing the censoring. Floor is inside the "keep skillShiftMin above
-                // roughly -4" rule. It buys that with envelope headroom: 9.1pp, which makes this
-                // the SINGLE TIGHTEST preset in the mod, ahead of Sovereign's 10.3pp. Owner
-                // approved that trade 2026-08-07.
+                // roughly -4" rule. It buys that with envelope headroom: 8.5pp, which makes this
+                // the SINGLE TIGHTEST preset in the mod, ahead of Sovereign's 8.7pp. Owner
+                // approved that trade 2026-08-07, when the two figures read 9.1pp and 10.3pp;
+                // both tightened on 2026-08-09 when the score started spending budgets through
+                // the generator's own loop (finding Q-14). The ORDERING and the trade are
+                // unchanged -- every preset moved the same way -- but there is less room than
+                // when this was approved, so re-read the current table before widening anything.
                 //
                 // NEITHER envelope_check.py NOR the dispersion table can see censoring. If you
                 // move this band, dump 1000 pawns and read the MEDIAN and the per-pawn sd. The

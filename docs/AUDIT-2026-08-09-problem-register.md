@@ -52,9 +52,9 @@ confirms a finding nobody had connected to it (Q-14 again).
 |---|---|---|---|
 | [Q-01](#q-01) | Scoring | The dispersion model ignores `enableSkillVariance` / `enablePassionVariance`, so every dispersion-aware readout scores an axis the generator does not roll — up to **18.3pp** | **Major** — ✅ **FIXED 2026-08-09** |
 | [Q-16](#q-16) | Scoring | `CalculateCompositeScore` zeroes the weight of a disabled axis, making both of its own vanilla fallbacks dead code — the root cause under Q-01 | **Major** — ✅ **FIXED 2026-08-09** |
-| [Q-14](#q-14) | Scoring | The passion spend loop discretizes the budget into whole purchases and discards the remainder; no model side does — **1.60pp** on the enforcing metric | **Major** — ⏳ open |
+| [Q-14](#q-14) | Scoring | The passion spend loop discretizes the budget into whole purchases and discards the remainder; no model side does — **1.60pp** on the enforcing metric | **Major** — ✅ **FIXED 2026-08-09** (models corrected, generator untouched; every published figure moved) |
 | [Q-02](#q-02) | Docs | Six `file.cs:NNN` citations in `HANDOVER.md` point at the wrong line; two are off by a consistent 66 | **Major** — ✅ **FIXED 2026-08-09** (a seventh was found and fixed in the same sweep) |
-| [Q-03](#q-03) | Scoring | The `Typical` readout divides a dispersion-aware numerator by a mean-band denominator — two different estimators of the same quantity | **Minor** (measured: **0.00pp** today) |
+| [Q-03](#q-03) | Scoring | The `Typical` readout divides a dispersion-aware numerator by a mean-band denominator — two different estimators of the same quantity | ~~Minor~~ → **Major**, ⏳ open — was `0.00pp`, **re-measured at −3.39%** on the shared denominator once Q-14 landed |
 | [Q-04](#q-04) | Model drift | `CalculateCompositeScore` omits the vanilla passion floor that all four dispersion sites carry | **Minor** |
 | [Q-05](#q-05) | Model drift | Six constants that enter the score are outside the golden-file drift check | **Minor** |
 | [Q-06](#q-06) | Model drift | The ±4σ truncation window is hardcoded in two mirrors and derived from the constant in the third | **Minor** |
@@ -473,7 +473,21 @@ swept for citations — the sweep covered `HANDOVER.md` only, so those may hold 
 <a id="q-03"></a>
 ## Q-03 — The `Typical` readout divides a dispersion-aware numerator by a mean-band denominator
 
-**Severity: Minor.  Confidence: high on the structure; the magnitude is measured and is currently zero.**
+**Severity: ~~Minor~~ → Major as of 2026-08-09.  Confidence: high on the structure; the magnitude is
+measured, and it is no longer zero.**
+
+> [!CAUTION]
+> **Re-measured after the Q-14 fix landed: `Faithful`'s two estimators now differ by −3.39%, where
+> they previously agreed to six decimals.** Everything below about the *structure* is unchanged and
+> still correct; the "measured at 0.00pp" argument that made this Minor is **void**. The full
+> re-measurement, the per-preset table and the mechanism (`E[spent]` is a staircase, and the mean
+> band lands just above one of its jumps) are in **Q-14's fix section**. This entry is the one that
+> should be worked next.
+>
+> The prediction in this entry's own text was that the trap would be sprung "by any retune that
+> pushes `Faithful`'s band against a clamp". That is not what sprung it — a change to the *shape* of
+> the passion function did, with the band untouched. The entry was right that the coupling was
+> latent and wrong about what would trigger it.
 
 ### What
 
@@ -956,6 +970,125 @@ since Best-of-N is a maximum statistic and the discretization also removes a lit
 Whether the right fix is to model the discretization or to stop discarding the remainder (e.g. spend
 the fraction probabilistically) is a Rule 5 decision — the second changes pawns, the first changes
 every published number.
+
+### ✅ Fixed 2026-08-09 — the models were corrected, the generator was not touched
+
+**Owner decision (Rule 5): model the discretization.** The competing option — making the generator
+stop discarding the remainder — was rejected on the ground the register itself supplies: vanilla's
+generator spends through the same discretizing loop, so our generator is *faithful* and it is the
+model that invented a continuous spend. "Fixing" the generator would have bought a tidier readout by
+breaking the vanilla-parity property `Faithful`'s whole band is built on.
+
+**No pawn changes. `PassionVarianceApplier` is byte-identical.**
+
+New `Source/PassionSpend.cs` returns the **exact** distribution of delivered pips, not an estimate.
+Every branch in the loop compares the remaining budget against `MinorPassionCost` or
+`MajorPassionCost`, so the outcome distribution depends on the budget only through which pair of
+consecutive thresholds it falls between — between two breakpoints it is literally constant, so a
+table indexed by breakpoint *is* the answer rather than a discretisation of it. The table is also
+tiny: the loop exits holding less than one Minor, so delivered pips lie in
+`(budget − MinorPassionCost, budget]` and at most three totals carry mass (two at the shipped
+costs). That is what lets every caller apply the capacity limit and `Clamp01` **per outcome**
+instead of to a mean, which keeps the *second* moment exact — the discretization removes a little
+dispersion as well as shifting the mean, and Best-of-N is a maximum statistic that reads dispersion
+directly.
+
+| Site | Change |
+|---|---|
+| `Source/PassionSpend.cs` | new — the exact spend-loop distribution, shared by both C# consumers |
+| `DispersionModel.Moments` | spends each Gauss node's budget through the loop; capacity and `Clamp01` per outcome, so `p2` stays exact |
+| `CalculateCompositeScore` | new `PassionNormFor` helper, shared with the disabled-axis fallback so the two branches cannot drift |
+| `envelope_check.py` | `make_spend`, used by `make_composite` and `grid_moments`; `PassionBudgetClampFactor` added to `required` |
+| `dispersion_mc.py` | runs the real loop, sampled — deliberately *not* the exact table, so it stays an independent method |
+| `DebugActions.cs` | invariant 1 routed through the loop; new invariant 1b (below) |
+
+**Order of operations: spend, then cap.** The loop runs *before* the capacity limit because that is
+the generator's order — it spends the whole budget into whole passions and only discovers how many
+eligible skills exist at assignment, discarding the surplus there. This only matters in the tail
+where capacity binds, but it is a decision the fix was forced to make and it is recorded here rather
+than left implicit.
+
+**The vanilla fallback discretizes too**, and it had to. Vanilla's generator runs the same loop, and
+`Faithful`'s band at `q = 0.50` *is* `VanillaPassionBudget` pips at `VanillaMajorBias` — so if the
+live branch discretized and the fallback did not, the two would sit on different scales and **Q-16's
+both-axes-off invariant would break**. Both sides moved together and it still holds exactly:
+`(0.8 × 0.25 + 1.5 × 0.251087) / 2.3 = 0.250709`, verified at `1.1e-16`.
+
+### What moved
+
+| | before | after |
+|---|---|---|
+| `FaithfulBaseline` | `0.257089` | **`0.250709`** |
+| `Sovereign` @ N=1 | +24.7% (10.3pp headroom) | **+26.3% (8.7pp)** |
+| `Wildcard` @ N=50 | +25.9% (9.1pp) | **+26.5% (8.5pp)** — still the tightest in the mod |
+| `Desperate` @ N=1 | −20.8% | **−22.1%** |
+| tool self-check | `2.13e-04` | `4.10e-04` |
+
+Every figure moved, every preset moved the same way, and **the tier ordering is unchanged**. Rule 1
+and Rule 2 PASS at N = 1/5/25/50. `EnvelopeFigures.g.cs` regenerated; every pasted table in
+`HANDOVER.md` repasted from the tool rather than hand-edited. Build clean, 0 warnings.
+
+The predicted `Sovereign` headroom in the entry above — *"reduces it to roughly 8.7pp"*, derived
+from a 400k-pawn simulation before any code was written — came out at **8.7pp**.
+
+### How it was verified
+
+- **`dispersion_mc.py` reproduces all 32 cells to ≤ 0.0004.** This is the check that matters: the
+  exact table claims to be the distribution of a loop it never runs, and the Monte Carlo is the only
+  place that loop is actually executed. Its own self-check averages 20,000 real spend loops per
+  point and lands `1.47e-04` against a `1e-3` tolerance.
+- **Table vs. loop, directly**: 300k sampled loops at 13 budgets × 3 biases reproduce the table's
+  mean *and* standard deviation to Monte-Carlo error, including across a breakpoint
+  (`b = 5.49` → `4.7312`, `b = 5.50` → `5.4230`).
+- **Monotonicity re-proved.** `HANDOVER.md`'s Best-of-N derivation requires `composite` monotonic in
+  `q`; the spend loop makes the passion axis a *step* function, so this was no longer inherited.
+  Checked exhaustively: `E[spent]` non-decreasing in budget over 101 biases × 6,801 budgets, and
+  `composite` non-decreasing in `q` over 20,001 points × 8 presets. Both hold.
+
+### The self-check that had to be restated, and why it is not a weakened test
+
+`envelope_check.py`'s `with_noise=False` self-check failed at `4.06e-03` on the first run. That was
+correct behaviour, not a tolerance problem: **the spend loop flips a coin per passion, so it is a
+dispersion source that survives zeroing both spread fields.** "Zero noise" had stopped meaning "zero
+variance", and the check was comparing a Normal approximation of a two-point distribution against an
+exact mean. The mode now suppresses the loop's *variance* while still routing its *mean* through the
+loop, so the analytic side averages the same outcomes and the check keeps its teeth. Same reasoning
+in `dispersion_mc.py`, whose self-check was exact to `1e-12` and now averages 20,000 draws against a
+Monte-Carlo tolerance — a genuine loss of strength, recorded rather than hidden.
+
+### ⚠️ This fix promoted Q-03 from `0.00pp` to a live defect — see that entry
+
+`Q-03` was filed Minor **because it measured `0.000pp`**: `TypicalAt` (dispersion-aware, the
+readout's numerator) and `CalculateCompositeScore` (mean-band, the shared denominator) agreed to six
+decimals on `Faithful`. They no longer do. Re-measured after this fix:
+
+| Profile | `TypicalAt` | mean-band composite | gap |
+|---|---|---|---|
+| **Faithful** | 0.242215 | 0.250709 | **−3.39%** ← this one is the denominator |
+| Desperate | 0.189226 | 0.195159 | −3.04% |
+| Elite | 0.295470 | 0.303061 | −2.50% |
+| Wildcard | 0.233955 | 0.228976 | +2.17% |
+
+The cause is specific and was not obvious: `E[spent(b)]` is a staircase, and the mean band lands at
+`b = 5.0`, which sits **just above a jump** (`4.8125` delivered), while the average of the staircase
+over the budget Gaussian is `≈ 4.55`. `f(E[X])` and `E[f(X)]` were nearly equal on a smooth function
+and are not on a step function.
+
+**The shipped envelope table is unaffected** — it uses the dispersion-aware estimator for both
+numerator and denominator, consistently. What is affected is the **in-game Row 3 readout**, whose
+denominator is `FaithfulBaseline` (mean-band) while its numerator is `TypicalAt`. That is now skewed
+by ~3.4%. Q-03's own entry says moving `FaithfulBaseline` onto `TypicalAt` is a Rule 5 / Rule 6
+action; it was **not** taken here, because it is a second scoring decision and landing it in the same
+edit would make this regeneration unattributable — the exact mistake the "Where to start" note warns
+about. **Q-03 should be re-read as Major and scheduled.**
+
+### Still not verified in game
+
+Everything above is offline. The **C#/Python cross-check has not been run against a running build** —
+that is `Verify Best-of-N against envelope_check.py`, and it is what proves the C# mirror of
+`PassionSpend` matches the Python one. Until it is run, the C# side is argued, not measured. The new
+invariant 1b (Faithful at zero spread, live branch = fallback branch, exact) has likewise only been
+predicted through the Python mirror.
 
 ---
 
