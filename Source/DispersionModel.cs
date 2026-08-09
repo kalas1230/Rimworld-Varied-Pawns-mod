@@ -65,47 +65,83 @@ namespace PawnVarianceMod
             float pdiv = Constants.MaxPassionPips;
             int nSkills = Mathf.RoundToInt(pdiv / Constants.MajorPassionCost);
 
-            float mag = Mathf.Lerp(Constants.MagnitudeLerpLow, Constants.MaxMagnitude,
-                                   v.SkillNoiseScalar);
-            float baseline = Mathf.Lerp(v.skillShiftMin, v.skillShiftMax, q);
-
+            // Both axes honour their enable flag, exactly as CalculateCompositeScore does -- a
+            // disabled axis is the pawn keeping VANILLA's skills/passions, so it contributes its
+            // vanilla fallback as a CONSTANT (zero variance), at full weight. It is not dropped
+            // from the average: see the long note on the weights in CalculateCompositeScore for
+            // why zeroing the weight is wrong, and keep the two functions in step.
+            //
+            // Until 2026-08-09 neither flag was read here at all -- a grep for either identifier in
+            // this file returned nothing -- so Typical, Best of N and the distribution curve all
+            // scored an axis the generator does not roll. Worth up to 18.3pp of the displayed
+            // "vs Faithful" figure against a gate whose tolerance is 0.5pp, and invisible to that
+            // gate because envelope_check.py shared the omission. Presets all enable both axes,
+            // which is why 32/32 never caught it.
             float s1 = 0f, s2 = 0f;
-            for (int i = 0; i < TriNodes; i++)
+            float sVar;
+            if (v.enableSkillVariance)
             {
-                float lvl = Mathf.Clamp(Constants.AssumedVanillaSkillBaseline
-                                        + baseline + triT[i] * mag, 0f, top);
-                float u = lvl / top;
-                s1 += triW[i] * u;
-                s2 += triW[i] * u * u;
-            }
-            // Pawn's AVERAGE over nSkills iid draws -> variance divides by nSkills.
-            float sVar = Mathf.Max(0f, s2 - s1 * s1) / nSkills;
+                float mag = Mathf.Lerp(Constants.MagnitudeLerpLow, Constants.MaxMagnitude,
+                                       v.SkillNoiseScalar);
+                float baseline = Mathf.Lerp(v.skillShiftMin, v.skillShiftMax, q);
 
-            float sig = Mathf.Lerp(Constants.PassionBudgetSpreadMin,
-                                   Constants.PassionBudgetSpreadMax, v.PassionNoiseScalar);
-            float bmean = Mathf.Lerp(v.passionCountMin, v.passionCountMax, q);
-            float capacity = nSkills * (Constants.MinorPassionCost
-                + (Constants.MajorPassionCost - Constants.MinorPassionCost) * v.passionMajorBias);
-            float eff = PawnVarianceSettings.PassionPipEfficiency(v.passionMajorBias);
+                for (int i = 0; i < TriNodes; i++)
+                {
+                    float lvl = Mathf.Clamp(Constants.AssumedVanillaSkillBaseline
+                                            + baseline + triT[i] * mag, 0f, top);
+                    float u = lvl / top;
+                    s1 += triW[i] * u;
+                    s2 += triW[i] * u * u;
+                }
+                // Pawn's AVERAGE over nSkills iid draws -> variance divides by nSkills.
+                sVar = Mathf.Max(0f, s2 - s1 * s1) / nSkills;
+            }
+            else
+            {
+                // Mirrors CalculateCompositeScore's `float skillNorm = 0.25f` fallback: vanilla's
+                // AssumedVanillaSkillBaseline / AssumedMaxSkillLevel = 5/20.
+                s1 = Constants.AssumedVanillaSkillBaseline / Constants.AssumedMaxSkillLevel;
+                sVar = 0f;
+            }
 
             float p1 = 0f, p2 = 0f;
-            for (int i = 0; i < GaussNodes; i++)
+            float pVar;
+            if (v.enablePassionVariance)
             {
-                float b = bmean + gaussZ[i] * sig;
-                // Vanilla's floor. NOT gated on sig: PassionVarianceApplier applies it whenever
-                // the budget lands under 1 and passionCountMin > 0, spread or no spread. Gating it
-                // here diverged from the generator on any profile with passionCountMin > 0 and a
-                // mean budget under 1 pip at zero spread -- reachable in two slider moves and worth
-                // ~6.6pp on the readout, which the in-game gate could not see because every model
-                // side shared the gate. Keep this condition identical to the applier's.
-                if (b < 1f && v.passionCountMin > 0f) b = 1f;
-                if (b < 0f) b = 0f;
-                if (b > capacity) b = capacity;
-                float u = Mathf.Min(1f, b * eff / pdiv);
-                p1 += gaussW[i] * u;
-                p2 += gaussW[i] * u * u;
+                float sig = Mathf.Lerp(Constants.PassionBudgetSpreadMin,
+                                       Constants.PassionBudgetSpreadMax, v.PassionNoiseScalar);
+                float bmean = Mathf.Lerp(v.passionCountMin, v.passionCountMax, q);
+                float capacity = nSkills * (Constants.MinorPassionCost
+                    + (Constants.MajorPassionCost - Constants.MinorPassionCost) * v.passionMajorBias);
+                float eff = PawnVarianceSettings.PassionPipEfficiency(v.passionMajorBias);
+
+                for (int i = 0; i < GaussNodes; i++)
+                {
+                    float b = bmean + gaussZ[i] * sig;
+                    // Vanilla's floor. NOT gated on sig: PassionVarianceApplier applies it whenever
+                    // the budget lands under 1 and passionCountMin > 0, spread or no spread. Gating it
+                    // here diverged from the generator on any profile with passionCountMin > 0 and a
+                    // mean budget under 1 pip at zero spread -- reachable in two slider moves and worth
+                    // ~6.6pp on the readout, which the in-game gate could not see because every model
+                    // side shared the gate. Keep this condition identical to the applier's.
+                    if (b < 1f && v.passionCountMin > 0f) b = 1f;
+                    if (b < 0f) b = 0f;
+                    if (b > capacity) b = capacity;
+                    float u = Mathf.Min(1f, b * eff / pdiv);
+                    p1 += gaussW[i] * u;
+                    p2 += gaussW[i] * u * u;
+                }
+                pVar = Mathf.Max(0f, p2 - p1 * p1);
             }
-            float pVar = Mathf.Max(0f, p2 - p1 * p1);
+            else
+            {
+                // Mirrors CalculateCompositeScore's passion-off fallback exactly: vanilla's own
+                // 5-pip budget at vanilla's 50/50 Major coin flip, scored through the same
+                // efficiency term as every other profile.
+                p1 = Constants.VanillaPassionBudget
+                     * PawnVarianceSettings.PassionPipEfficiency(Constants.VanillaMajorBias) / pdiv;
+                pVar = 0f;
+            }
 
             mu = (wS * s1 + wP * p1) / wsum;
             sd = Mathf.Sqrt((wS * wS * sVar + wP * wP * pVar) / (wsum * wsum));

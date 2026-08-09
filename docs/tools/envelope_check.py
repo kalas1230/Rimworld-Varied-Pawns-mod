@@ -77,6 +77,15 @@ FIELDS = ("averageQuality", "skillShiftMin", "skillShiftMax",
           # say "not scored"; that was true only before the dispersion-aware work.
           "skillSpread", "passionSpread")
 
+# SCORED, and mirrored from CalculateCompositeScore / DispersionModel.Moments as of 2026-08-09.
+# No shipped preset assigns either one -- VarianceProfile.cs:77/79 default both to true -- so
+# every figure this tool prints is unchanged by their addition. They are parsed and honoured
+# anyway because the C# sides read them, and a mirror that silently assumes `true` is exactly the
+# omission that let the per-axis-toggle defect (Q-01) sit behind a green 32/32 gate: both
+# implementations agreed with each other while neither agreed with the generator. If a future
+# preset ever turns an axis off, this tool follows it instead of quietly scoring the wrong thing.
+BOOL_FIELDS = ("enableSkillVariance", "enablePassionVariance")
+
 
 def read(path):
     with open(path, "r", encoding="utf-8-sig") as fh:
@@ -100,7 +109,12 @@ def parse_constants(src):
                 "PassionLearnRateNone", "PassionLearnRateMinor", "PassionLearnRateMajor",
                 # Only used to anchor the printed exchange rate. R is bias-dependent, so a single
                 # quoted figure has to say which bias it is at, and vanilla's 50/50 is the anchor.
-                "VanillaMajorBias",
+                # Vanilla's own budget and Major flip. These anchor the printed exchange rate AND,
+                # since 2026-08-09, they are the passion axis's value for a profile with passion
+                # variance switched off -- so they are read, not merely quoted. (They used to be
+                # computed into a `passionNorm` that CalculateCompositeScore then multiplied by a
+                # zeroed weight, i.e. they were dead on both sides.)
+                "VanillaMajorBias", "VanillaPassionBudget",
                 # Skill-noise Lerp endpoints. These DO enter the score now: grid_moments builds
                 # the per-skill excursion from them via SkillNoiseScalar. They were spread-column
                 # only before the dispersion-aware work.
@@ -131,6 +145,11 @@ def parse_profiles(src):
             if not hits:
                 sys.exit(f"ERROR: {var} has no '{f}' assignment")
             vals[f] = float(hits[-1])
+        for f in BOOL_FIELDS:
+            # Absent is the normal case: the field initialiser in VarianceProfile.cs is `true` and
+            # no preset overrides it. Only an explicit `= false` turns an axis off.
+            hits = re.findall(rf"\b{f}\s*=\s*(true|false)\s*[,;]", block)
+            vals[f] = (hits[-1] == "true") if hits else True
         out[NAMES[var]] = vals
     missing = set(NAMES.values()) - set(out)
     if missing:
@@ -161,7 +180,14 @@ def make_efficiency(C):
 
 
 def make_composite(C):
-    """Mirror of PawnVarianceSettings.CalculateCompositeScore. Presets all enable both axes."""
+    """Mirror of PawnVarianceSettings.CalculateCompositeScore.
+
+    Both enable flags are honoured. A disabled axis is NOT dropped from the weighted average --
+    it contributes vanilla's own level, because "passion variance off" means the pawn keeps
+    vanilla's passions, not that it has none. The weights therefore stay unconditional. With both
+    axes off the score is exactly the Faithful baseline (0.257089), which is the check that fixes
+    the semantics. See the note on the weights in CalculateCompositeScore.
+    """
     wS, wP = C["CompositeSkillWeight"], C["CompositePassionWeight"]
     base, top, pdiv = (C["AssumedVanillaSkillBaseline"],
                        C["AssumedMaxSkillLevel"], C["MaxPassionPips"])
@@ -173,16 +199,25 @@ def make_composite(C):
     efficiency = make_efficiency(C)
 
     def composite(q, p):
-        shift = p["skillShiftMin"] + (p["skillShiftMax"] - p["skillShiftMin"]) * q
-        skill_norm = min(1.0, max(0.0, min(max(base + shift, 0.0), top) / top))
+        if p.get("enableSkillVariance", True):
+            shift = p["skillShiftMin"] + (p["skillShiftMax"] - p["skillShiftMin"]) * q
+            skill_norm = min(1.0, max(0.0, min(max(base + shift, 0.0), top) / top))
+        else:
+            skill_norm = base / top
         # The budget is already in pips. No per-Major premium on top of it -- the
         # `* (1 + 0.25 * passionMajorBias)` that stood here until 2026-08-06 was a unit error
         # inherited from the era when the denominator was 12 skills instead of 18 pips. Capacity
         # is the real cap: 12 skills, one passion each, at the bias's average price.
-        budget = p["passionCountMin"] + (p["passionCountMax"] - p["passionCountMin"]) * q
-        capacity = skills * (minor + (major - minor) * p["passionMajorBias"])
-        eff = efficiency(p["passionMajorBias"])
-        passion_norm = min(1.0, max(0.0, min(budget, capacity) * eff / pdiv))
+        if p.get("enablePassionVariance", True):
+            budget = p["passionCountMin"] + (p["passionCountMax"] - p["passionCountMin"]) * q
+            capacity = skills * (minor + (major - minor) * p["passionMajorBias"])
+            eff = efficiency(p["passionMajorBias"])
+            passion_norm = min(1.0, max(0.0, min(budget, capacity) * eff / pdiv))
+        else:
+            # Vanilla's own budget at vanilla's own 50/50 Major flip, scored through the same
+            # efficiency term as every other profile.
+            passion_norm = (C["VanillaPassionBudget"]
+                            * efficiency(C["VanillaMajorBias"]) / pdiv)
         return min(1.0, (wS * skill_norm + wP * passion_norm) / (wS + wP))
 
     return composite
@@ -256,41 +291,50 @@ def grid_moments(C):
     wsum = wS + wP
 
     def moments(p, q, with_noise=True):
-        mag = (p["skillSpread"] * math.sqrt(6.0)) if with_noise else 0.0
-        sig = p["passionSpread"] if with_noise else 0.0
-
-        baseline = p["skillShiftMin"] + (p["skillShiftMax"] - p["skillShiftMin"]) * q
+        # Both enable flags honoured, mirroring DispersionModel.Moments. A disabled axis is a
+        # zero-variance CONSTANT at vanilla's level, at full weight -- not a dropped term. See
+        # make_composite's docstring for why dropping it is the wrong reading.
         s1 = s2 = 0.0
-        for t, w in zip(TS, TW):
-            lvl = base + baseline + t * mag
-            lvl = 0.0 if lvl < 0.0 else (top if lvl > top else lvl)
-            u = lvl / top
-            s1 += w * u
-            s2 += w * u * u
-        # The pawn's AVERAGE over n_skills iid draws: variance divides by n_skills (CLT).
-        s_var = max(0.0, s2 - s1 * s1) / n_skills
+        if p.get("enableSkillVariance", True):
+            mag = (p["skillSpread"] * math.sqrt(6.0)) if with_noise else 0.0
+            baseline = p["skillShiftMin"] + (p["skillShiftMax"] - p["skillShiftMin"]) * q
+            for t, w in zip(TS, TW):
+                lvl = base + baseline + t * mag
+                lvl = 0.0 if lvl < 0.0 else (top if lvl > top else lvl)
+                u = lvl / top
+                s1 += w * u
+                s2 += w * u * u
+            # The pawn's AVERAGE over n_skills iid draws: variance divides by n_skills (CLT).
+            s_var = max(0.0, s2 - s1 * s1) / n_skills
+        else:
+            s1, s_var = base / top, 0.0
 
-        bmean = p["passionCountMin"] + (p["passionCountMax"] - p["passionCountMin"]) * q
-        capacity = n_skills * (minor + (major - minor) * p["passionMajorBias"])
-        eff = efficiency(p["passionMajorBias"])
         p1 = p2 = 0.0
-        for z, w in zip(ZS, ZW):
-            b = bmean + z * sig
-            # Vanilla's floor. NOT gated on sig -- PassionVarianceApplier applies it whenever the
-            # budget lands under 1 and passionCountMin > 0, spread or no spread. Must stay
-            # identical to DispersionModel.cs and dispersion_mc.py, and to the applier itself.
-            if b < 1.0 and p["passionCountMin"] > 0.0:
-                b = 1.0
-            if b < 0.0:
-                b = 0.0
-            if b > capacity:
-                b = capacity
-            u = b * eff / pdiv
-            if u > 1.0:
-                u = 1.0
-            p1 += w * u
-            p2 += w * u * u
-        p_var = max(0.0, p2 - p1 * p1)
+        if p.get("enablePassionVariance", True):
+            sig = p["passionSpread"] if with_noise else 0.0
+            bmean = p["passionCountMin"] + (p["passionCountMax"] - p["passionCountMin"]) * q
+            capacity = n_skills * (minor + (major - minor) * p["passionMajorBias"])
+            eff = efficiency(p["passionMajorBias"])
+            for z, w in zip(ZS, ZW):
+                b = bmean + z * sig
+                # Vanilla's floor. NOT gated on sig -- PassionVarianceApplier applies it whenever the
+                # budget lands under 1 and passionCountMin > 0, spread or no spread. Must stay
+                # identical to DispersionModel.cs and dispersion_mc.py, and to the applier itself.
+                if b < 1.0 and p["passionCountMin"] > 0.0:
+                    b = 1.0
+                if b < 0.0:
+                    b = 0.0
+                if b > capacity:
+                    b = capacity
+                u = b * eff / pdiv
+                if u > 1.0:
+                    u = 1.0
+                p1 += w * u
+                p2 += w * u * u
+            p_var = max(0.0, p2 - p1 * p1)
+        else:
+            p1 = C["VanillaPassionBudget"] * efficiency(C["VanillaMajorBias"]) / pdiv
+            p_var = 0.0
 
         mu = (wS * s1 + wP * p1) / wsum
         var = (wS * wS * s_var + wP * wP * p_var) / (wsum * wsum)

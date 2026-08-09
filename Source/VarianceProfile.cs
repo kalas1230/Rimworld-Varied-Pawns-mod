@@ -28,7 +28,7 @@ namespace PawnVarianceMod
         public float skillSpread = 0.857321f;
         // These four match the Scribe_Values defaults in ExposeData below, which in turn match
         // Faithful. They are effectively unreachable -- every creation path passes explicit values
-        // (PawnVarianceSettings.cs:1096/1106, Clone), and the parameterless ctor is only used by
+        // (PawnVarianceSettings.cs:1171/1181, Clone), and the parameterless ctor is only used by
         // Scribe, which overwrites all four on load -- but they used to read 1.0/7.0/0.35/0.8, a
         // stale copy of an older Distinct that matched no shipped preset. Keep them in step with
         // the Scribe defaults so nothing here can be mistaken for a live default.

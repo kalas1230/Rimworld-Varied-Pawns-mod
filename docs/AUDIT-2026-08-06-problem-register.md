@@ -18,6 +18,10 @@ it is wrong, when it bites, and what was actually verified versus inferred.
 > - **FIXED in docs:** P-01's two false `HANDOVER.md` status lines. The tree itself is deliberately
 >   left uncommitted at the owner's instruction.
 > - **Deferred by the owner:** everything retune-facing — P-02, P-03, P-05, P-06, P-08, P-09.
+>
+> **This block is a dated snapshot of 2026-08-06 and is kept as history — its status lines are not
+> current.** The deferral above ended on 2026-08-08 and all six are now closed. Read the next block
+> and the index instead.
 
 > [!TIP]
 > ## Re-checked 2026-08-08, after the dispersion-aware scoring batch
@@ -35,24 +39,22 @@ it is wrong, when it bites, and what was actually verified versus inferred.
 > | **P-10** | silent `composite(averageQuality)` fallback | gone — `CalculateBestOfNScoreCore` is now a one-line delegate to `DispersionModel.BestOfN`, no NaN/zero-total fallback anywhere |
 > | **P-12** | Python clamped one side, C# both | `envelope_check.py:326` — the `[0,1]` integration bound *is* the `Clamp01`, stated in the code |
 >
-> **P-06 has RECURRED in a new form and is the one thing this re-check found.** The stale
-> headroom figure was fixed in Rule 6's callout (`:466`, correctly `9.1pp`) but
-> `HANDOVER.md:403` still calls `Sovereign` @ N=1 *"the tightest figure in this project"* at
-> `10.3pp`. Since the `Wildcard` retune, `Wildcard` @ N=50 at **9.1pp** is the tightest and
-> `Sovereign` is second — the document now contradicts itself two sections apart. The
-> surrounding argument (that `N=1` is exact and so the slip is harmless) is unaffected; only
-> the superlative is wrong.
+> **P-06 had RECURRED in a new form and was the one thing this re-check found** — `HANDOVER.md`
+> still called `Sovereign` @ N=1 *"the tightest figure in this project"* at `10.3pp` while Rule 6's
+> callout correctly read `9.1pp`. **Closed:** the passage now says "the tightest figure **at that
+> batch size**" and names `Wildcard` @ N=50 (`9.1pp`) as tightest overall in the same paragraph.
 >
-> **Still open, all Minor or Cosmetic, none retune-related** — re-verified present in the tree:
-> P-06 (above), P-07 (`About/About.xml` still advertises `1.5`), P-11, P-13
-> (`Constants.cs:166` still says "seven presets"; there are eight), P-17 (the
-> "Verbose logging **(dev mode)**" checkbox is a plain `CheckboxLabeled` with no `Prefs.DevMode`
-> gate, and still rethrows), P-18, P-19, P-20 (no exception guard on the life-stage postfix),
-> P-21, P-22 (`DateTime.Now.Ticks` ids at `PawnVarianceSettings.cs:1138` and `:1148`), P-23,
-> P-24 (`ProfileEditorTab.cs:239` still writes unconditionally), P-25.
+> **The "still open" list that stood here is SUPERSEDED — see the block below.** It named P-06,
+> P-07, P-11, P-13, P-17 through P-25 as present in the tree. Commit `6c93279` closed them; each was
+> re-verified against the tree on 2026-08-08 and the specific citations that list gave are all dead
+> (`About/About.xml` carries only `1.6`; `Constants.cs:166` says "eight presets"; the verbose-logging
+> checkbox sits inside `if (Prefs.DevMode)`; the life-stage postfix has its `try`/`catch`;
+> `NewCustomProfileId()` suffixes on collision; `ProfileEditorTab.cs`'s quality write is guarded).
+> **The index is the authority. Do not work from that list.**
 >
-> **P-01 is worse, not better:** `main` is now **27 commits ahead** of `origin/main` and still
-> unpushed.
+> **P-01, corrected:** it read "27 commits ahead of `origin/main` and still unpushed". `main` is now
+> **2 commits ahead**, both documentation. The bulk was pushed; the process risk that made P-01
+> Major is no longer live.
 
 **Ground state this audit was taken against**
 
@@ -109,8 +111,7 @@ occasions where an unchecked citation sent someone editing the wrong code.
 | [P-25](#p-25) | Memory | `LastKnownStage` never drops entries for dead pawns | **Cosmetic** — ⛔ WON'T FIX (audit: "no action implied") |
 | [P-26](#p-26) | Overrides | "This mod never touches them" is enforced by a weaker faction test than the one that decides the override — hostile pawns can be varied with the toggle off | **Major** — ✅ FIXED |
 | [P-27](#p-27) | Robustness | Three of four `HostileTo(Faction.OfPlayerSilentFail)` call sites omit the null check the fourth has — during world gen, which is exactly when it is null | **Minor** — ✅ FIXED |
-
-| [P-28](#p-28) | Scoring | The Beta cache is never invalidated when the quality slider moves, so a custom profile's curve and power readout integrate a stale distribution for the rest of the editing session | **Major** — ✅ FIXED 2026-08-08 |
+| [P-28](#p-28) | Scoring | The Beta cache is never invalidated when the quality slider moves, so a custom profile's curve and power readout integrate a stale distribution for the rest of the editing session | **Major** — ✅ FIXED 2026-08-08, verified in game |
 *(Entries below are added as the audit proceeds; the index is kept in sync.)*
 
 ### What was checked and found clean
@@ -151,29 +152,46 @@ Recorded so this audit is not silently re-run. Verified during this pass:
 
 The register is ordered by discovery, not by priority. If these are worked rather than filed:
 
-1. ~~**P-01** first~~ — ✅ done: the false status lines are corrected; the tree stays uncommitted by the owner's instruction. Originally: it is not a code fix — commit the STEP 1 working tree, or correct the two
-   handover lines that say it is already committed. Everything else is easier to reason about once
-   the tree state and the document agree.
+1. ~~**P-01** first~~ — ✅ done. The false status lines were corrected, and the STEP 1 tree that this
+   item was written about has since been committed and pushed (the "stays uncommitted by the owner's
+   instruction" note that stood here described a tree state that no longer exists). Originally: it is
+   not a code fix — commit the STEP 1 working tree, or correct the two handover lines that say it is
+   already committed. Everything else is easier to reason about once the tree state and the document
+   agree.
 2. ~~**P-14** and **P-26**~~ — ✅ both fixed. They were the two that produced *wrong pawns silently*,
    the category this project has been bitten by three times.
-3. **P-02, P-03, P-05, P-08** are one job, not four: a single sweep of everything the STEP 1b
-   efficiency term invalidated. Doing this **before STEP 2** matters — the retune reads exactly
-   these paragraphs, and three of the four are load-bearing arguments rather than stray figures.
-   **Deferred by the owner** along with the rest of the retune work; still the right sequencing when
-   STEP 2 is picked up.
+3. ~~**P-02, P-03, P-05, P-08**~~ — ✅ all four done, as one sweep of everything the STEP 1b
+   efficiency term invalidated, exactly as this item argued. (It read **"Deferred by the owner"**
+   until 2026-08-08; the deferral ended when the dispersion-aware scoring batch landed.) The
+   sequencing claim still holds for any *future* retune: these paragraphs are what a retuner reads,
+   and three of the four are load-bearing arguments rather than stray figures — re-check them before
+   STEP 2, not after.
 4. ~~**P-15, P-16, P-27**~~ — ✅ all three fixed without needing the decompile. Each turned out to be
    correct-against-stated-intent (P-15) or correct-either-way (P-16, P-27), so the unread vanilla
    methods stopped gating the fix.
 
-**What is left after this pass:** the retune-facing docs sweep (item 3, plus P-06 and P-09), and the
-un-actioned Minors/Cosmetics — P-07, P-10, P-11, P-12, P-13, P-18, P-19, P-20, P-21, P-22, P-23,
-P-24, P-25. Note **P-20** (unguarded life-stage postfix) is the largest of those and now sits next to
-freshly-changed code in `GrowthUpPatch.cs`.
+**What is left, as of 2026-08-08.** Every row in the index is ✅ or ⛔; the earlier "un-actioned
+Minors/Cosmetics" list here (P-07, P-10 … P-25) is **superseded** — all of it was closed by
+`6c93279` and re-verified against the tree. Three qualifications that a green index hides:
 
-> **⚠️ Nothing below has been exercised in-game.** The four code fixes compile clean and
-> `envelope_check.py` still reports `PASS` / `unchanged`, but no GABS session has run against them.
-> P-15 in particular changes behaviour that only shows up on gene *removal*, which no verification
-> pass in this project has ever driven.
+| | |
+|---|---|
+| **P-25** | ⛔ **WON'T FIX**, not fixed. A decision (cosmetic, "no action implied"), and it stays true of the code. |
+| **P-18, P-19, P-23** | ✅ **DOCUMENTED**, not code-fixed. The behaviour is unchanged; what landed is a written reason it is acceptable. Re-reading the entry beats re-reading the code. |
+| **P-01** | Marked ✅ for the *documentation* half only. The tree is 2 commits ahead of `origin/main` (both docs) — down from 27, so the risk is small, but "pushed" is not what the ✅ means. |
+
+**The register is closed. The next work is not here** — it is the review backlog in `HANDOVER.md`
+"Code review status": three files flipped back to `NEEDS RE-REVIEW` by the dispersion work
+(`VarianceProfile.cs`, `PawnVarianceSettings.cs`, `ProfileEditorTab.cs` — the last of which now also
+carries P-28's fix), two new unreviewed files (`DispersionModel.cs`, `MathUtil.cs`), and
+`GrowUpVariance.cs` marked **NEXT UP**.
+
+> **In-game exercise status.** The blanket "⚠️ Nothing below has been exercised in-game" that stood
+> here is no longer true, but do not read that as blanket coverage either. **Exercised in game:**
+> P-28 (2026-08-08, quality slider drag — see its entry), and the shipped presets via
+> `Verify Best-of-N` 32/32. **Still never driven in game:** P-15, whose behaviour only appears on
+> gene *removal*, which no verification pass in this project has ever performed; P-14, P-16, P-26 and
+> P-27 are argued from code and a clean build, not observed.
 
 ---
 
@@ -1484,9 +1502,39 @@ Presets are unaffected: `Resolve` clones them, and `Clone()` sets the flag.
 `v.MarkDistributionParamsDirty()` when it does. This is the call the method was evidently written
 for and never wired to.
 
+### Verified in game 2026-08-08
+
+`Custom 1` (passions 3.0–7.0, skill shift ±3.0, spreads at their defaults) opened in the Profile
+Editor at `averageQuality` 0.80, then the quality slider dragged to 0.50 **without closing the
+window**:
+
+| | quality 0.80 | after the drag, 0.50 |
+|---|---|---|
+| Typical | `+28% vs Faithful (0.33)` | `Baseline (0.26)` |
+| **Best of 25 rerolls** | **`+15% vs Faithful (0.41)`** | **`baseline vs Faithful (0.36)`** |
+
+`0.36` is the figure the same profile shows on a freshly opened editor at 0.50, so the readout is
+now integrating the *current* Beta shape. A stale cache would have held `0.41`. The header curve
+re-centred in the same frame, so `OutcomeDensity` — the other `GetBetaAlphaBeta` consumer — tracks
+as well.
+
+**The value was predicted before the drag, not read off afterwards**, which is what makes this a
+test rather than an observation: `0.36` post-fix versus `0.41` if nothing invalidated.
+
+> [!CAUTION]
+> **The fix sat in git for a full session without being in the game.** The DLL under
+> `Steam/.../Mods/PawnVarianceMod/Assemblies/` was older than both the last `dotnet build` and the
+> commit carrying this fix — `dotnet build` writes to `<repo>/Assemblies/` and the copy is a
+> separate step (HANDOVER "Build & deployment loop"). No in-game check of P-28 could have passed
+> before the redeploy regardless of the code. **Compare the two `Assemblies` timestamps before
+> concluding a fix failed.**
+
 ### What was not verified
 
-Not reproduced in game — the session's RimWorld instance had already been stopped when this was
-found. The code trace is unambiguous, but **the in-game check is still owed**: open a custom
-profile, drag `Average pawn quality` across its range, and confirm the curve and the
-`Best of 25 rerolls` figure track it continuously rather than jumping after a close/reopen.
+**GABS cannot drive this control.** `get_ui_layout` does not emit slider elements — the quality
+slider appears in no capture, actionable or otherwise — and no input capability presses a mouse
+button at an arbitrary screen coordinate (`click_ui_target` needs an instrumented element;
+`set_hover_target` moves a virtual cursor but never clicks). An OS-level `SendInput` click is
+refused because Windows blocks the agent process from taking foreground focus. **The drag above was
+performed by the controller by hand**; only the readout was captured through GABS. Any future
+slider-driven check has the same constraint — budget for a manual step or add a debug action.

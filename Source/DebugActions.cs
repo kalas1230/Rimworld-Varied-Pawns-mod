@@ -294,6 +294,96 @@ namespace PawnVarianceMod
                 }
             }
 
+            // ---- Per-axis enable toggles -------------------------------------------------
+            //
+            // This block does NOT compare against the reference table, and cannot: every shipped
+            // preset leaves both flags true, so the golden file has no column for a disabled axis
+            // and the 32/32 above never touches this branch. That is exactly how the toggles went
+            // unmirrored -- DispersionModel ignored both flags entirely while envelope_check.py
+            // shared the omission, so the two agreed with each other to ~0.000pp while neither
+            // agreed with the generator, and this gate stayed green through the whole defect.
+            // Cross-checking two mirrors cannot catch a branch both mirrors are missing. So these
+            // are standalone INVARIANTS, derived from Constants rather than from the table.
+            //
+            // Invariant 1: with both axes off the mod changes nothing about the pawn, so the score
+            // must be vanilla's own -- which is the Faithful baseline -- for EVERY profile and at
+            // EVERY quality. Anything else means a disabled axis is being scored, or being dropped
+            // from the weighted average instead of falling back to vanilla.
+            float vanillaSkillNorm = Constants.AssumedVanillaSkillBaseline / Constants.AssumedMaxSkillLevel;
+            float vanillaPassionNorm = Constants.VanillaPassionBudget
+                * PawnVarianceSettings.PassionPipEfficiency(Constants.VanillaMajorBias)
+                / Constants.MaxPassionPips;
+            float vanillaComposite =
+                (Constants.CompositeSkillWeight * vanillaSkillNorm
+                 + Constants.CompositePassionWeight * vanillaPassionNorm)
+                / (Constants.CompositeSkillWeight + Constants.CompositePassionWeight);
+
+            const float ToggleTolerance = 1e-4f;
+            int toggleFailures = 0;
+            sb.AppendLine($"  per-axis toggles: both-off must equal vanilla {vanillaComposite:F6} "
+                + "at any quality");
+
+            foreach (VarianceProfile preset in VarianceProfiles.Presets)
+            {
+                VarianceProfileValues off = preset.MakeValues();
+                off.enableSkillVariance = false;
+                off.enablePassionVariance = false;
+
+                foreach (float q in new[] { 0.10f, 0.50f, 0.90f })
+                {
+                    float got = DispersionModel.TypicalAt(off, q);
+                    if (Mathf.Abs(got - vanillaComposite) > ToggleTolerance)
+                    {
+                        sb.AppendLine($"  {preset.label,-12} q={q:F2} both axes off -> {got:F6}, "
+                            + $"expected {vanillaComposite:F6}  *** TOGGLE MISMATCH ***");
+                        toggleFailures++;
+                    }
+                }
+            }
+
+            // Invariant 2: on a profile that is NOT vanilla-like, switching an axis off must
+            // actually move the score. If the flags are ignored again the delta is exactly zero,
+            // which is the specific regression this catches. Sovereign is the strongest tier and
+            // so the largest signal; the threshold is far below the real effect (~0.03 raw, worth
+            // ~14pp of the displayed figure) and far above integration noise.
+            VarianceProfile sovereign = VarianceProfiles.Presets
+                .FirstOrDefault(x => x.label == "Sovereign");
+            if (sovereign == null)
+            {
+                sb.AppendLine("  NOTE  Sovereign missing; the toggles-do-something check was skipped.");
+            }
+            else
+            {
+                VarianceProfileValues on = sovereign.MakeValues();
+                float qs = on.averageQuality;
+                float baseline = DispersionModel.TypicalAt(on, qs);
+
+                VarianceProfileValues noPassion = sovereign.MakeValues();
+                noPassion.enablePassionVariance = false;
+                VarianceProfileValues noSkill = sovereign.MakeValues();
+                noSkill.enableSkillVariance = false;
+
+                float dPassion = Mathf.Abs(DispersionModel.TypicalAt(noPassion, qs) - baseline);
+                float dSkill = Mathf.Abs(DispersionModel.TypicalAt(noSkill, qs) - baseline);
+
+                sb.AppendLine($"  Sovereign    passions-off moves the score by {dPassion:F6}, "
+                    + $"skills-off by {dSkill:F6}");
+
+                if (dPassion < 1e-3f || dSkill < 1e-3f)
+                {
+                    sb.AppendLine("  *** TOGGLE IGNORED *** DispersionModel is not reading "
+                        + "enableSkillVariance / enablePassionVariance.");
+                    toggleFailures++;
+                }
+            }
+
+            failures += toggleFailures;
+            if (toggleFailures == 0)
+            {
+                sb.AppendLine("  per-axis toggles OK: disabled axes fall back to vanilla, "
+                    + "enabled axes are scored.");
+            }
+
             if (failures == 0)
             {
                 sb.AppendLine("  PASS: the live integrator agrees with the reference everywhere.");

@@ -1413,7 +1413,12 @@ namespace PawnVarianceMod
 
         private static float CalculateCompositeScore(float q, VarianceProfileValues v)
         {
-            float skillNorm = 0.25f;
+            // Skill variance off => the pawn keeps vanilla's levels, i.e. AssumedVanillaSkillBaseline
+            // out of AssumedMaxSkillLevel. Derived, not the literal 0.25f this used to be: the same
+            // fallback is mirrored in DispersionModel.Moments, and two hardcoded copies of 5/20 is
+            // how the constants drift apart. Unlike the passion fallback below, this one really is
+            // the skill axis's own baseline rather than a value borrowed from elsewhere.
+            float skillNorm = Constants.AssumedVanillaSkillBaseline / Constants.AssumedMaxSkillLevel;
             if (v.enableSkillVariance)
             {
                 float shift = Mathf.Lerp(v.skillShiftMin, v.skillShiftMax, q);
@@ -1489,12 +1494,32 @@ namespace PawnVarianceMod
             // These two weights and Constants.MaxPassionPips jointly set the skill/passion exchange
             // rate — see the derivation on Constants.CompositeSkillWeight. Retuning one alone moves
             // the rate without looking like it does.
-            float wS = v.enableSkillVariance ? Constants.CompositeSkillWeight : 0f;
-            float wP = v.enablePassionVariance ? Constants.CompositePassionWeight : 0f;
-            float totalW = wS + wP;
+            //
+            // THE WEIGHTS ARE UNCONDITIONAL, and the two fallbacks above are why. Until 2026-08-09
+            // these read `v.enableSkillVariance ? Constants.CompositeSkillWeight : 0f` and the same
+            // for passion, which multiplied each disabled axis's fallback by zero — so the whole
+            // derivation above (VanillaPassionBudget x efficiency, and the argument for why it is
+            // 0.2609 and "not 0.25") computed a value that could never reach the result. Both
+            // constants had no other consumer in Source/, i.e. they were dead.
+            //
+            // Dropping the axis is also wrong on its own terms. A disabled axis does not mean the
+            // pawn has no skills or no passions; it means the pawn keeps VANILLA's, which is
+            // exactly what the fallbacks measure. Zeroing the weight instead rescales the composite
+            // so the surviving axis is 100% of it, putting that profile on a different scale from
+            // every other profile while still being divided by the same Faithful baseline.
+            //
+            // The check that settles it: with BOTH axes off every pawn is untouched vanilla, so the
+            // score must be exactly the Faithful baseline. Keeping the weights gives
+            //     (0.8 x 0.25 + 1.5 x 0.260870) / 2.3 = 0.257089
+            // which is FaithfulBaseline() to six decimals. The old code returned `q` there — the
+            // raw quality roll, on no meaningful scale at all.
+            //
+            // No shipped figure moves: all eight presets set both flags true, so this is reachable
+            // only from a custom profile. DispersionModel.Moments mirrors this; keep them in step.
+            const float wS = Constants.CompositeSkillWeight;
+            const float wP = Constants.CompositePassionWeight;
 
-            if (totalW <= 0f) return q;
-            return Mathf.Clamp01((wS * skillNorm + wP * passionNorm) / totalW);
+            return Mathf.Clamp01((wS * skillNorm + wP * passionNorm) / (wS + wP));
         }
 
         // Expected composite score of the best of n pawns: E[composite(max(q1..qn))].

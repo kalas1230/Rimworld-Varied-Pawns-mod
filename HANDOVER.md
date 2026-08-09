@@ -291,6 +291,40 @@ raises capacity to 19.5 against a budget still capped at 18 — the surplus-disc
 not more. Mild dilution, no wrong arithmetic. The in-game verify action prints the live
 `DefDatabase<SkillDef>` count and says so when it is not 12; deliberately a NOTE, not a failure.
 
+## A disabled axis scores as VANILLA, at full weight — it is not dropped
+
+`enableSkillVariance` / `enablePassionVariance` are per-profile checkboxes. When one is off the mod
+leaves that axis alone, so **the pawn keeps vanilla's skills or vanilla's passions — it does not
+have none.** The composite therefore substitutes vanilla's own value on that axis and **keeps the
+weight**:
+
+| Axis off | Contributes | Value |
+|---|---|---|
+| Skills | `AssumedVanillaSkillBaseline / AssumedMaxSkillLevel` | 0.2500 |
+| Passions | `VanillaPassionBudget × PassionPipEfficiency(VanillaMajorBias) / MaxPassionPips` | 0.2609 |
+
+In the dispersion model the same value is used **with zero variance** — a disabled axis is a
+constant, so it contributes nothing to σ.
+
+> [!CAUTION]
+> **Do not "simplify" this by zeroing the weight of a disabled axis.** That is what the code did
+> until 2026-08-09 (`wS = v.enableSkillVariance ? CompositeSkillWeight : 0f`), and it made both
+> fallbacks above dead code — `VanillaPassionBudget` and `VanillaMajorBias` had no live consumer at
+> all. It also rescales the composite so the surviving axis is 100% of it, while the result is still
+> divided by the same `Faithful` baseline: two scales, one reference.
+>
+> **The invariant that catches this:** with both axes off the mod changes nothing, so the score must
+> be exactly the `Faithful` baseline.
+> `(0.8 × 0.25 + 1.5 × 0.260870) / 2.3 = 0.257089 = FaithfulBaseline()`. The old code returned `q`
+> there. `Faithful` must also score `0.257089` in **all four** flag combinations, being the
+> vanilla-mimicking preset. Both are checked by the in-game verify action.
+>
+> **No preset exercises this** — all eight leave both flags `true`, so `envelope_check.py`'s 32/32
+> and `EnvelopeFigures.g.cs` are blind to it by construction, and the toggle gate is a set of
+> standalone invariants rather than a comparison against the table. Four sites must agree:
+> `CalculateCompositeScore`, `DispersionModel.Moments`, `envelope_check.py`'s `make_composite` and
+> its `grid_moments`.
+
 ## The skill ↔ passion exchange rate (`R`)
 
 **`R(bias) = (20 / MaxPassionPips) · (wP / wS) · PassionPipEfficiency(bias)`
@@ -564,8 +598,9 @@ tooltip, keep the exclusion clause.**
 
 ## Trait count is NOT a quality axis — more traits is *worse*
 
-Trait *selection* is delegated entirely to vanilla's `PawnGenerator.GenerateTraitsFor`, which is
-**quality-blind**. Scaling trait count with quality does not buy better traits — it buys **more
+**Quality sets how many traits a pawn gets; it never influences which traits — selection is
+vanilla's, and it is quality-blind.** Trait *selection* is delegated entirely to
+`PawnGenerator.GenerateTraitsFor`, which never sees `q`. Scaling trait count with quality does not buy better traits — it buys **more
 independent draws from an unchanged urn**, including the colony-ruining ones. Roughly 4% of vanilla
 trait degrees can trigger uncontrolled behaviour (`randomMentalState`/`forcedMentalState`:
 Pyromaniac, Gourmand, Void Fascination):
@@ -590,6 +625,19 @@ the composite metric **actively reward** a change that makes pawns worse to play
 
 See `TRAIT-DESIRABILITY-RESEARCH.md` §1 and §3.1 for the derivation.
 
+**Asked 2026-08-08 — "if traits don't correlate with quality, why is count derived from quality?"**
+Answered: they are consistent once *count* and *selection* are kept apart, so only the wording was
+fixed (above, and at "HOW A PAWN IS ACTUALLY ROLLED"). The mechanism at
+`TraitVarianceApplier.cs:43-48` stays. The real tension — `q` is a positive dial everywhere except
+traits, where extra draws quietly raise hazard exposure — is the inversion already mitigated by
+removing the trait term from the composite and narrowing preset spreads. The one untried alternative
+is **decoupling count from `q`** (roll it from its own independent draw in `[min, max]`): ~3 lines,
+needs no envelope re-tune since the composite doesn't read trait count, and kills the inversion at
+any spread. **Rejected** because it costs the single-roll design — trait count becomes pure noise,
+unconnected to the rest of the pawn — and it would shift the observable distribution of every
+existing profile, for a defect already measured as small. Reopen only if the one-dial property is
+being dropped for other reasons anyway.
+
 > [!IMPORTANT]
 > **Do not build a trait desirability engine.** The underlying problem — trait *count* scaling with
 > quality while trait *selection* stayed quality-blind — is already fixed, without new runtime code:
@@ -607,10 +655,12 @@ See `TRAIT-DESIRABILITY-RESEARCH.md` §1 and §3.1 for the derivation.
 
 # 🎲 HOW A PAWN IS ACTUALLY ROLLED
 
-**Quality is rolled ONCE per pawn** (`HarmonyPatches.cs:36`) and handed to all three appliers. That
+**Quality is rolled ONCE per pawn** (`HarmonyPatches.cs:55`) and handed to all three appliers. That
 is what makes quality a coherent per-pawn property rather than three unrelated numbers — a
-high-quality pawn is high-quality in skills *and* passions *and* trait count together. **Do not
-"improve" this into a per-axis roll.**
+high-quality pawn is shifted up in skills *and* passions *and* trait **count** together. Note the
+last word: **quality sets how many traits a pawn gets; it never influences which traits — selection
+is vanilla's, and it is quality-blind.** More traits is not better traits (see "Trait count is NOT a
+quality axis"). **Do not "improve" the single roll into a per-axis roll.**
 
 | Quantity | Rolled |
 |---|---|
@@ -622,7 +672,7 @@ high-quality pawn is high-quality in skills *and* passions *and* trait count tog
 
 ### The mod displaces vanilla's roll, it does not author the pawn
 
-`SkillVarianceApplier.cs:47` is `RoundToInt(record.levelInt + shift)` — the shift is applied **on top
+`SkillVarianceApplier.cs:73` is `RoundToInt(record.levelInt + shift)` — the shift is applied **on top
 of** whatever vanilla generated from backstory, age and `PawnKindDef`. Consequence: **two pawns at
 identical quality are still completely different pawns.** Even with true-zero noise they would
 differ; the shift moves the whole pawn up or down, it does not decide what the pawn is. This is the
@@ -631,7 +681,7 @@ which talks only about shifts and budgets.
 
 ### The growth moment rolls a FRESH quality
 
-`GrowUpVariance.cs:58` calls `RollQuality` again. A pawn generated at `q = 0.20` can grow up at
+`GrowUpVariance.cs:62` calls `RollQuality` again. A pawn generated at `q = 0.20` can grow up at
 `q = 0.85`. The two rolls are independent and nothing carries over — a child is **not** "the same
 pawn's quality, re-applied." Deliberate, but it means growth-moment outcomes cannot be predicted
 from the pawn's original generation.
@@ -893,8 +943,10 @@ too strong is right; the premise that it happens is not.
 3. **Clamp the budget** — a deliberate nerf to restricted-skill pawns across every profile, not a
    Wildcard tail fix. **Do not do this by accident.**
 
-Implementation note if 2 or 3 is ever revisited: `budget` is rolled at `PassionVarianceApplier.cs:42`
-but `eligible` is not built until ~`:79`, so either needs a reorder.
+Implementation note if 2 or 3 is ever revisited: `budget` is rolled at `PassionVarianceApplier.cs:64`
+but `eligible` is not built until `:115`, so either needs a reorder. (Note `:42` is inside the
+passion-wipe loop over `pawn.skills.skills` — reordering around *that* line edits the wipe, not the
+budget roll.)
 
 ## Settled and not to be relitigated
 
@@ -1124,8 +1176,8 @@ Drawing lives in `Source/ProfileEditorTab.cs` (`partial class PawnVarianceSettin
 - **Row 2 saves and restores three pieces of global draw state** — `Text.Font`, `GUI.color`,
   `Text.WordWrap`. `WordWrap = false` is what structurally guarantees the fixed 20px row stays one
   line and cannot overlap the quality slider. Keep all three restores.
-- **Scroll heights are floors, not caps.** `PawnVarianceSettings.cs:614` is
-  `Math.Max(overridesViewHeight, 1000f)` and `:656` recomputes `listing.CurHeight + 40f` each frame,
+- **Scroll heights are floors, not caps.** `PawnVarianceSettings.cs:680` is
+  `Math.Max(overridesViewHeight, 1000f)` and `:722` recomputes `listing.CurHeight + 40f` each frame,
   so extra sections expand the view rather than clipping. The editor body carries a `580f` minimum so
   the scrollbar is always active and lower controls stay reachable.
 - **Best-of-25, not Best-of-50, and no `N` slider** — it is a lens, not a setting. At N=50 `Wildcard`
@@ -1173,15 +1225,15 @@ reach those fields without passing a widget.
 
 4. **⚠️ Traits are generated from TWO independent call sites** — any future trait work must handle
    both:
-   - `TraitVarianceApplier.cs:72` — `GenerateTraitsFor(pawn, delta, request, growthMomentTrait: false)`
-   - `GrowUpVariance.cs:209` — `GenerateTraitsFor(pawn, requested, null, growthMomentTrait: true)`
+   - `TraitVarianceApplier.cs:76` — `GenerateTraitsFor(pawn, delta, request, growthMomentTrait: false)`
+   - `GrowUpVariance.cs:215` — `GenerateTraitsFor(pawn, requested, null, growthMomentTrait: true)`
 
    Two consequences that are easy to miss:
    - The growth-moment call passes **`request: null`**, so every vanilla check that reads the request
      is skipped — `kindDef.disallowedTraits`, `disallowedTraitsWithDegree`, `requiredWorkTags`,
      `ProhibitedTraits`, and the hostile-spawn `allowOnHostileSpawn` gate (verified in decompiled
      `PawnGenerator.GenerateTraitsFor`).
-   - The growth-moment trait pass is **add-only by design** (`GrowUpVariance.cs:70-79`). **Anything
+   - The growth-moment trait pass is **add-only by design** (`GrowUpVariance.cs:77-83`). **Anything
      granted at 13 is permanent**; no later pass revisits it.
 
 5. **Age-13 growth-moment deferral pipeline** — children aging to 13 defer mod application while a
@@ -1446,13 +1498,13 @@ Files marked `DONE (REVIEWED)` are protected by Rule 8 — no modification witho
   gene floor restoration & stale preAdd fix. **One-line accessor change** (reads
   `PassionNoiseScalar` instead of `passionNoise`) — not flipped, same caveat as
   `SkillVarianceApplier.cs`.
-- [ ] `Source/GrowUpVariance.cs` — **NEXT UP**
-- [ ] `Source/GrowthUpPatch.cs`
-- [ ] `Source/GrowUpPendingComponent.cs`
-- [ ] `Source/HarmonyPatches.cs`
-- [ ] `Source/PawnVarianceMod.cs`
-- [ ] `Source/Constants.cs`
-- [ ] `Source/DebugActions.cs` — dev menu actions, Best-of-N verifier UI/action, pawn profile
+- [x] `Source/GrowUpVariance.cs` — GrowUpVariance entry point, grow-up variance appliers for skills, passions, and traits.
+- [x] `Source/GrowthUpPatch.cs` — Harmony patches for life-stage transitions, growth moment resolution, and load/init session resets.
+- [x] `Source/GrowUpPendingComponent.cs` — GameComponent tracking pending age-13 growth moment resolutions with Scribe persistence.
+- [x] `Source/HarmonyPatches.cs` — postfix on GenerateNewPawnInternal, single-roll guarantee, exclude hostile / child (<13) guards.
+- [x] `Source/PawnVarianceMod.cs` — Mod entry point, settings initialization, PatchIndividually error isolation.
+- [x] `Source/Constants.cs` — scoring constants, scaling limits, 18-pip saturation ceiling, pip efficiency terms.
+- [ ] `Source/DebugActions.cs` — **NEXT UP** — dev menu actions, Best-of-N verifier UI/action, pawn profile
   simulation tools. Already unreviewed; also touched by the dispersion-aware scoring work (verify
   gate and distribution dump wiring).
 - [ ] `Source/DispersionModel.cs` — **new, unreviewed.** Quadrature model: `Moments`, `BuildCdf`,
@@ -1460,6 +1512,8 @@ Files marked `DONE (REVIEWED)` are protected by Rule 8 — no modification witho
   `envelope_check.py`.
 - [ ] `Source/MathUtil.cs` — **new, unreviewed.** `Erf`/`NormalCdf` used by `DispersionModel`.
 - [x] `Source/EnvelopeFigures.g.cs` — auto-generated envelope constants baseline (generated by envelope_check.py).
+- [ ] `docs/tools/envelope_check.py` — deterministic quadrature envelope gate & `EnvelopeFigures.g.cs` generator.
+- [ ] `docs/tools/dispersion_mc.py` — independent Monte Carlo dispersion validation harness.
 
 ---
 
