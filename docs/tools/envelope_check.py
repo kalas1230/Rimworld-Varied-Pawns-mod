@@ -606,6 +606,33 @@ MIRROR_SITES = ("Source/DispersionModel.cs",
 # dispersion_mc.py ever learns the flags, move it back onto MIRROR_SITES.
 TOGGLE_MIRROR_SITES = tuple(s for s in MIRROR_SITES if s != "docs/tools/dispersion_mc.py")
 
+# THIS TABLE IS NOT A COMPLETE INVENTORY OF THE GENERATOR -- READ BEFORE ADDING OR TRUSTING A ROW.
+#
+# GENERATOR_BRANCHES lists only the branches a MODEL SITE is supposed to mirror. Several other
+# things in the generator shape the outcome and are deliberately absent, because no model site
+# mirrors them -- the models score a quality roll, not a pawn, so there is nothing for a marker
+# to attach to. Adding a row for any of these would make the checklist certify a mirror that
+# does not exist, which is exactly the dishonesty this table exists to prevent:
+#
+#   - the age gate (HarmonyPatches.cs:45) -- a pawn under Constants.VanillaAdultPassionAge
+#     receives no rolled passion budget at all;
+#   - the hostile exclusion (HarmonyPatches.cs:32, settings.IsExcludedAsHostile);
+#   - trait/gene passion eligibility (PassionVarianceApplier.cs:95-115) -- conflictingPassions
+#     and DropAll genes narrow the eligible skill list below the 12 the passion-capacity branch
+#     above assumes;
+#   - the triangular shape of the skill noise draw (SkillVarianceApplier.cs:71).
+#
+# The age gate and the hostile exclusion ARE honoured, but not here -- they are honoured by the
+# eligibility filter in the generator-vs-model assertion in DebugActions.DumpDistribution, which
+# only asserts against pawns the generator itself would have touched. The eligibility narrowing
+# from trait/gene exclusion is exactly what that assertion's 0.15-pip tolerance floor exists to
+# absorb: it is real generator behaviour with no model mirror, so the assertion budgets slack
+# for it instead of failing on it.
+#
+# So: a green "generator/mirror checklist" line below means every row in THIS table has its
+# declared mirrors. It does not mean every generator branch has a mirror, and it does not mean
+# the generator has no more branches than these five -- it means these five, which are the ones
+# a model site COULD mirror, do.
 GENERATOR_BRANCHES = (
     # (branch id, where the generator does it, which sites must mirror it)
     ("passion-floor", "PassionVarianceApplier.cs:76-77", MIRROR_SITES),
@@ -819,14 +846,23 @@ def main():
         print("FAIL: the dispersion model does not reduce to the analytic score at zero noise")
         return 1
 
+    # Both checks below run and print unconditionally, and the FAIL decision is deferred to a
+    # single combined return at the end of this block. This used to short-circuit on the
+    # mean-band check's failure -- `return 1` right after its FAIL lines, before
+    # check_mirror_markers() ever ran -- so a missing MIRRORS marker stayed unreported until an
+    # unrelated numeric failure was fixed first. On a fully passing run this prints the exact
+    # same lines in the exact same order as before (mean-band line, then the mirror checklist
+    # line); only the failing case changes, by no longer hiding one failure behind the other.
     worst_meanband = check_mean_band_consistency(C, P)
-    if worst_meanband > 1e-9:
+    meanband_failed = worst_meanband > 1e-9
+    if meanband_failed:
         print("FAIL: the dispersion model and the mean-band composite disagree at zero spread.")
         print("      They integrate the same thing there, so a gap means one of them is missing")
         print("      a branch the other has -- the floor, the spend loop, capacity or a clamp.")
-        return 1
 
-    if check_mirror_markers() > 0:
+    mirror_failed = check_mirror_markers() > 0
+
+    if meanband_failed or mirror_failed:
         return 1
 
     # R carries the pip-efficiency factor, so it is a FUNCTION of the profile's Major bias, not a

@@ -1463,11 +1463,15 @@ namespace PawnVarianceMod
         // Keep this condition identical to the applier's, minus its alreadyCommittedPips clause:
         // that clause is about the grow-up top-up path, which scores nothing.
         //
+        // Split declaration: this function only carries the three markers it actually
+        // implements. `enable-toggles` and `skill-clamp` live on CalculateCompositeScore below
+        // instead -- this function takes no enable* flags and does no skill clamping, so a
+        // marker for either here would be a declaration this code does not back up. See the
+        // matching split note above CalculateCompositeScore for where those two live and why.
+        //
         // MIRRORS: passion-floor
         // MIRRORS: passion-spend-loop
         // MIRRORS: passion-capacity
-        // MIRRORS: enable-toggles
-        // MIRRORS: skill-clamp
         private static float PassionNormFor(float budget, float majorBias, bool floorToOne)
         {
             if (budget < 1f && floorToOne) budget = 1f;
@@ -1512,6 +1516,18 @@ namespace PawnVarianceMod
         // MapToCenteredX") describes the tree as it was two fixes earlier. DO NOT read the absence
         // of a caller as licence to let it drift: if a future readout wants a mean-band figure it
         // will call this, and it must be right when that happens.
+        //
+        // Split declaration: this function carries `enable-toggles` and `skill-clamp` because it
+        // is where the enable* flags are actually read (v.enableSkillVariance /
+        // v.enablePassionVariance below) and where the resulting skill norm is clamped. The other
+        // three markers -- passion-floor, passion-spend-loop, passion-capacity -- live above
+        // PassionNormFor instead, because that is the function that implements them. Splitting
+        // the five markers across the two functions that actually carry them is what keeps each
+        // MIRRORS comment an honest claim about the code it sits on, rather than a blanket
+        // declaration attached to whichever function happened to be nearby.
+        //
+        // MIRRORS: enable-toggles
+        // MIRRORS: skill-clamp
         private static float CalculateCompositeScore(float q, VarianceProfileValues v)
         {
             // Skill variance off => the pawn keeps vanilla's levels, i.e. AssumedVanillaSkillBaseline
