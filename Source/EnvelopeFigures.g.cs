@@ -38,6 +38,13 @@ namespace PawnVarianceMod
         public const float GenPassionLearnRateNone = 0.35f;
         public const float GenPassionLearnRateMinor = 1f;
         public const float GenPassionLearnRateMajor = 1.5f;
+        public const float GenMagnitudeLerpLow = 0f;
+        public const float GenMaxMagnitude = 6f;
+        public const float GenPassionBudgetSpreadMin = 0f;
+        public const float GenPassionBudgetSpreadMax = 4f;
+        public const float GenPassionBudgetClampFactor = 4f;
+        public const float GenVanillaMajorBias = 0.5f;
+        public const float GenVanillaPassionBudget = 5f;
 
         public static readonly int[] Batches = { 1, 5, 25, 50 };
 

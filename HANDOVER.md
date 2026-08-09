@@ -741,7 +741,8 @@ from the pawn's original generation.
 
 ### The noise sliders now mean literally zero at zero
 
-`MinMagnitudeFloor` and `PassionBudgetSpreadMin` used to be **floors, not zeros** (0.5 and 0.25), so
+`MagnitudeLerpLow` (named `MinMagnitudeFloor` until P-11 renamed it — the old name greps to nothing)
+and `PassionBudgetSpreadMin` used to be **floors, not zeros** (0.5 and 0.25), so
 a slider reading `0.00` still delivered ±0.5 levels per skill and still varied the passion budget
 enough to change how many passions a pawn got. Both are `0f` now.
 
@@ -750,7 +751,12 @@ enough to change how many passions a pawn got. Both are `0f` now.
 > setting, not just at zero — proportionally hardest at the quiet end, where every preset except
 > Wildcard lives:
 >
-> | `skillNoise` | magnitude before | after | change |
+> The left column is the **pre-rename 0–1 scalar**, which is what the constants were lerped against
+> at the time; today's field is `skillSpread` in real skill-level units and the scalar survives as
+> the derived `SkillNoiseScalar`. The figures are quoted unconverted so they match the retune they
+> record.
+>
+> | `skillNoise` (pre-rename scalar) | magnitude before | after | change |
 > |---|---|---|---|
 > | 0.00 | 0.50 | 0.00 | −100% |
 > | 0.20 (`Faithful`) | 1.60 | 1.20 | −25% |

@@ -23,7 +23,7 @@ namespace PawnVarianceMod
     // skills get Major far more often" happen for free, as a consequence of vanilla's own shape,
     // rather than a bolted-on bias. The only two numbers this mod makes tunable that vanilla hardcodes
     // are: the budget's mean (vanilla: flat 5, here: quality-lerped between passionCountMin/Max) and
-    // spread (vanilla: fixed widthFactor 1 / clamp 4, here: passionNoise-driven), and the coin flip's
+    // spread (vanilla: fixed widthFactor 1 / clamp 4, here: passionSpread-driven), and the coin flip's
     // probability of Major (vanilla: flat Rand.Bool = 50%, here: passionMajorBias).
     public static class PassionVarianceApplier
     {

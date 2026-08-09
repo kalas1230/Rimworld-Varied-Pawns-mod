@@ -41,10 +41,20 @@ namespace PawnVarianceMod
 
             gaussZ = new float[GaussNodes];
             gaussW = new float[GaussNodes];
-            float dz = 8f / GaussNodes, gtot = 0f;    // +-4 sigma, matching PassionBudgetClampFactor
+            // The truncation window is DERIVED from PassionBudgetClampFactor, not a literal that
+            // happens to equal it. PassionVarianceApplier clamps its Gaussian draw to
+            // +-(spread * PassionBudgetClampFactor), i.e. +-factor sigma, so this quadrature has to
+            // cover exactly that support. Until 2026-08-09 this read `8f / GaussNodes` and `-4f`
+            // with a comment naming the coupling, and envelope_check.py did the same, while
+            // dispersion_mc.py derived its window from the constant -- so retuning the constant
+            // would have moved the independent Monte Carlo and left both quadratures behind, and
+            // the resulting disagreement would have read as "the Monte Carlo says the quadrature
+            // is wrong" when the truth was the reverse. Audit finding Q-06.
+            float zmax = Constants.PassionBudgetClampFactor;
+            float dz = 2f * zmax / GaussNodes, gtot = 0f;
             for (int i = 0; i < GaussNodes; i++)
             {
-                float z = -4f + (i + 0.5f) * dz;
+                float z = -zmax + (i + 0.5f) * dz;
                 gaussZ[i] = z;
                 gaussW[i] = Mathf.Exp(-0.5f * z * z) * dz;
                 gtot += gaussW[i];

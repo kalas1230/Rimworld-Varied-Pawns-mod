@@ -120,10 +120,11 @@ def parse_constants(src):
                 # only before the dispersion-aware work.
                 "MagnitudeLerpLow", "MaxMagnitude",
                 "PassionBudgetSpreadMin", "PassionBudgetSpreadMax",
-                # Read since 2026-08-09 by make_spend, which needs the widest budget a caller can
-                # present in order to size its table. Q-06 notes this tool used to hardcode the
-                # +-4 sigma window as a literal while dispersion_mc.py derived it from here; the
-                # quadrature nodes in _gauss_nodes still hardcode it, so that half of Q-06 is open.
+                # Read by make_spend, which needs the widest budget a caller can present in order
+                # to size its table, AND by _gauss_nodes, which truncates the budget Gaussian at
+                # exactly this many sigma. Both used to hardcode 4 while dispersion_mc.py derived
+                # it from here; that asymmetry was Q-06 and is closed. It is a scoring input on
+                # every side now, which is why it is also in GEN_CONSTANTS.
                 "PassionBudgetClampFactor"]
     missing = [r for r in required if r not in out]
     if missing:
@@ -295,14 +296,23 @@ def make_composite(C):
     efficiency = make_efficiency(C)
     outcomes = make_spend(C)
 
-    def passion_from(budget, bias):
-        """Pips -> normalised axis, through the generator's own spend loop.
+    def passion_from(budget, bias, floor_to_one):
+        """Pips -> normalised axis, through vanilla's floor and the generator's own spend loop.
+
+        `floor_to_one` is vanilla's at-least-one-passion guarantee (PassionVarianceApplier.cs:76,
+        DispersionModel.cs, grid_moments below, dispersion_mc.simulate). This function was the one
+        site of the five that did not have it -- audit finding Q-04. It is a parameter rather than
+        a read of passionCountMin because the disabled-axis branch scores VANILLA's budget, and
+        vanilla always floors.
 
         The loop is applied BEFORE the capacity limit, which is the generator's order: it spends
         the whole budget into whole passions and only then discovers how many eligible skills
         exist, discarding the surplus at assignment time. Capacity and Clamp01 are applied per
         OUTCOME rather than to the mean, so the second moment stays exact for grid_moments.
         """
+        if budget < 1.0 and floor_to_one:
+            budget = 1.0
+        budget = max(budget, 0.0)
         eff = efficiency(bias)
         acc = 0.0
         for pips, w in outcomes(budget, bias):
@@ -325,7 +335,8 @@ def make_composite(C):
         # is the real cap: 12 skills, one passion each, at the bias's average price.
         if p.get("enablePassionVariance", True):
             budget = p["passionCountMin"] + (p["passionCountMax"] - p["passionCountMin"]) * q
-            passion_norm = passion_from(budget, p["passionMajorBias"])
+            passion_norm = passion_from(budget, p["passionMajorBias"],
+                                        p["passionCountMin"] > 0.0)
         else:
             # Vanilla's own budget at vanilla's own 50/50 Major flip, scored through the same
             # efficiency term as every other profile -- AND through the same spend loop, because
@@ -334,7 +345,10 @@ def make_composite(C):
             # would put the two branches on different scales and break the both-axes-off invariant
             # that Q-16 turns on: Faithful's band at q = 0.50 is VanillaPassionBudget pips at
             # VanillaMajorBias, so the two paths must agree term for term.
-            passion_norm = passion_from(C["VanillaPassionBudget"], C["VanillaMajorBias"])
+            # Floored, like every other branch: vanilla's `5 + clamp(Gaussian, -4, 4)` bottoms out
+            # at 1, so the floor is vanilla's own. Inert at a 5-pip budget; present so the two
+            # branches stay term-for-term identical, which the both-axes-off invariant needs.
+            passion_norm = passion_from(C["VanillaPassionBudget"], C["VanillaMajorBias"], True)
         return min(1.0, (wS * skill_norm + wP * passion_norm) / (wS + wP))
 
     return composite
@@ -381,9 +395,17 @@ def _tri_nodes():
     return ts, [w / tot for w in ws]
 
 
-def _gauss_nodes():
-    """Standard normal truncated to +-4, matching PassionBudgetClampFactor."""
-    lo, hi = -4.0, 4.0
+def _gauss_nodes(C):
+    """Standard normal truncated to +-PassionBudgetClampFactor sigma.
+
+    DERIVED from the constant, not a literal that happens to match it. PassionVarianceApplier
+    clamps its draw to +-(spread * PassionBudgetClampFactor), so this is exactly the support of
+    the budget's distribution. This function and DispersionModel.EnsureNodes both hardcoded 4.0
+    until 2026-08-09 while dispersion_mc.py derived it -- audit finding Q-06, whose point was that
+    a retune of the constant would have moved only the independent validator.
+    """
+    zmax = C["PassionBudgetClampFactor"]
+    lo, hi = -zmax, zmax
     dz = (hi - lo) / GGRID
     zs, ws, tot = [], [], 0.0
     for i in range(GGRID):
@@ -405,7 +427,7 @@ def grid_moments(C):
     efficiency = make_efficiency(C)
     outcomes = make_spend(C)
     TS, TW = _tri_nodes()
-    ZS, ZW = _gauss_nodes()
+    ZS, ZW = _gauss_nodes(C)
     wsum = wS + wP
 
     def moments(p, q, with_noise=True):
@@ -517,11 +539,32 @@ def make_grid_score(C):
     return best_of_n
 
 
+# EVERY constant that enters a printed figure. The in-game "Verify Best-of-N" action diffs each
+# of these against the live Constants.cs (DebugActions.CheckConstant), so moving one without
+# re-running this tool is REPORTED rather than silently measured against a stale reference.
+#
+# The rule for this tuple is mechanical: if `required` above reads a constant to compute a score
+# or a moment, it belongs here. It is not "the weights" -- that reading is what left the six
+# additions below outside the check until 2026-08-09 (audit finding Q-05), including four that
+# grid_moments uses to build sigma(q) on every single figure the tool prints.
 GEN_CONSTANTS = ("CompositeSkillWeight", "CompositePassionWeight", "MaxPassionPips",
                  "AssumedVanillaSkillBaseline", "AssumedMaxSkillLevel", "BetaConcentrationK",
                  "QualityClampEpsilon",
                  "MajorPassionCost", "MinorPassionCost",
-                 "PassionLearnRateNone", "PassionLearnRateMinor", "PassionLearnRateMajor")
+                 "PassionLearnRateNone", "PassionLearnRateMinor", "PassionLearnRateMajor",
+                 # Skill- and passion-noise Lerp endpoints. grid_moments builds the per-skill
+                 # excursion and the budget sigma from these, so they set the DISPERSION of every
+                 # dispersion-aware figure -- change MaxMagnitude without re-running and every
+                 # percentage is measured against the wrong reference.
+                 "MagnitudeLerpLow", "MaxMagnitude",
+                 "PassionBudgetSpreadMin", "PassionBudgetSpreadMax",
+                 # The truncation window of the budget Gaussian, in sigma (see _gauss_nodes), and
+                 # the widest budget make_spend has to table. A scoring input on both sides since
+                 # Q-06 closed; before that only dispersion_mc.py read it.
+                 "PassionBudgetClampFactor",
+                 # Vanilla's own budget and Major flip: the passion axis's value for a profile
+                 # with passion variance switched off. Dead until Q-16 made the fallback live.
+                 "VanillaMajorBias", "VanillaPassionBudget")
 
 GEN_HEADER = """// <auto-generated>
 //     Regenerated by {tool}. DO NOT EDIT BY HAND.

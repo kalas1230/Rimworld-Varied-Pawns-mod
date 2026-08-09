@@ -1415,8 +1415,9 @@ namespace PawnVarianceMod
         // docs/tools/envelope_check.py's make_composite; DispersionModel.Moments does the same
         // thing node by node. IF YOU CHANGE ONE, CHANGE ALL THREE.
         //
-        // Four terms, and they are four genuinely different things. Do not collapse them.
+        // Five terms, and they are five genuinely different things. Do not collapse them.
         //   budget      — pips the profile targets at this quality.
+        //   floor       — vanilla's guarantee that an adult gets at least one passion. See below.
         //   spend loop  — how many of those pips a pawn ACTUALLY receives. Whole passions only,
         //                 remainder discarded. See PassionSpend for why this is not the same as
         //                 the budget and why the difference does not cancel (finding Q-14).
@@ -1450,8 +1451,22 @@ namespace PawnVarianceMod
         // worth more than its 1.5-pip price. What was wrong was the units, the anchor (it scaled
         // above the ceiling instead of discounting below it) and the magnitude (1.25 from nowhere,
         // against 1.18 derived from the game's own XP rates).
-        private static float PassionNormFor(float budget, float majorBias)
+        //
+        // `floorToOne` is vanilla's at-least-one-passion guarantee, and it is a PARAMETER rather
+        // than a read of v.passionCountMin because the disabled-axis fallback below has no profile
+        // to ask -- vanilla's own budget is what it scores, and vanilla always floors. Until
+        // 2026-08-09 this function had no floor at all: the generator applied it
+        // (PassionVarianceApplier.cs:76), DispersionModel.Moments applied it, and both Python
+        // mirrors applied it, while THIS function -- which computes MapToCenteredX's marker
+        // position -- did not. That is finding Q-04, and it is the 2026-08-08 floor fix surviving
+        // in the one site that fix's enumeration ("the model sides") did not count as a model side.
+        // Keep this condition identical to the applier's, minus its alreadyCommittedPips clause:
+        // that clause is about the grow-up top-up path, which scores nothing.
+        private static float PassionNormFor(float budget, float majorBias, bool floorToOne)
         {
+            if (budget < 1f && floorToOne) budget = 1f;
+            if (budget < 0f) budget = 0f;
+
             float skillCount = Constants.MaxPassionPips / Constants.MajorPassionCost;
             float capacity = skillCount
                 * (Constants.MinorPassionCost
@@ -1473,6 +1488,24 @@ namespace PawnVarianceMod
             return acc;
         }
 
+        // ⚠️ CURRENTLY HAS NO CALLER. Verified 2026-08-09 by grep over Source/: every other hit on
+        // this name is a comment. It is kept, and kept correct, for two reasons rather than out of
+        // sentiment:
+        //
+        //   1. It is the C# mirror of envelope_check.py's make_composite, which is very much live
+        //      -- it drives the tool's zero-noise self-check and the printed mean-band baseline.
+        //      A drifting mirror is how this project's last three defects were built, so the rule
+        //      is that the mirror stays faithful whether or not the game reads it today.
+        //   2. It is the MEAN-BAND estimator, f(E[X]). The dispersion-aware E[f(X)] lives in
+        //      DispersionModel. Both are legitimate and they answer different questions (see the
+        //      two-baselines note on FaithfulBaseline); deleting this one would leave the project
+        //      with no expression of the mean band at all.
+        //
+        // It lost its last caller when Q-03 moved FaithfulBaseline() onto DispersionModel.TypicalAt
+        // -- so the audit register's Q-04 rationale ("it computes FaithfulBaseline and
+        // MapToCenteredX") describes the tree as it was two fixes earlier. DO NOT read the absence
+        // of a caller as licence to let it drift: if a future readout wants a mean-band figure it
+        // will call this, and it must be right when that happens.
         private static float CalculateCompositeScore(float q, VarianceProfileValues v)
         {
             // Skill variance off => the pawn keeps vanilla's levels, i.e. AssumedVanillaSkillBaseline
@@ -1510,15 +1543,23 @@ namespace PawnVarianceMod
             // below discretizes would put the two on different scales and break the both-axes-off
             // invariant Q-16 turns on -- Faithful's band at q = 0.50 is VanillaPassionBudget pips
             // at VanillaMajorBias, so the two paths must agree term for term.
+            // floorToOne: true. Vanilla's budget is `5 + clamp(Gaussian, -4, 4)`, which bottoms out
+            // at 1 -- the floor is where that guarantee comes from, so the branch that scores
+            // vanilla has to carry it. It changes nothing at VanillaPassionBudget = 5; it is here
+            // so the two branches stay term-for-term identical, which is what Q-16's invariant
+            // depends on.
             float passionNorm = PassionNormFor(Constants.VanillaPassionBudget,
-                                               Constants.VanillaMajorBias);
+                                               Constants.VanillaMajorBias,
+                                               floorToOne: true);
             if (v.enablePassionVariance)
             {
                 // Pips the profile targets at this quality. Everything that turns pips into a
-                // normalised axis — the spend loop, capacity, efficiency — is in PassionNormFor,
-                // which the disabled-axis fallback above shares so the two cannot drift apart.
+                // normalised axis — the floor, the spend loop, capacity, efficiency — is in
+                // PassionNormFor, which the disabled-axis fallback above shares so the two cannot
+                // drift apart.
                 float budget = Mathf.Lerp(v.passionCountMin, v.passionCountMax, q);
-                passionNorm = PassionNormFor(budget, v.passionMajorBias);
+                passionNorm = PassionNormFor(budget, v.passionMajorBias,
+                                             floorToOne: v.passionCountMin > 0f);
             }
 
             // These two weights and Constants.MaxPassionPips jointly set the skill/passion exchange

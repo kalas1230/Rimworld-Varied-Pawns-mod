@@ -55,20 +55,28 @@ confirms a finding nobody had connected to it (Q-14 again).
 | [Q-14](#q-14) | Scoring | The passion spend loop discretizes the budget into whole purchases and discards the remainder; no model side does — **1.60pp** on the enforcing metric | **Major** — ✅ **FIXED 2026-08-09** (models corrected, generator untouched; every published figure moved) |
 | [Q-02](#q-02) | Docs | Six `file.cs:NNN` citations in `HANDOVER.md` point at the wrong line; two are off by a consistent 66 | **Major** — ✅ **FIXED 2026-08-09** (a seventh was found and fixed in the same sweep) |
 | [Q-03](#q-03) | Scoring | The `Typical` readout divides a dispersion-aware numerator by a mean-band denominator — two different estimators of the same quantity | ~~Minor~~ → **Major** — ✅ **FIXED 2026-08-09** (was `0.00pp`, re-measured at −3.39% once Q-14 landed) |
-| [Q-04](#q-04) | Model drift | `CalculateCompositeScore` omits the vanilla passion floor that all four dispersion sites carry | **Minor** |
-| [Q-05](#q-05) | Model drift | Six constants that enter the score are outside the golden-file drift check | **Minor** |
-| [Q-06](#q-06) | Model drift | The ±4σ truncation window is hardcoded in two mirrors and derived from the constant in the third | **Minor** |
-| [Q-07](#q-07) | Docs | The two documents modified in the same uncommitted batch disagree about which file is next for review | **Minor** |
-| [Q-08](#q-08) | Docs | The uncommitted `Constants.cs` diff deletes the only surviving record of the passion-spread rescale figures | **Minor** |
-| [Q-09](#q-09) | Comments | The verify gate's tolerance rationale describes an integrator that no longer exists | **Cosmetic** |
-| [Q-10](#q-10) | Packaging | `LoadFolders.xml` still maps `v1.5`, which `About.xml` deliberately dropped | **Cosmetic** |
-| [Q-11](#q-11) | Naming | Dead identifiers (`passionNoise`, `skillNoise`, `MinMagnitudeFloor`) survive in comments and docs | **Cosmetic** |
+| [Q-04](#q-04) | Model drift | `CalculateCompositeScore` omits the vanilla passion floor that all four dispersion sites carry | **Minor** — ✅ **FIXED 2026-08-09** |
+| [Q-05](#q-05) | Model drift | Six constants that enter the score are outside the golden-file drift check | **Minor** — ✅ **FIXED 2026-08-09** (seven; `PassionBudgetClampFactor` joined them via Q-06) |
+| [Q-06](#q-06) | Model drift | The ±4σ truncation window is hardcoded in two mirrors and derived from the constant in the third | **Minor** — ✅ **FIXED 2026-08-09** |
+| [Q-07](#q-07) | Docs | The two documents modified in the same uncommitted batch disagree about which file is next for review | **Minor** — ⏸️ **deferred by owner 2026-08-09** (judged not important) |
+| [Q-08](#q-08) | Docs | The uncommitted `Constants.cs` diff deletes the only surviving record of the passion-spread rescale figures | **Minor** — ⏸️ **deferred by owner 2026-08-09** (judged not important) |
+| [Q-09](#q-09) | Comments | The verify gate's tolerance rationale describes an integrator that no longer exists | **Cosmetic** — ✅ **FIXED 2026-08-09** (ran deeper than filed — see the entry) |
+| [Q-10](#q-10) | Packaging | `LoadFolders.xml` still maps `v1.5`, which `About.xml` deliberately dropped | **Cosmetic** — ✅ **FIXED 2026-08-09** |
+| [Q-11](#q-11) | Naming | Dead identifiers (`passionNoise`, `skillNoise`, `MinMagnitudeFloor`) survive in comments and docs | **Cosmetic** — ✅ **FIXED 2026-08-09** |
 | [Q-12](#q-12) | Comments | `VarianceProfile.cs:31` cites `PawnVarianceSettings.cs:1096/1106`; the real sites are `:1171/:1181` | **Cosmetic** — ✅ **FIXED 2026-08-09** |
-| [Q-15](#q-15) | Growth | A throw anywhere in the life-stage postfix locks that pawn out of adult variance permanently, because the stage is recorded before the work | **Minor** |
-| [Q-13](#q-13) | UI | The curve draw allocates an array and sorts already-sorted data every frame | **Cosmetic** |
+| [Q-15](#q-15) | Growth | A throw anywhere in the life-stage postfix locks that pawn out of adult variance permanently, because the stage is recorded before the work | **Minor** — ✅ **FIXED 2026-08-09** |
+| [Q-13](#q-13) | UI | The curve draw allocates an array and sorts already-sorted data every frame | **Cosmetic** — ✅ **FIXED 2026-08-09** |
 
 *(Numbering is by discovery order; the index is grouped by area. `Q-14` and `Q-15` came from the
 adversarial pass, which ran last.)*
+
+> [!NOTE]
+> **Register closed for defects 2026-08-09.** Every entry is ✅ except **Q-07** and **Q-08**, which
+> the owner deferred as not important. Both are defects *in an uncommitted diff* rather than in the
+> code, which is what makes deferring them cheap: they cost nothing until that diff is committed.
+> Before working this register again, re-read "What this pass changed about the method" at the
+> bottom — the closing sweep found two entries whose stated rationale had been invalidated by an
+> *earlier fix in the same register*, and that is now the failure mode to look for first.
 
 ### What was checked and found clean
 
@@ -138,6 +146,21 @@ Recorded so this audit is not silently re-run. Verified against **this** tree:
 ### Where to start
 
 The register is ordered by area, not priority. If these are worked rather than filed:
+
+> [!NOTE]
+> **Fully superseded 2026-08-09 — every item below is done or deferred.** Kept only because the
+> *reasoning* about sequencing is the part worth carrying to the next register. Outcomes against
+> what this list predicted:
+>
+> | Advice | Outcome |
+> |---|---|
+> | Q-14 next, it moves shipped figures | Done. Every figure moved; tier ordering held. |
+> | Q-04/Q-05/Q-06 "as one sweep… none moves a shipped figure" | **Both halves correct.** They were one sweep, and they were the same question — Q-06 turned `PassionBudgetClampFactor` into a scoring constant, which is what put it in Q-05's drift check. `EnvelopeFigures.g.cs`'s `Scores` array came out byte-identical. |
+> | Q-03 "not urgent, a trap for a future retune" | **Wrong, and the entry says so itself.** It was sprung within the day by Q-14. |
+> | Q-07/Q-08 "before the working tree is committed" | **Expired unactioned** — the tree was committed. See both entries. |
+>
+> The sequencing lesson that generalises: *fix the entries that move published figures one at a
+> time, and batch the ones that move none.* Both halves of that were borne out.
 
 > [!NOTE]
 > **Superseded 2026-08-09.** Q-01 (with Q-16 under it), Q-02 and Q-12 are fixed; the advice below is
@@ -656,6 +679,57 @@ never affected** — the reachable consequence is confined to `MapToCenteredX` p
 custom profile's marker slightly wrong on the curve. That narrowness is why this is Minor rather
 than a repeat of the Major it descends from.
 
+### ✅ Fixed 2026-08-09
+
+The floor moved into `PassionNormFor`, which both branches of `CalculateCompositeScore` already
+share, so the live branch and the disabled-axis fallback cannot acquire it separately. It is a
+**parameter** (`floorToOne`) rather than a read of `v.passionCountMin`, because the fallback branch
+has no profile to ask — it scores *vanilla's* budget, and vanilla always floors. Mirrored into
+`envelope_check.py`'s `passion_from` the same way. The applier's third clause,
+`alreadyCommittedPips <= 0f`, is deliberately **not** mirrored: it is about the grow-up top-up path,
+which scores nothing.
+
+Magnitude, since the entry above left it uncomputed. On a custom profile at
+`passionCountMin = 0.2, passionCountMax = 0.8`:
+
+| `q` | composite before (no floor) | after (floored) |
+|---|---|---|
+| 0.00 | 0.034783 | **0.068809** |
+| 0.25 | 0.060870 | **0.094896** |
+
+— i.e. the un-floored function scored such a pawn at roughly **half** its real value at the bottom
+of the band. `passionCountMin = 0` correctly suppresses the floor, so the `Desperate`-style explicit
+request for passionless pawns still works.
+
+**The decisive check is a new one, and it is worth keeping**: at zero spread the dispersion model
+must reduce to the mean band, so `TypicalAt` and `CalculateCompositeScore` must agree *exactly* —
+and they can only do so if both apply the floor. Measured over 101 qualities on the profile above:
+worst deviation **1.4e-16**. Before the fix the same comparison would have read ~0.035. That test
+costs nothing and would have caught this on the day the 2026-08-08 floor fix shipped.
+
+**No shipped figure moves** — no preset has `passionCountMin` below 2.2, so the floor cannot engage
+on any of them. `envelope_check.py` reports `EnvelopeFigures.g.cs: unchanged` for the `Scores` array
+and Rule 1 / Rule 2 still PASS. Build clean, 0 warnings.
+
+### ⚠️ This entry's stated reachability was already out of date when it was filed against this tree
+
+The "why it matters" paragraph above says `CalculateCompositeScore` "is not dead: it computes
+`FaithfulBaseline()` … and `MapToCenteredX`". **Neither is true any more, and the change that made
+them untrue is Q-03's fix, three entries up in this same register.** `FaithfulBaseline()` now calls
+`DispersionModel.TypicalAt`, and `MapToCenteredX` only calls `FaithfulBaseline()`. A grep over
+`Source/` on 2026-08-09 finds **no caller of `CalculateCompositeScore` at all** — every other hit is
+a comment.
+
+So the C# half of this fix corrects a function the game does not currently call. It was still worth
+making, and the function was annotated rather than deleted, for reasons recorded at its definition:
+it is the C# mirror of `envelope_check.py`'s `make_composite`, which *is* live (the tool's zero-noise
+self-check and the printed mean-band baseline both run through it), and it is the project's only
+expression of the mean-band estimator `f(E[X])`. The Python half of this fix is live either way.
+
+**The lesson is about the register, not the code**: an entry's reachability argument has a shelf
+life measured in *other entries from the same audit*. Q-03 was fixed on the same day this was filed
+and silently invalidated it.
+
 ---
 
 <a id="q-05"></a>
@@ -715,6 +789,27 @@ Whether a change to one of the four spread constants would still be caught downs
 small one, but this was not computed — so the claim is "the diagnostic is missing", not "the change
 is undetectable".
 
+### ✅ Fixed 2026-08-09
+
+**Seven, not six.** All six listed constants were added to `GEN_CONSTANTS` and to
+`DebugActions.VerifyBestOfN`'s stale-table block, plus `PassionBudgetClampFactor`: Q-06's fix made
+both quadratures derive their truncation window from it, so it stopped being a Monte-Carlo-only
+input and became a scoring constant on every side. Filing it here rather than as a new entry because
+it is the same defect with the same cause.
+
+`GEN_CONSTANTS` also gained a rule, since "which constants belong in the drift check?" is exactly
+the question that produced this gap: *if `required` reads a constant to compute a score or a moment,
+it belongs in `GEN_CONSTANTS`.* Mechanical, and it would have caught all seven. The reading that let
+them out was "the check covers the weights".
+
+`EnvelopeFigures.g.cs` was regenerated. **The `Scores` array is byte-identical** — the file gained
+exactly seven `Gen*` constants and nothing else, which is the proof that this fix is diagnostic-only
+and moves no figure.
+
+**What this does not fix.** The check compares the golden file's constants against the live
+`Constants.cs`; it cannot tell you what a drifting constant *did* to the figures. It names the cause
+so an unexplained mismatch downstream is attributable, which is what the entry asked for.
+
 ---
 
 <a id="q-06"></a>
@@ -746,6 +841,22 @@ derivation is a trap set for whoever changes the constant.
 Whether any test or assertion elsewhere pins the three together — none was found in the audited
 files, but the search was not exhaustive across the repo.
 
+### ✅ Fixed 2026-08-09
+
+Both quadratures now derive the window instead of asserting it in a comment.
+`DispersionModel.EnsureNodes` reads `zmax = Constants.PassionBudgetClampFactor` and builds
+`dz = 2·zmax / GaussNodes` from it; `envelope_check.py`'s `_gauss_nodes` takes `C` and reads the same
+constant. All three sites — both quadratures and `dispersion_mc.py` — now move together.
+
+Verified two ways: the shipped figures are **unchanged** (`EnvelopeFigures.g.cs` `Scores` identical,
+Rule 1 / Rule 2 PASS, self-check `4.10e-04` before and after), which is what "numerically identical
+today" predicts; and forcing the constant to `3.0` moves the node range to `±2.954` instead of
+`±3.939`, i.e. the derivation genuinely tracks the constant rather than coincidentally matching it.
+
+`PassionBudgetClampFactor` was also added to the golden-file drift check as part of Q-05 — this fix
+is what turned it into a scoring input on all three sides, so it now needs the same protection as
+the other scoring constants.
+
 ---
 
 <a id="q-07"></a>
@@ -770,6 +881,17 @@ inverted.
 
 **What was not verified:** whether the six files flipped to `[x]` in that diff were in fact reviewed.
 That is not checkable from the tree; only the disagreement is.
+
+> [!NOTE]
+> **⏸️ Deferred by the owner, 2026-08-09**, as not important — not fixed, not withdrawn.
+>
+> **Re-verified, and the framing has aged out.** The disagreement itself is still live:
+> `AUDIT-2026-08-06-problem-register.md:187` still says `GrowUpVariance.cs` is **NEXT UP** while
+> `HANDOVER.md:1566` says `Source/DebugActions.cs` is. What is no longer true is "in the same
+> *uncommitted* batch" — both files were committed in the interim, so this is now a committed
+> contradiction between two documents rather than something a pre-commit check would catch. The
+> advice to "resolve it before the working tree is committed" has therefore already expired
+> unactioned; the fix is now a one-line edit to the older register whenever it is next opened.
 
 ---
 
@@ -802,6 +924,27 @@ the figure should be preserved, in `HANDOVER.md` if not in the comment.
 **What was not verified:** whether the figure survives in a 2026-08-06 commit message. Even if it
 does, a commit message is not where the handover tells readers to look.
 
+> [!CAUTION]
+> **⏸️ Deferred by the owner, 2026-08-09** as not important — but re-verification found this entry
+> describes a door that **has since closed**, so record what actually happened rather than the
+> warning.
+>
+> This entry was filed as *"the uncommitted diff will delete the figure"*. That diff has been
+> committed. A grep for `1.19` on 2026-08-09 returns **nothing in the working tree and nothing in
+> `HEAD`**, and `HANDOVER.md` never carried it. So the passion-axis rescale figure
+> `passionNoise 0.25 went sigma 1.19 -> 1.00 (-16%)` is **already gone from the repo** — it is not
+> at risk, it is lost, and recovering it means reading a pre-2026-08-06 commit or re-deriving it
+> from `PassionBudgetSpreadMin`'s old value.
+>
+> That is not fatal: it is a historical tuning figure, the skill-axis equivalent survives in
+> `HANDOVER.md`, and the constant it describes is current and documented. Recorded because the
+> entry's own point was that the handover tells readers to consult a table, and for the passion axis
+> there is still no table to consult.
+>
+> Adjacent, for the avoidance of doubt: **Q-11** rewrote the surrounding comment (it contained the
+> dead `passionNoise` identifier). It did not delete this figure — the figure was already absent
+> from that comment — and it did not re-add it.
+
 ---
 
 <a id="q-09"></a>
@@ -830,6 +973,41 @@ elsewhere; this is only the comment that explains the tolerance.
 **What was not verified:** what the actual source and magnitude of raw disagreement between
 `BuildCdf` and `beta_grid` now is, i.e. whether 3% is still the right number.
 
+### ✅ Fixed 2026-08-09 — and the comment was wrong in a second way the entry did not reach
+
+Answering "what *is* the source of raw disagreement now?" turned up more than a stale sentence.
+**The two sides no longer differ in resolution at all**, so the tolerance's entire premise is gone:
+
+| | mod | tool |
+|---|---|---|
+| q-nodes | `DispersionModel.QNodes` = 256 | `QGRID` = 256 |
+| x-nodes | `XNodes` = 512 | `XGRID` = 512 |
+| triangular / Gauss nodes | 65 / 65 | `TGRID` / `GGRID` = 65 / 65 |
+
+The reference `Scores` are integrated on **the same grid the mod uses**. `GRID = 20000` and
+`Constants.BestOfNIntegrationNodes = 1024` — the two numbers the gate printed in its own header as
+"reference 20000 nodes, live 1024 nodes" — belong to the retired analytic scheme. `beta_grid`'s
+`run +=` survives, but only on the tool's zero-noise self-check path, not on the path this gate
+compares. So the expected raw gap is **float-precision-scale** (float32 vs float64, plus
+`MathUtil.NormalCdf`'s ~1.5e-7 Erf), not the ~0.9% the comment claimed.
+
+Three consequences, and the third is the one to argue with:
+
+1. The comment now states all of the above, including which claims it replaces.
+2. The header line reports `dispersion grid 256q x 512x on both sides` instead of two node counts
+   neither integrator uses. **`Constants.BestOfNIntegrationNodes` thereby lost its last reader** and
+   is now dead; it is annotated as such at its definition, keeping the 0.35pp/0.17pp measurement,
+   rather than deleted.
+3. **The 3% tolerance was left at 3%.** It is now ~4 orders of magnitude looser than the
+   disagreement it is sized for, which is a real argument for tightening it — but this gate *has
+   never been run against a running build since the dispersion model landed*, so the tiny expected
+   gap is predicted, not measured. Tightening a threshold onto a prediction is how a gate starts
+   failing for no reason. The comment says explicitly: tighten it once the gate has been run and
+   the observed deviations are in hand. Until then the 0.5pp **display** tolerance is what carries
+   the weight, and it is unaffected.
+
+**Still not verified in game** — which is precisely why (3) went the way it did.
+
 ---
 
 <a id="q-10"></a>
@@ -848,6 +1026,31 @@ fix. `About/LoadFolders.xml:3-8` still declares both:
 `supportedVersions` is what actually gates loading, so 1.5 is not advertised to players and nothing
 is broken. It is a vestigial declaration of the exact claim the sibling file's comment explains was
 removed, and a maintainer reading `LoadFolders.xml` alone would conclude 1.5 is still targeted.
+
+### ✅ Fixed 2026-08-09 — and swept beyond the one file
+
+Owner instruction was to remove **any** support for or mention of 1.5, so the fix was not confined
+to the entry:
+
+| Site | Change |
+|---|---|
+| `About/LoadFolders.xml` | the `<v1.5>` mapping deleted; `<v1.6>` is the only entry |
+| `Source/GrowthUpPatch.cs:10` | *"Verified against RimWorld 1.5/1.6's decompiled Assembly-CSharp.dll"* → **1.6**. This one mattered more than the XML: it claimed a verification against an assembly nobody in this repo has ever compiled against |
+
+Checked and found clean: `PawnVarianceMod.csproj` names no RimWorld version (it references a single
+install), and `HANDOVER.md` makes no version claim at all.
+
+**Deliberately kept:** the *rationale* comments in `About.xml` and the new one in `LoadFolders.xml`,
+both of which name 1.5 in order to say it was dropped and why. They are the guard against someone
+re-adding it, i.e. the opposite of a support claim. Say so if you want them stripped too.
+
+**Not touched:** dated documents under `docs/superpowers/` (the 2026-07-27 spec and plans) that
+record 1.5 as a target *at the time they were written*, and `AUDIT-2026-08-06-problem-register.md`'s
+P-07 entry. Editing those would falsify the record rather than remove a claim — the mod's live
+targeting is what "support" means here, and it is now 1.6 everywhere.
+
+Every remaining `1.5` in the tree is the **Major passion cost in pips**, an unrelated quantity that
+happens to share the digits.
 
 ---
 
@@ -868,6 +1071,31 @@ left references behind:
 
 Nothing computes wrongly. Filed because grepping for the name a comment uses is how a reader finds
 the field, and all three return zero hits in `Source/`.
+
+### ✅ Fixed 2026-08-09
+
+All three, each in the way its context called for rather than by blanket search-and-replace:
+
+- **`Constants.cs`, `PassionBudgetSpreadMin`** — rewritten to name `passionSpread` and its
+  `PassionNoiseScalar` accessor, and to attribute the clamp window to `PassionBudgetClampFactor`
+  rather than to "vanilla's hardcoded 4" (true of vanilla, no longer true of us — see Q-06). The
+  old name is kept in one trailing sentence *as* the old name.
+- **`HANDOVER.md`, `MinMagnitudeFloor`** — now reads `MagnitudeLerpLow (named MinMagnitudeFloor
+  until P-11 renamed it — the old name greps to nothing)`. The history the entry called "arguably
+  intentional" is preserved; what changed is that the greppable name is the one in front.
+- **`HANDOVER.md`, the `skillNoise` rescale table** — the entry's actual complaint was that the
+  table reports pre-rename 0–1 scalar values without saying so, unlike the comparable passage
+  further down. A note now says so, and the column header reads `skillNoise (pre-rename scalar)`.
+  The figures are deliberately left unconverted: they record a retune that happened in those units.
+
+Left alone as genuine history: the four places `HANDOVER.md` describes the rename itself
+(*"`skillNoise`/`passionNoise` → `skillSpread`/`passionSpread`"*) or the one-line accessor change in
+the two appliers. Those sentences are *about* the old names.
+
+**Found in the same sweep, same class, not previously filed:** `Constants.cs`'s
+`VanillaPassionBudget` comment worked its own arithmetic to `5 × 0.9391 / 18 = 0.2609` — the
+pre-Q-14 continuous figure. Since Q-14 that branch spends through the loop and delivers 4.8125 pips,
+giving `0.2511`. Corrected, with the old value named so it is recognisable if it turns up elsewhere.
 
 ---
 
@@ -916,6 +1144,23 @@ Filed only because the immediately adjacent `curveDensityScratch` (`:529`, `:559
 cached across frames *because the curve redraws every frame* — so this is the one allocation in a
 method already written with per-frame GC pressure in mind. At `CurveSamples = 70` the cost is not
 perceptible; no profiling was done.
+
+### ✅ Fixed 2026-08-09
+
+The sort is gone and the array joins `curveDensityScratch` as a cached `curvePointScratch`, so the
+method now allocates nothing per frame.
+
+The monotonicity argument is written into the code rather than left in this register, because
+removing a sort is a **correctness** claim and the next reader has to be able to check it without
+finding this file: `power` is `(i + 0.5f) / CurveSamples` for increasing `i`, and `MapToCenteredX`
+is monotonically non-decreasing — both branches are `constant + positive slope × input` and they
+meet continuously at `compositeScore == baseC`, where both evaluate to `0.50`. A strictly increasing
+input through a non-decreasing map is non-decreasing. The comment also names the condition under
+which the removal stops being safe (a non-monotonic branch added to `MapToCenteredX`) and says to
+restore the sort rather than reorder the map.
+
+**Not profiled, and still not worth profiling** — the justification is that the allocation was
+inconsistent with the method it sits in, not that it was measurably slow.
 
 ---
 
@@ -1207,6 +1452,35 @@ one. The ordering and the unreachability of any retry are both certain from the 
 `GrowUpVariance.Apply` can throw *after* partially modifying a pawn — which would make the lockout
 leave a half-applied pawn rather than an untouched one — was not traced.
 
+### ✅ Fixed 2026-08-09 — rolled back in the `catch`, and bounded at one retry
+
+The fix is where the entry said it had to be. `Postfix` snapshots the pawn's `LastKnownStage` entry
+*before* calling `PostfixInner` — that is the value the `catch` needs, and by the time the `catch`
+runs `PostfixInner` has already overwritten it — and on a throw restores it (or removes the key if
+there was none). The next life-stage firing then sees a genuine `NotAdult → Adult` transition again
+and retries. `PostfixInner` is untouched, so its legitimate reasons to record the stage on no-op
+paths are preserved.
+
+**The retry is bounded at one, and that is the part the entry did not specify.** An unbounded
+rollback is not a safe reading of "undo the write": `GrowUpVariance.Apply` mutates the pawn, so a
+thrower that fires partway through would be re-run on every `AgeTickInterval`, additively
+re-shifting the same pawn's skills — which is **exactly the save corruption the `LastKnownStage`
+dictionary was introduced to end** (see the class comment on the old `HashSet<int>` guard). A
+session-only `StageRollbackSpent` set records that a pawn has had its retry; a second throw leaves
+the `Adult` baseline standing and accepts the lockout. That buys back the transient cases — a
+dictionary mid-rebuild, a race with another mod's faction edit — without reopening the repeating
+one. Cleared alongside `LastKnownStage` in `ClearForNewGame`, for the same `thingIDNumber`-collision
+reason.
+
+The `Log.ErrorOnce` message now states which of the two happened (`baseline rolled back, so the next
+life-stage firing will retry once` / `this pawn already had its one retry`), so the log distinguishes
+a recovered pawn from a skipped one.
+
+**Not verified in game, and not reproducible on demand** — the trigger was undemonstrated when
+filed and still is. What changed is the consequence of the trigger, not the odds of it. The
+untraced question above (can `Apply` throw after partially modifying a pawn?) is *why* the retry is
+bounded rather than unbounded: the fix is built to be correct whichever way that answer goes.
+
 ---
 
 ## Rejected during verification
@@ -1236,3 +1510,45 @@ Recorded because knowing what was checked and dismissed is worth as much as the 
   case and is currently treated as one, so the single genuinely-corrupt shape on that path is the
   one that stays quiet. Too small and too speculative to file.
 - **Tree, branch and push state** — see the note under Ground state. Not a defect on this project.
+
+---
+
+## What this pass changed about the method
+
+Added 2026-08-09 after the closing sweep (Q-04, Q-05, Q-06, Q-09, Q-10, Q-11, Q-13, Q-15). Three
+things came out of it that are about *how the register is worked*, not about any one entry.
+
+**1. A finding's rationale can be invalidated by another finding in the same register, silently.**
+It happened twice here:
+
+- **Q-04** justified its severity by "`CalculateCompositeScore` is not dead: it computes
+  `FaithfulBaseline()` and `MapToCenteredX`". **Q-03's fix removed that**, hours later, by moving
+  `FaithfulBaseline` onto `TypicalAt`. The function now has no caller at all.
+- **Q-09** described a stale comment. The comment was staler than described: the two integrators no
+  longer differ in *resolution* either, which retired `Constants.BestOfNIntegrationNodes` entirely.
+
+Both were caught only because every claim was re-verified against the tree before being acted on —
+which is the rule this register already states, applied to its own entries rather than only to the
+code. **Before fixing an entry, re-check its "why it matters" paragraph, not just its "what".**
+
+**2. "Fix it where the other sites already agree" is worth preferring to "fix it here".** Q-04's
+floor went into `PassionNormFor`, which both branches share, rather than into the two call sites;
+Q-06's window is derived in both quadratures rather than corrected in one. In both cases the shape
+of the fix removes the possibility of the same drift recurring, which a correct-value-in-two-places
+fix does not.
+
+**3. Three fixes produced a test that did not exist before, and those are the durable part.**
+
+| Fix | The check it left behind |
+|---|---|
+| Q-04 | At zero spread, `TypicalAt` must equal `CalculateCompositeScore` **exactly** — measured `1.4e-16`. Only true if both apply the floor; would have caught this on the day the 2026-08-08 floor fix shipped. |
+| Q-05 | Seven more constants whose drift is now *named* by the in-game gate rather than surfacing as an unexplained mismatch. |
+| Q-06 | Forcing `PassionBudgetClampFactor` to 3.0 moves both quadratures' node ranges — proof the value is derived, not coincidentally equal. |
+
+**What none of this pass did: run in game.** Every claim above is offline. `envelope_check.py`
+PASSes Rule 1 and Rule 2 at N = 1/5/25/50, `EnvelopeFigures.g.cs`'s `Scores` array is byte-identical
+(the file gained seven `Gen*` constants and nothing else), and the build is clean at 0 warnings —
+but the C#/Python cross-check `Verify Best-of-N against envelope_check.py` **has still never been
+run against a running build since the dispersion model landed**, which is why Q-09's 3% raw
+tolerance was left alone rather than tightened onto a prediction. That run is the outstanding
+verification for this register as a whole, not for any single entry in it.

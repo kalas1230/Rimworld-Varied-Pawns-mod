@@ -27,8 +27,11 @@ namespace PawnVarianceMod
         // 1. Cross-check the mod's live integrator against docs/tools/envelope_check.py.
         // ------------------------------------------------------------------------------------
         // The mod and the Python tool each implement E[composite(max(q1..qn))] independently --
-        // the tool at 20000 nodes, the mod at Constants.BestOfNIntegrationNodes (1024), because
-        // custom profiles need a live figure no precomputed table can cover. Until now the only
+        // two separate bodies of code, because custom profiles need a live figure no precomputed
+        // table can cover. They are no longer separated by RESOLUTION as well: both integrate the
+        // dispersion model on the same 256q x 512x grid (see the tolerance note in VerifyBestOfN).
+        // What this action proves is that the two implementations agree, not that two different
+        // quadratures converge. Until it existed the only
         // thing holding them together was a comment reading "if you change one, change both".
         //
         // That contract has already failed once: Task 4's first commit compared a Best-of-25
@@ -130,25 +133,52 @@ namespace PawnVarianceMod
             // "F0" (FormatPowerPercent) -- so that is what gets the 0.5 percentage-POINT threshold,
             // below which no digit on screen can change.
             //
-            // Raw scores are still compared, but at a deliberately wide 3% relative. Both
-            // implementations share a first-order-accurate right-edge CDF -- envelope_check.py's
-            // beta_grid does `run += v * dq` before appending, and CalculateBestOfNScoreCore does
-            // the same -- and that scheme's error is proportional to dq. So the mod's 1024 nodes
-            // and the tool's 20000 do NOT converge to the same raw number; they differ by up to
-            // ~0.9% at N=50. That gap is real, but it CANCELS in the ratio to Faithful and moves no
-            // digit on screen.
+            // Raw scores are still compared, but at a deliberately wide 3% relative.
+            //
+            // ⚠️ 3% IS INHERITED, NOT DERIVED FROM THE CURRENT INTEGRATORS. Read this before
+            // trusting it, and before tightening it. Until 2026-08-09 the paragraph here justified
+            // the width by a shared first-order right-edge CDF: envelope_check.py's beta_grid does
+            // `run += v * dq` before appending "and CalculateBestOfNScoreCore does the same", the
+            // error being proportional to dq, so the mod's 1024 nodes and the tool's 20000 were
+            // said to differ by up to ~0.9% at N=50. Every clause of that is now false on the path
+            // this gate actually compares (audit finding Q-09):
+            //
+            //   * CalculateBestOfNScoreCore is a one-line delegate to DispersionModel.BestOfN,
+            //     whose BuildCdf accumulates each F[j] as a DIRECT weighted sum over the q-nodes.
+            //     A grep for `run +=` across Source/ returns nothing. The Python side's running
+            //     total survives only in beta_grid, which now feeds the tool's zero-noise ANALYTIC
+            //     self-check -- not the reference Scores this gate diffs against.
+            //   * The two sides no longer differ in resolution either. The shipped figures come
+            //     from grids that are equal by construction on both sides: QNodes/XNodes/TriNodes/
+            //     GaussNodes = 256/512/65/65 in DispersionModel, QGRID/XGRID/TGRID/GGRID = the same
+            //     four numbers in envelope_check.py. GRID = 20000 and BestOfNIntegrationNodes =
+            //     1024 belong to the retired scheme; keep them out of this reasoning.
+            //
+            // So the expected raw gap is now float-precision-scale (float32 against float64, plus
+            // MathUtil.NormalCdf's ~1.5e-7 Erf approximation) rather than ~0.9%, and 3% is roughly
+            // four orders of magnitude looser than the disagreement it is nominally sized for.
+            // It is left at 3% ANYWAY, deliberately: this gate has never been run against a
+            // running build since the dispersion model landed, so the real gap is predicted, not
+            // measured, and tightening a threshold on a prediction is how a gate starts crying
+            // wolf. TIGHTEN IT ONCE THE GATE HAS ACTUALLY BEEN RUN and the observed raw deviations
+            // are in hand -- the 0.5pp DISPLAY tolerance is the one carrying the weight until then.
             //
             // Gating the raw score at 0.5% (as this did originally, while its comment claimed to be
-            // measuring percentage points) failed 16 times: 15 on that invisible shared bias, and
-            // one on the genuine n == 1 shortcut defect in CalculateBestOfNScoreCore -- which was
-            // indistinguishable from the noise precisely because the noise was so loud.
+            // measuring percentage points) failed 16 times: 15 on the shared right-edge bias of the
+            // day, and one on the genuine n == 1 shortcut defect in CalculateBestOfNScoreCore --
+            // which was indistinguishable from the noise precisely because the noise was so loud.
+            // That history is why the number is wide; it is not evidence that it is still right.
             const float DisplayTolerancePp = 0.5f;
             const float RawToleranceRelPct = 3.0f;
 
             var sb = new StringBuilder();
             sb.AppendLine($"[PawnVarianceMod] Best-of-N cross-check vs {EnvelopeFigures.Tool}");
-            sb.AppendLine($"  reference {EnvelopeFigures.ReferenceNodes} nodes, "
-                + $"live {Constants.BestOfNIntegrationNodes} nodes; "
+            // Node counts reported from the grids that actually produced both sides of this
+            // comparison. EnvelopeFigures.ReferenceNodes (20000) and BestOfNIntegrationNodes
+            // (1024) describe the retired analytic scheme and printing them here implied a
+            // resolution gap that no longer exists -- see the tolerance note above.
+            sb.AppendLine($"  dispersion grid {DispersionModel.QNodes}q x {DispersionModel.XNodes}x "
+                + "on both sides; "
                 + $"readout tolerance {DisplayTolerancePp:F2}pp, raw {RawToleranceRelPct:F2}%");
 
             int failures = 0;
@@ -216,6 +246,34 @@ namespace PawnVarianceMod
                 Constants.PassionLearnRateMinor, EnvelopeFigures.GenPassionLearnRateMinor);
             failures += CheckConstant(sb, "PassionLearnRateMajor",
                 Constants.PassionLearnRateMajor, EnvelopeFigures.GenPassionLearnRateMajor);
+            // The four Lerp endpoints below set the DISPERSION, and dispersion is scored: they are
+            // what DispersionModel.Moments builds the per-skill excursion and the budget sigma
+            // from, so every dispersion-aware figure responds to them. They sat outside this check
+            // until 2026-08-09 (audit finding Q-05) because the check was read as covering "the
+            // weights" -- so a retune of MaxMagnitude would have left every percentage measured
+            // against a stale reference, with the one diagnostic built to name that cause silent.
+            failures += CheckConstant(sb, "MagnitudeLerpLow",
+                Constants.MagnitudeLerpLow, EnvelopeFigures.GenMagnitudeLerpLow);
+            failures += CheckConstant(sb, "MaxMagnitude",
+                Constants.MaxMagnitude, EnvelopeFigures.GenMaxMagnitude);
+            failures += CheckConstant(sb, "PassionBudgetSpreadMin",
+                Constants.PassionBudgetSpreadMin, EnvelopeFigures.GenPassionBudgetSpreadMin);
+            failures += CheckConstant(sb, "PassionBudgetSpreadMax",
+                Constants.PassionBudgetSpreadMax, EnvelopeFigures.GenPassionBudgetSpreadMax);
+            // Not a magnitude but the DOMAIN of the budget integral: both quadratures truncate the
+            // budget Gaussian at this many sigma (DispersionModel.EnsureNodes, envelope_check's
+            // _gauss_nodes), and dispersion_mc.py clamps its draws to the same window. It became a
+            // scoring input on all three sides when Q-06 closed; it was previously read by the
+            // Monte Carlo alone, which is exactly why a retune would have desynchronised them.
+            failures += CheckConstant(sb, "PassionBudgetClampFactor",
+                Constants.PassionBudgetClampFactor, EnvelopeFigures.GenPassionBudgetClampFactor);
+            // Vanilla's own budget and Major flip: the passion axis's value when a profile has
+            // passion variance switched OFF. These were genuinely dead until Q-16 -- the fallback
+            // they feed was multiplied by a zeroed weight -- and are live scoring inputs now.
+            failures += CheckConstant(sb, "VanillaMajorBias",
+                Constants.VanillaMajorBias, EnvelopeFigures.GenVanillaMajorBias);
+            failures += CheckConstant(sb, "VanillaPassionBudget",
+                Constants.VanillaPassionBudget, EnvelopeFigures.GenVanillaPassionBudget);
 
             if (failures > 0)
             {

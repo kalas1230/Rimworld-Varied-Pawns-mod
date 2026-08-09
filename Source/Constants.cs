@@ -18,9 +18,14 @@ namespace PawnVarianceMod
 
         // Passion budget spread (Core Algorithms > Passion variance): mirrors vanilla
         // PawnGenerator.GenerateSkills' own passion-budget roll — `5f + clamp(Rand.Gaussian(), -4f,
-        // 4f)` — but with the Gaussian's width factor and clamp window driven by passionNoise instead
-        // of vanilla's hardcoded 1 and 4. At passionNoise = 0 the budget is exactly its
-        // quality-lerped mean, with no roll at all.
+        // 4f)` — but with the Gaussian's width factor driven by the profile's passionSpread
+        // (via VarianceProfileValues.PassionNoiseScalar) instead of vanilla's hardcoded 1, and the
+        // clamp window by PassionBudgetClampFactor instead of vanilla's hardcoded 4. At
+        // passionSpread = 0 the budget is exactly its quality-lerped mean, with no roll at all.
+        //
+        // The field was called `passionNoise` until the 2026-08-06 rename and this comment still
+        // said so until 2026-08-09 (audit finding Q-11) — grepping the name a comment uses is how
+        // a reader finds the field, and that one returns nothing.
         public const float PassionBudgetSpreadMin = 0f;
         public const float PassionBudgetSpreadMax = 4f;
         public const float PassionBudgetClampFactor = 4f; // matches vanilla's own spread:clamp ratio (widthFactor 1 : clamp 4)
@@ -51,8 +56,12 @@ namespace PawnVarianceMod
         // Used as the composite's passion axis when a profile has passion variance switched OFF:
         // that pawn gets vanilla's assignment, so vanilla's budget is what the axis should report.
         // It read a flat 0.25 until 2026-08-06, which was the SKILL axis's baseline (5/20) copied
-        // across -- correct there, coincidental here. Scored like any other profile:
-        // 5 pips x PassionPipEfficiency(VanillaMajorBias = 0.5) / 18 = 5 x 0.9391 / 18 = 0.2609.
+        // across -- correct there, coincidental here. Scored like any other profile, which since
+        // 2026-08-09 means THROUGH THE SPEND LOOP as well (see PassionSpend, finding Q-14):
+        // vanilla's own generator discretizes, so a 5-pip budget delivers 4.8125 pips on average,
+        // and 4.8125 x PassionPipEfficiency(VanillaMajorBias = 0.5) / 18 = 4.8125 x 0.9391 / 18
+        // = 0.2511. This line read 0.2609 -- the same arithmetic on the undiscretized 5.0 -- until
+        // that fix; if you find 0.2609 quoted anywhere else, it predates the spend loop.
         public const float VanillaPassionBudget = 5f;
 
         // Vanilla skips the passion budget entirely below this age: GenerateSkills returns early
@@ -170,9 +179,19 @@ namespace PawnVarianceMod
         // limit as a target.
         public const int BestOfNSampleCount = 25;
 
-        // Midpoint-rule nodes for the Best-of-N integral. Measured against the 20000-node
-        // reference in docs/tools/envelope_check.py across all eight presets: 512 nodes lands
-        // 0.35pp off, which can flip a whole-percent readout; 1024 lands 0.17pp. Do not lower it.
+        // ⚠️ NO LONGER READ BY ANYTHING. Kept only so the measurement below is not lost.
+        //
+        // Midpoint-rule nodes for the Best-of-N integral, back when that integral was the analytic
+        // one over the Beta density. Measured against the 20000-node reference in
+        // docs/tools/envelope_check.py across all eight presets: 512 nodes lands 0.35pp off, which
+        // can flip a whole-percent readout; 1024 lands 0.17pp.
+        //
+        // The dispersion-aware rewrite moved the integration into DispersionModel, which carries
+        // its own QNodes/XNodes (256/512, matched exactly by envelope_check.py's QGRID/XGRID), so
+        // this constant stopped governing anything and survived only as a figure quoted in the
+        // verify gate's header -- where it implied a resolution gap between the two sides that no
+        // longer exists. Removed from that line 2026-08-09 (audit finding Q-09). If the node
+        // counts are ever retuned, retune DispersionModel's, not this.
         public const int BestOfNIntegrationNodes = 1024;
     }
 }

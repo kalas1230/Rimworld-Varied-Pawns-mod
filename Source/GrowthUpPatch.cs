@@ -7,7 +7,7 @@ using Verse;
 
 namespace PawnVarianceMod
 {
-    // Verified against RimWorld 1.5/1.6's decompiled Assembly-CSharp.dll: Pawn_AgeTracker has no
+    // Verified against RimWorld 1.6's decompiled Assembly-CSharp.dll: Pawn_AgeTracker has no
     // DevelopmentalStage member at all (it's a read-only computed property on Pawn itself, not
     // Pawn_AgeTracker, and has no setter to hook). The real target is
     // Pawn_AgeTracker.PostResolveLifeStageChange() — public, parameterless, called on EVERY
@@ -37,6 +37,11 @@ namespace PawnVarianceMod
         // vanilla's), which resync noise for an already-adult pawn can never satisfy.
         private static readonly Dictionary<int, DevelopmentalStage> LastKnownStage = new Dictionary<int, DevelopmentalStage>();
 
+        // Pawns whose LastKnownStage baseline has already been rolled back once after a throw.
+        // Session-only and cleared alongside LastKnownStage; see the rollback note on Postfix for
+        // why the retry is bounded at one rather than unlimited.
+        private static readonly HashSet<int> StageRollbackSpent = new HashSet<int>();
+
         // Guarded for the same reason GrowthMomentMakeChoices_Postfix is, and arguably a stronger
         // one: this is a postfix on PostResolveLifeStageChange, whose only caller is
         // AgeTickInterval, and it re-fires once on the first tick after any save load for
@@ -45,17 +50,66 @@ namespace PawnVarianceMod
         // it walks the faction, race and xenotype dictionaries -- so it is the realistic thrower.
         // This is defence in depth, not a fix for a demonstrated crash; the two sibling postfixes
         // both had it and this one did not.
+        //
+        // THE CATCH ROLLS THE BASELINE BACK, and that is not incidental to the guard -- it is what
+        // stops the guard converting a loud failure into a permanent silent one. PostfixInner
+        // records LastKnownStage[pawn] = Adult BEFORE doing the work it gates (deliberately: the
+        // no-op paths need an accurate baseline too). So if ValuesFor or GrowUpVariance.Apply
+        // throws, the entry already reads Adult, every later firing takes the
+        // `previousStage == Adult` return, and that pawn never receives adult growth variance
+        // again -- in that save, ever. A reload does not help: the pawn is already Adult by then,
+        // so the first post-load observation sets the baseline with hadBaseline == false and
+        // returns, and the "genuine NotAdult -> Adult transition" the guard requires is observable
+        // exactly once per pawn and has been spent. Audit finding Q-15.
+        //
+        // The retry is bounded at ONE, which is the whole design question here. An unbounded
+        // rollback would re-run the work on every AgeTickInterval for as long as the throw
+        // persists, and GrowUpVariance.Apply mutates the pawn -- so a thrower that fires partway
+        // through would additively re-shift the same pawn's skills over and over. That is
+        // precisely the save corruption the LastKnownStage dictionary was introduced to end (see
+        // the class comment). One retry buys back the transient case -- a dictionary that was mid-
+        // rebuild, a race with another mod's faction edit -- without reopening the repeating one.
         public static void Postfix(Pawn ___pawn)
         {
+            // Snapshotted BEFORE the call, because the value the catch has to restore is the one
+            // PostfixInner overwrites on its way in.
+            DevelopmentalStage priorStage = default(DevelopmentalStage);
+            bool hadPriorStage = false;
+            if (___pawn != null)
+                hadPriorStage = LastKnownStage.TryGetValue(___pawn.thingIDNumber, out priorStage);
+
             try { PostfixInner(___pawn); }
             catch (Exception ex)
             {
+                string recovery = "no baseline to restore (null pawn)";
+                if (___pawn != null)
+                {
+                    int id = ___pawn.thingIDNumber;
+                    if (StageRollbackSpent.Contains(id))
+                    {
+                        // Second throw for this pawn. Leave the Adult baseline standing so the
+                        // work is not attempted a third time -- a repeating thrower is not
+                        // transient, and re-running a mutating applier against it is worse than
+                        // skipping this pawn's adult variance.
+                        recovery = "baseline left at Adult -- this pawn already had its one retry, "
+                            + "so its adult variance is skipped for the rest of this session";
+                    }
+                    else
+                    {
+                        StageRollbackSpent.Add(id);
+                        if (hadPriorStage) LastKnownStage[id] = priorStage;
+                        else LastKnownStage.Remove(id);
+                        recovery = "baseline rolled back, so the next life-stage firing will retry "
+                            + "once";
+                    }
+                }
+
                 // Salted so this key cannot collide with another ErrorOnce keyed on the same
                 // thingIDNumber. Parenthesised because ^ binds tighter than ??.
                 int key = (___pawn?.thingIDNumber ?? 0) ^ 0x5B1F3A2D;
                 Log.ErrorOnce(
                     $"[PawnVarianceMod] Exception in the life-stage postfix for "
-                    + $"{___pawn?.LabelShort ?? "(null pawn)"}: {ex}", key);
+                    + $"{___pawn?.LabelShort ?? "(null pawn)"} ({recovery}): {ex}", key);
             }
         }
 
@@ -122,6 +176,9 @@ namespace PawnVarianceMod
         internal static void ClearForNewGame()
         {
             LastKnownStage.Clear();
+            // Cleared with it, and for the same thingIDNumber-collision reason: a spent retry must
+            // not follow an unrelated pawn into a different save loaded in the same session.
+            StageRollbackSpent.Clear();
         }
     }
 

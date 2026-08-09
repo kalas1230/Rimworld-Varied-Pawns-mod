@@ -283,7 +283,7 @@ namespace PawnVarianceMod
             // The second paragraph is the load-bearing half. Without it a player reads Distinct's
             // -10% as "weaker than Faithful" and picks against the profile for the exact reason it
             // exists: its spread is 1.52x Faithful's. This figure is now dispersion-aware (it DOES
-            // see skillNoise and passionNoise, via DispersionModel), but it is still a single
+            // see skillSpread and passionSpread, via DispersionModel), but it is still a single
             // number describing an average pawn -- it does not show how much pawns differ from each
             // other, so two profiles with the same figure can still play very differently.
             TooltipHandler.TipRegion(qReadout,
@@ -527,6 +527,10 @@ namespace PawnVarianceMod
         // fills it in place.
         private const int CurveSamples = 70;
         private static float[] curveDensityScratch;
+        // Same reasoning as curveDensityScratch, and it was the one allocation in this method that
+        // did not follow it: a fresh Vector2[70] per IMGUI frame, plus (until 2026-08-09) an
+        // Array.Sort with a freshly allocated comparer delegate beside it. Audit finding Q-13.
+        private static Vector2[] curvePointScratch;
 
         // True while the mouse is held anywhere in the editor -- i.e. a slider may be moving. The
         // single-slot Best-of-N cache now keys on this flag directly (PawnVarianceSettings), so a
@@ -560,7 +564,9 @@ namespace PawnVarianceMod
                 curveDensityScratch = new float[CurveSamples];
             DispersionModel.OutcomeDensity(v, curveDensityScratch);
 
-            Vector2[] points = new Vector2[CurveSamples];
+            if (curvePointScratch == null || curvePointScratch.Length != CurveSamples)
+                curvePointScratch = new Vector2[CurveSamples];
+            Vector2[] points = curvePointScratch;
             float maxDensity = 0.001f;
 
             for (int i = 0; i < CurveSamples; i++)
@@ -575,8 +581,18 @@ namespace PawnVarianceMod
                 points[i] = new Vector2(x, density);
             }
 
-            // Sort points by x-coordinate for smooth rendering
-            Array.Sort(points, (a, b) => a.x.CompareTo(b.x));
+            // NO SORT. The points are generated in ascending x and cannot be otherwise, so the
+            // `Array.Sort(points, (a, b) => a.x.CompareTo(b.x))` that stood here until 2026-08-09
+            // sorted already-sorted data every frame and allocated a comparer delegate to do it
+            // (audit finding Q-13). The proof, since this is a correctness claim and not just a
+            // performance one: `power` is `(i + 0.5f) / CurveSamples` for increasing i, and
+            // MapToCenteredX is monotonically non-decreasing -- both of its branches are
+            // `constant + positive slope x input`, and they meet continuously at
+            // `compositeScore == baseC`, where both evaluate to 0.50. A strictly increasing input
+            // through a non-decreasing map is non-decreasing.
+            //
+            // If MapToCenteredX ever grows a non-monotonic branch, this is the line that breaks --
+            // restore the sort rather than reordering the map.
 
             // Draw Line Segments. maxDensity floors at 0.001f above, so this can never divide by
             // zero even if OutcomeDensity ever returned an all-zero array.
