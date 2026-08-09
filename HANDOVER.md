@@ -57,15 +57,20 @@ approximation is known to drift.
   read ~2.4× narrower. It did not.
 - Zeroing both spread fields moved `Best of 25` from +23% to +9%, proving the readout now actually
   responds to dispersion rather than only to the mean band.
-- [ ] **`Roll pawns and dump distribution` at 1000 pawns.** No curated single-profile colony is
-  needed for this anymore — `DumpDistribution` groups eligible pawns by their RESOLVED profile
-  and prints one `GENERATOR vs MODEL` block per group (minimum 30 eligible pawns per group; a
-  smaller group is reported, not asserted), so a normal colony with override config active, which
-  routinely resolves several profiles at once, is asserted per profile rather than skipped
-  outright. Expected: each group's block reports `pawns delivered` within tolerance of what it
-  predicts — e.g. `Faithful` predicts `~4.55` pips/pawn. A delta beyond tolerance on a group means
-  a generator branch has no mirror. **This has never been run** — until it is, the
-  assertion is argued, not measured.
+- **The generator/model assertion is measured, not argued.** `Roll pawns and dump distribution` at
+  1000 pawns, against a build deployed from the current tree, reports for the resolved profile
+  (`Custom 1 x1000`): `model predicts 4.548 pips/pawn (sd 1.234)`, `pawns delivered 4.553`,
+  `delta +0.004 against tolerance 0.156` — `OK — the model describes the pawns being rolled`.
+  `DumpDistribution` groups eligible pawns by their RESOLVED profile and prints one
+  `GENERATOR vs MODEL` block per group (minimum 30 eligible pawns per group; a smaller group is
+  reported, not asserted), so a colony that resolves several profiles at once is asserted per
+  profile rather than skipped outright. A delta beyond tolerance on a group means a generator
+  branch has no mirror.
+- [ ] **The multi-group path of that dump is still unexercised.** The run above resolved to a
+  single profile for all 1000 pawns, so the per-group loop was only ever entered once. The
+  grouping is asserted by construction, not by observation; a run that resolves two or more
+  profiles (race/xenotype overrides active) would close this. Low value — the numeric assertion
+  itself is measured — but do not claim the grouping branch has been seen working.
 
 **Affordance worth knowing:** the profile editor can be opened directly via GABS with
 `rimworld/open_mod_settings`, `modId: mod-settings:kalas.pawnvariance:28ba19877e53c641` — far faster
@@ -74,9 +79,11 @@ than clicking through Options when verifying a UI change in game.
 ## 1. Carried items — known, quantified, not fixed
 
 The in-game `Varied Pawns > Verify Best-of-N against envelope_check.py` gate passes **32/32** against
-the shipped build: worst displayed divergence 0.26pp against the 0.50pp tolerance, worst raw 0.94%
-against the 3% guard, every `N=1` row bit-identical. `envelope_check.py` PASSes Rule 1 and Rule 2 at
-N = 1, 5, 25, 50 and reports `EnvelopeFigures.g.cs: unchanged`.
+the shipped build: worst displayed divergence 0.01pp against the 0.50pp tolerance, worst raw 0.01%
+against the 3% guard, every `N=1` row bit-identical. It also reports `pip prediction matches Moments
+at q=0.10/0.50/0.90, and ExpectedPassionPips' Beta integral matches its own per-q reconstruction, on
+all presets` (invariant 3). `envelope_check.py` PASSes Rule 1 and Rule 2 at N = 1, 5, 25, 50 and
+reports `EnvelopeFigures.g.cs: unchanged`.
 
 **Re-running both after any scoring change is Rule 6**, and the tuning constraints that used to sit
 here have moved to "Tuning constraints" below — they govern every future retune.
