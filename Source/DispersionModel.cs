@@ -241,6 +241,127 @@ namespace PawnVarianceMod
             return mu;
         }
 
+        // E[delivered passion pips] and sd, in PIPS -- not the normalised composite axis.
+        //
+        // This exists to be compared against ROLLED PAWNS (DebugActions' distribution dump), which
+        // is a kind of check nothing else in this project performs: every other gate compares a
+        // model against another model, and the defect class this project keeps rediscovering is the
+        // generator doing something no model mirrors. Finding Q-14 is the canonical case -- the
+        // score assumed 5.001 pips where pawns receive ~4.55, both mirrors agreed with each other,
+        // and the in-game measurement proving it sat unread in HANDOVER.md for weeks.
+        //
+        // Deliberately NOT normalised: the dump measures pips, so predicting pips keeps the
+        // comparison in units a human can check against the log by hand.
+        //
+        // MIRRORS THE PASSION BRANCH OF Moments ABOVE, minus the efficiency/MaxPassionPips
+        // normalisation and the Clamp01. Do not let the two drift -- VerifyBestOfN asserts they
+        // agree (invariant 3), which is what keeps this honest.
+        public static void ExpectedPassionPips(VarianceProfileValues v, out float mean, out float sd)
+        {
+            mean = 0f;
+            sd = 0f;
+            if (v == null || !v.enablePassionVariance) return;
+
+            EnsureNodes();
+            v.GetBetaAlphaBeta(out float alpha, out float beta);
+
+            float dq = 1f / QNodes;
+            var qs = new float[QNodes];
+            var wq = new float[QNodes];
+            float total = 0f;
+            for (int i = 0; i < QNodes; i++)
+            {
+                float q = (i + 0.5f) * dq;
+                qs[i] = q;
+                wq[i] = Mathf.Exp((alpha - 1f) * Mathf.Log(q) + (beta - 1f) * Mathf.Log(1f - q));
+                total += wq[i] * dq;
+            }
+            for (int i = 0; i < QNodes; i++) wq[i] = wq[i] * dq / total;
+
+            float sig = Mathf.Lerp(Constants.PassionBudgetSpreadMin,
+                                   Constants.PassionBudgetSpreadMax, v.PassionNoiseScalar);
+            int nSkills = Mathf.RoundToInt(Constants.MaxPassionPips / Constants.MajorPassionCost);
+            float capacity = nSkills * (Constants.MinorPassionCost
+                + (Constants.MajorPassionCost - Constants.MinorPassionCost) * v.passionMajorBias);
+
+            float m1 = 0f, m2 = 0f;
+            for (int i = 0; i < QNodes; i++)
+            {
+                float bmean = Mathf.Lerp(v.passionCountMin, v.passionCountMax, qs[i]);
+                for (int g = 0; g < GaussNodes; g++)
+                {
+                    float b = bmean + gaussZ[g] * sig;
+                    // Identical to the applier's floor and to Moments' -- see the note there.
+                    if (b < 1f && v.passionCountMin > 0f) b = 1f;
+                    if (b < 0f) b = 0f;
+
+                    var outcomes = PassionSpend.Outcomes(b, v.passionMajorBias);
+                    for (int k = 0; k < outcomes.Length; k++)
+                    {
+                        float pips = Mathf.Min(outcomes[k].Pips, capacity);
+                        float w = wq[i] * gaussW[g] * outcomes[k].Weight;
+                        m1 += w * pips;
+                        m2 += w * pips * pips;
+                    }
+                }
+            }
+
+            mean = m1;
+            sd = Mathf.Sqrt(Mathf.Max(0f, m2 - m1 * m1));
+        }
+
+        // Single-q version of ExpectedPassionPips: no Beta weighting, just the budget Gaussian and
+        // the spend loop at one quality. Used by the verify gate to compare against Moments, which
+        // is also a conditional-on-q quantity -- comparing the Beta-integrated figure against a
+        // per-q one would fail for a reason that is not a defect.
+        public static void ExpectedPassionPipsAt(VarianceProfileValues v, float q, out float mean)
+        {
+            mean = 0f;
+            if (v == null || !v.enablePassionVariance) return;
+
+            EnsureNodes();
+            float sig = Mathf.Lerp(Constants.PassionBudgetSpreadMin,
+                                   Constants.PassionBudgetSpreadMax, v.PassionNoiseScalar);
+            int nSkills = Mathf.RoundToInt(Constants.MaxPassionPips / Constants.MajorPassionCost);
+            float capacity = nSkills * (Constants.MinorPassionCost
+                + (Constants.MajorPassionCost - Constants.MinorPassionCost) * v.passionMajorBias);
+            float bmean = Mathf.Lerp(v.passionCountMin, v.passionCountMax, q);
+
+            float acc = 0f;
+            for (int g = 0; g < GaussNodes; g++)
+            {
+                float b = bmean + gaussZ[g] * sig;
+                if (b < 1f && v.passionCountMin > 0f) b = 1f;
+                if (b < 0f) b = 0f;
+                var outcomes = PassionSpend.Outcomes(b, v.passionMajorBias);
+                for (int k = 0; k < outcomes.Length; k++)
+                    acc += gaussW[g] * outcomes[k].Weight * Mathf.Min(outcomes[k].Pips, capacity);
+            }
+            mean = acc;
+        }
+
+        // The skill term Moments computes, exposed so the verify gate can subtract it back out of
+        // mu and recover the passion term in isolation.
+        public static float SkillTermAt(VarianceProfileValues v, float q)
+        {
+            EnsureNodes();
+            float top = Constants.AssumedMaxSkillLevel;
+            if (!v.enableSkillVariance)
+                return Constants.AssumedVanillaSkillBaseline / top;
+
+            float mag = Mathf.Lerp(Constants.MagnitudeLerpLow, Constants.MaxMagnitude,
+                                   v.SkillNoiseScalar);
+            float baseline = Mathf.Lerp(v.skillShiftMin, v.skillShiftMax, q);
+            float s1 = 0f;
+            for (int i = 0; i < TriNodes; i++)
+            {
+                float lvl = Mathf.Clamp(Constants.AssumedVanillaSkillBaseline
+                                        + baseline + triT[i] * mag, 0f, top);
+                s1 += triW[i] * (lvl / top);
+            }
+            return s1;
+        }
+
         // The realised-outcome density for the header curve. Analytic Gaussian mixture rather than
         // finite differences of F -- same inputs, visibly smoother line.
         //

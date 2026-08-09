@@ -508,6 +508,40 @@ namespace PawnVarianceMod
                     + "enabled axes are scored.");
             }
 
+            // Invariant 3: ExpectedPassionPips must agree with Moments' own passion branch.
+            // The two integrate the same thing in different units -- recover Moments' passion term
+            // by subtracting its skill term back out of mu, and it must equal the pip prediction
+            // scaled by efficiency / MaxPassionPips. Without this the new prediction is a fifth
+            // mirror with nothing holding it to the four that already exist.
+            int pipFailures = 0;
+            foreach (VarianceProfile preset in VarianceProfiles.Presets)
+            {
+                VarianceProfileValues pv = preset.MakeValues();
+                float pipEff = PawnVarianceSettings.PassionPipEfficiency(pv.passionMajorBias);
+                float wS = Constants.CompositeSkillWeight;
+                float wP = Constants.CompositePassionWeight;
+
+                DispersionModel.ExpectedPassionPipsAt(pv, 0.50f, out float pipAtHalf);
+                DispersionModel.Moments(pv, 0.50f, out float muHalf, out _);
+                float skillHalf = DispersionModel.SkillTermAt(pv, 0.50f);
+                float passionHalf = ((wS + wP) * muHalf - wS * skillHalf) / wP;
+                float expectHalf = pipAtHalf * pipEff / Constants.MaxPassionPips;
+
+                // 1e-4 is loose by twelve orders of magnitude and deliberately so: the identity was
+                // validated in the Python mirror on 2026-08-09 and holds to 3.89e-16 (worst of
+                // eight presets, Wildcard). float32 in the C# widens that, but nowhere near 1e-4.
+                // A failure here is a structural divergence, never accumulated rounding.
+                if (Mathf.Abs(passionHalf - expectHalf) > 1e-4f)
+                {
+                    sb.AppendLine($"  {preset.label,-12} pip/moment mismatch at q=0.50: "
+                        + $"moments {passionHalf:F6} vs pips {expectHalf:F6}  *** PIP MISMATCH ***");
+                    pipFailures++;
+                }
+            }
+            failures += pipFailures;
+            if (pipFailures == 0)
+                sb.AppendLine("  pip prediction matches Moments' passion term on all presets at q=0.50.");
+
             if (failures == 0)
             {
                 sb.AppendLine("  PASS: the live integrator agrees with the reference everywhere.");
@@ -805,6 +839,14 @@ namespace PawnVarianceMod
             var perPawnMeans = new List<float>();
             var traitCounts = new List<int>();
             var passionPips = new List<float>();
+            // Pips for ONLY the pawns the passion model actually describes. The model predicts what
+            // PassionVarianceApplier delivers, so a pawn the applier never touched must not be
+            // averaged into the comparison: HarmonyPatches skips pawns under VanillaAdultPassionAge
+            // (vanilla gives them no budget at all), hostile-excluded pawns, and any profile with
+            // the passion axis switched off. Including them would drag the observed mean down and
+            // read as a model defect.
+            var modelPips = new List<float>();
+            VarianceProfileValues modelValues = null;
             int majors = 0, minors = 0, nones = 0, passionless = 0;
             // What each pawn ACTUALLY resolved to, tallied per label. This action used to print
             // settings.activeProfileId and assert "overrides are not exercised here" -- which is
@@ -845,7 +887,8 @@ namespace PawnVarianceMod
 
                         // The same call the generation postfix makes, so this reports the profile
                         // that actually produced the pawn rather than the one the settings name.
-                        string label = settings.ValuesFor(pawn, request)?.profileLabel ?? "(null)";
+                        VarianceProfileValues pawnValues = settings.ValuesFor(pawn, request);
+                        string label = pawnValues?.profileLabel ?? "(null)";
                         resolved.TryGetValue(label, out int seen);
                         resolved[label] = seen + 1;
 
@@ -878,6 +921,17 @@ namespace PawnVarianceMod
                                : r.passion == Passion.Minor ? Constants.MinorPassionCost : 0f);
                         passionPips.Add(pips);
                         if (pips <= 0f) passionless++;
+
+                        bool adultForPassions = pawn.ageTracker == null
+                            || pawn.ageTracker.AgeBiologicalYears >= Constants.VanillaAdultPassionAge;
+                        if (adultForPassions
+                            && pawnValues != null
+                            && pawnValues.enablePassionVariance
+                            && !settings.IsExcludedAsHostile(pawn, request))
+                        {
+                            modelPips.Add(pips);
+                            modelValues = pawnValues;
+                        }
                     }
                     finally
                     {
@@ -937,10 +991,60 @@ namespace PawnVarianceMod
             // the quality-driven spread of the baseline, so it
             // should sit ABOVE that prediction. If it sits below, the noise term is not reaching
             // the pawns and something upstream is clamping it.
-            sb.AppendLine("  Compare 'per-skill level' sd against the 'per-skill sd' column in");
-            sb.AppendLine("  `python docs/tools/envelope_check.py`. Observed should exceed the");
-            sb.AppendLine("  predicted figure — the tool models noise only, this also carries the");
-            sb.AppendLine("  spread of the quality roll itself.");
+            // GENERATOR vs MODEL. This is the only check in the project that compares rolled pawns
+            // against the scoring model; everything else compares one model to another, which
+            // cannot catch a branch both models are missing (see the note on VerifyBestOfN).
+            //
+            // The passion axis, not the skill axis, and that is deliberate: the mod supplies the
+            // whole passion budget, so model and generator are meant to agree EXACTLY. Skill levels
+            // are built on vanilla's own base distribution, which AssumedVanillaSkillBaseline only
+            // approximates -- asserting on those would fail for reasons that are not defects. The
+            // per-skill sd comparison this replaces stays available by eye in the table above.
+            sb.AppendLine();
+            if (byCount.Count > 1)
+            {
+                sb.AppendLine("  model check SKIPPED: mixed sample, so there is no single profile "
+                    + "to predict from.");
+            }
+            else if (modelPips.Count == 0 || modelValues == null)
+            {
+                sb.AppendLine("  model check SKIPPED: no pawn in this sample was eligible for "
+                    + "rolled passions (all under age " + Constants.VanillaAdultPassionAge
+                    + ", hostile-excluded, or passion variance off).");
+            }
+            else
+            {
+                DispersionModel.ExpectedPassionPips(modelValues, out float predMean, out float predSd);
+                float obsMean = modelPips.Average();
+
+                // Tolerance is DERIVED from the sample, not a hardcoded pip count: the standard
+                // error shrinks as sqrt(n), so a fixed threshold would either false-fail at n=50 or
+                // sleep through real drift at n=1000. Four standard errors is ~1-in-16000 per run.
+                // The 0.15-pip floor covers what the model knowingly does not represent: capacity
+                // assumes MaxPassionPips/MajorPassionCost eligible skills, while real pawns lose
+                // eligibility to conflicting traits and DropAll genes, so the observed mean sits
+                // slightly BELOW the prediction for budgets near capacity.
+                float se = predSd / Mathf.Sqrt(modelPips.Count);
+                float tol = Mathf.Max(4f * se, 0.15f);
+                float delta = obsMean - predMean;
+
+                sb.AppendLine($"  GENERATOR vs MODEL -- passion pips, {modelPips.Count} eligible pawns");
+                sb.AppendLine($"    model predicts {predMean:F3} pips/pawn (sd {predSd:F3})");
+                sb.AppendLine($"    pawns delivered {obsMean:F3} pips/pawn");
+                sb.AppendLine($"    delta {delta:+0.000;-0.000} against tolerance {tol:F3} "
+                    + $"(4 x SE {se:F3}, floored at 0.150)");
+                if (Mathf.Abs(delta) > tol)
+                {
+                    sb.AppendLine("    *** MODEL/GENERATOR MISMATCH *** the score is describing a "
+                        + "pawn the generator does not roll.");
+                    sb.AppendLine("    This is the shape of audit findings Q-01, Q-04 and Q-14. "
+                        + "Check which generator branch has no mirror before adjusting anything.");
+                }
+                else
+                {
+                    sb.AppendLine("    OK -- the model describes the pawns being rolled.");
+                }
+            }
             sb.AppendLine(Histogram("per-pawn mean skill", perPawnMeans, 12));
 
             Log.Message(sb.ToString().TrimEnd());
