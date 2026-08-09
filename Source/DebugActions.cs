@@ -508,39 +508,104 @@ namespace PawnVarianceMod
                     + "enabled axes are scored.");
             }
 
-            // Invariant 3: ExpectedPassionPips must agree with Moments' own passion branch.
-            // The two integrate the same thing in different units -- recover Moments' passion term
-            // by subtracting its skill term back out of mu, and it must equal the pip prediction
-            // scaled by efficiency / MaxPassionPips. Without this the new prediction is a fifth
-            // mirror with nothing holding it to the four that already exist.
+            // Invariant 3, part A: ExpectedPassionPipsAt must agree with Moments' own passion
+            // branch, at THREE qualities (0.10, 0.50, 0.90) rather than one -- a single point could
+            // pass by coincidence on a formula that is wrong away from q=0.50. The two integrate the
+            // same thing in different units -- recover Moments' passion term by subtracting its
+            // skill term back out of mu, and it must equal the pip prediction scaled by
+            // efficiency / MaxPassionPips.
+            //
+            // The efficiency term is selected the same way Moments selects it: a passion-disabled
+            // profile scores vanilla's own budget at VanillaMajorBias, not the profile's own
+            // (unused) passionMajorBias. Using the profile's bias here for a disabled profile would
+            // manufacture a mismatch that has nothing to do with either function being wrong.
+            //
+            // Invariant 3, part B: pins ExpectedPassionPips (the Beta-weighted integral actually
+            // called by DumpDistribution's GENERATOR vs MODEL check) to ExpectedPassionPipsAt (the
+            // per-q function part A already checks against Moments). Without this, ExpectedPassionPips
+            // is a fifth mirror with nothing holding it to the four that already exist -- part A
+            // alone never calls it.
             int pipFailures = 0;
             foreach (VarianceProfile preset in VarianceProfiles.Presets)
             {
                 VarianceProfileValues pv = preset.MakeValues();
-                float pipEff = PawnVarianceSettings.PassionPipEfficiency(pv.passionMajorBias);
+                float pipEff = pv.enablePassionVariance
+                    ? PawnVarianceSettings.PassionPipEfficiency(pv.passionMajorBias)
+                    : PawnVarianceSettings.PassionPipEfficiency(Constants.VanillaMajorBias);
                 float wS = Constants.CompositeSkillWeight;
                 float wP = Constants.CompositePassionWeight;
 
-                DispersionModel.ExpectedPassionPipsAt(pv, 0.50f, out float pipAtHalf);
-                DispersionModel.Moments(pv, 0.50f, out float muHalf, out _);
-                float skillHalf = DispersionModel.SkillTermAt(pv, 0.50f);
-                float passionHalf = ((wS + wP) * muHalf - wS * skillHalf) / wP;
-                float expectHalf = pipAtHalf * pipEff / Constants.MaxPassionPips;
+                float worstQDelta = 0f;
+                float worstQ = 0f;
+                foreach (float q in new[] { 0.10f, 0.50f, 0.90f })
+                {
+                    DispersionModel.ExpectedPassionPipsAt(pv, q, out float pipAtQ);
+                    DispersionModel.Moments(pv, q, out float muQ, out _);
+                    float skillAtQ = DispersionModel.SkillTermAt(pv, q);
+                    float passionAtQ = ((wS + wP) * muQ - wS * skillAtQ) / wP;
+                    float expectAtQ = pipAtQ * pipEff / Constants.MaxPassionPips;
+
+                    float qDelta = Mathf.Abs(passionAtQ - expectAtQ);
+                    if (qDelta > worstQDelta) { worstQDelta = qDelta; worstQ = q; }
+                }
 
                 // 1e-4 is loose by twelve orders of magnitude and deliberately so: the identity was
                 // validated in the Python mirror on 2026-08-09 and holds to 3.89e-16 (worst of
                 // eight presets, Wildcard). float32 in the C# widens that, but nowhere near 1e-4.
                 // A failure here is a structural divergence, never accumulated rounding.
-                if (Mathf.Abs(passionHalf - expectHalf) > 1e-4f)
+                if (worstQDelta > 1e-4f)
                 {
-                    sb.AppendLine($"  {preset.label,-12} pip/moment mismatch at q=0.50: "
-                        + $"moments {passionHalf:F6} vs pips {expectHalf:F6}  *** PIP MISMATCH ***");
+                    sb.AppendLine($"  {preset.label,-12} pip/moment mismatch, worst at q={worstQ:F2}: "
+                        + $"delta {worstQDelta:E2}  *** PIP MISMATCH ***");
+                    pipFailures++;
+                }
+
+                // Part B: reconstruct the Beta-weighted mean from the same QNodes midpoint grid and
+                // Beta weights ExpectedPassionPips uses internally, evaluating ExpectedPassionPipsAt
+                // at each node instead of re-deriving the integrand. This shares the quadrature
+                // scheme with the code it checks -- it can catch a wiring error in the integration
+                // loop (wrong weight, wrong node count, a q dropped from the sum) but it is NOT
+                // independent evidence that the scheme itself is right. dispersion_mc.py and the
+                // Python oracle are what cover that; this is only the pin that makes sure the two C#
+                // functions do not silently diverge from each other.
+                pv.GetBetaAlphaBeta(out float alpha, out float beta);
+                int qNodes = DispersionModel.QNodes;
+                float dq = 1f / qNodes;
+                var wq = new float[qNodes];
+                float total = 0f;
+                for (int i = 0; i < qNodes; i++)
+                {
+                    float qi = (i + 0.5f) * dq;
+                    wq[i] = Mathf.Exp((alpha - 1f) * Mathf.Log(qi) + (beta - 1f) * Mathf.Log(1f - qi));
+                    total += wq[i] * dq;
+                }
+                float recon = 0f;
+                for (int i = 0; i < qNodes; i++)
+                {
+                    float qi = (i + 0.5f) * dq;
+                    DispersionModel.ExpectedPassionPipsAt(pv, qi, out float pipAtQi);
+                    recon += (wq[i] * dq / total) * pipAtQi;
+                }
+                DispersionModel.ExpectedPassionPips(pv, out float betaMean, out _);
+
+                // 1e-3 relative, not absolute: float32 accumulation over 256 nodes plus a second
+                // independent Beta-weight normalisation pass (this loop re-derives its own `total`
+                // rather than reusing ExpectedPassionPips') can differ from the function's internal
+                // running sum by noise proportional to the mean itself, not to a fixed pip count.
+                float relErr = Mathf.Abs(recon - betaMean) / Mathf.Max(Mathf.Abs(betaMean), 1e-6f);
+                if (relErr > 1e-3f)
+                {
+                    sb.AppendLine($"  {preset.label,-12} Beta-integral mismatch: reconstructed "
+                        + $"{recon:F6} vs ExpectedPassionPips {betaMean:F6} "
+                        + $"(rel {relErr:E2})  *** PIP INTEGRAL MISMATCH ***");
                     pipFailures++;
                 }
             }
             failures += pipFailures;
             if (pipFailures == 0)
-                sb.AppendLine("  pip prediction matches Moments' passion term on all presets at q=0.50.");
+                sb.AppendLine("  pip prediction matches Moments at q=0.10/0.50/0.90, and "
+                    + "ExpectedPassionPips' Beta integral matches its own per-q reconstruction, "
+                    + "on all presets.");
 
             if (failures == 0)
             {
@@ -839,14 +904,18 @@ namespace PawnVarianceMod
             var perPawnMeans = new List<float>();
             var traitCounts = new List<int>();
             var passionPips = new List<float>();
-            // Pips for ONLY the pawns the passion model actually describes. The model predicts what
-            // PassionVarianceApplier delivers, so a pawn the applier never touched must not be
-            // averaged into the comparison: HarmonyPatches skips pawns under VanillaAdultPassionAge
-            // (vanilla gives them no budget at all), hostile-excluded pawns, and any profile with
-            // the passion axis switched off. Including them would drag the observed mean down and
-            // read as a model defect.
-            var modelPips = new List<float>();
-            VarianceProfileValues modelValues = null;
+            // Pips for ONLY the pawns the passion model actually describes, grouped by the profile
+            // that actually produced them. The model predicts what PassionVarianceApplier delivers,
+            // so a pawn the applier never touched must not be averaged into the comparison:
+            // HarmonyPatches skips pawns under VanillaAdultPassionAge (vanilla gives them no budget
+            // at all), hostile-excluded pawns, and any profile with the passion axis switched off.
+            // Including them would drag the observed mean down and read as a model defect.
+            //
+            // Grouped by RESOLVED label rather than kept as one pooled list -- see the long comment
+            // by the GENERATOR vs MODEL block below for why a mixed sample is several comparisons,
+            // not zero.
+            var modelPipsByLabel = new Dictionary<string, List<float>>();
+            var modelValuesByLabel = new Dictionary<string, VarianceProfileValues>();
             int majors = 0, minors = 0, nones = 0, passionless = 0;
             // What each pawn ACTUALLY resolved to, tallied per label. This action used to print
             // settings.activeProfileId and assert "overrides are not exercised here" -- which is
@@ -929,8 +998,13 @@ namespace PawnVarianceMod
                             && pawnValues.enablePassionVariance
                             && !settings.IsExcludedAsHostile(pawn, request))
                         {
-                            modelPips.Add(pips);
-                            modelValues = pawnValues;
+                            if (!modelPipsByLabel.TryGetValue(label, out List<float> group))
+                            {
+                                group = new List<float>();
+                                modelPipsByLabel[label] = group;
+                            }
+                            group.Add(pips);
+                            modelValuesByLabel[label] = pawnValues;
                         }
                     }
                     finally
@@ -1000,13 +1074,20 @@ namespace PawnVarianceMod
             // are built on vanilla's own base distribution, which AssumedVanillaSkillBaseline only
             // approximates -- asserting on those would fail for reasons that are not defects. The
             // per-skill sd comparison this replaces stays available by eye in the table above.
+            //
+            // PER-PROFILE GROUP, not a single global comparison -- this deliberately diverges from
+            // this action's earlier design (and from the plan text that introduced it), which
+            // predicted from ONE profile and skipped outright the moment more than one was resolved
+            // (`byCount.Count > 1`). That skip was wrong, not conservative: the owner's override
+            // config outranks the Active Colony Profile (see the "RESOLVED, not configured" note
+            // above), so a normal run routinely resolves several profiles, the skip fired every
+            // time, and the assertion this whole mechanism exists to run in-game never executed. A
+            // mixed sample is not an obstacle to the comparison -- it is SEVERAL comparisons, one
+            // per resolved profile, each perfectly well-defined on its own pawns. Do not restore the
+            // mixed-sample skip; restore only the skip for "no group has any eligible pawns at all",
+            // which is the one case where there is genuinely nothing to compare.
             sb.AppendLine();
-            if (byCount.Count > 1)
-            {
-                sb.AppendLine("  model check SKIPPED: mixed sample, so there is no single profile "
-                    + "to predict from.");
-            }
-            else if (modelPips.Count == 0 || modelValues == null)
+            if (modelPipsByLabel.Count == 0)
             {
                 sb.AppendLine("  model check SKIPPED: no pawn in this sample was eligible for "
                     + "rolled passions (all under age " + Constants.VanillaAdultPassionAge
@@ -1014,35 +1095,60 @@ namespace PawnVarianceMod
             }
             else
             {
-                DispersionModel.ExpectedPassionPips(modelValues, out float predMean, out float predSd);
-                float obsMean = modelPips.Average();
+                // A floor, not a stylistic minimum: the tolerance below is 4 standard errors of the
+                // sample mean, and the standard error itself is only a meaningful quantity once the
+                // sample is large enough for the CLT approximation it relies on to hold. Below this,
+                // "4 x SE" is not a real 1-in-16000 bound, it is noise dressed as one -- a group of a
+                // handful of pawns could swing the observed mean by more than any reasonable
+                // tolerance purely by chance and either falsely pass or falsely fail. Reporting the
+                // group size instead of asserting on it keeps a small group visible without letting
+                // it cry wolf.
+                const int MinGroupSizeToCompare = 30;
 
-                // Tolerance is DERIVED from the sample, not a hardcoded pip count: the standard
-                // error shrinks as sqrt(n), so a fixed threshold would either false-fail at n=50 or
-                // sleep through real drift at n=1000. Four standard errors is ~1-in-16000 per run.
-                // The 0.15-pip floor covers what the model knowingly does not represent: capacity
-                // assumes MaxPassionPips/MajorPassionCost eligible skills, while real pawns lose
-                // eligibility to conflicting traits and DropAll genes, so the observed mean sits
-                // slightly BELOW the prediction for budgets near capacity.
-                float se = predSd / Mathf.Sqrt(modelPips.Count);
-                float tol = Mathf.Max(4f * se, 0.15f);
-                float delta = obsMean - predMean;
+                foreach (var kv in modelPipsByLabel.OrderByDescending(kv => kv.Value.Count))
+                {
+                    string groupLabel = kv.Key;
+                    List<float> groupPips = kv.Value;
+                    VarianceProfileValues groupValues = modelValuesByLabel[groupLabel];
 
-                sb.AppendLine($"  GENERATOR vs MODEL -- passion pips, {modelPips.Count} eligible pawns");
-                sb.AppendLine($"    model predicts {predMean:F3} pips/pawn (sd {predSd:F3})");
-                sb.AppendLine($"    pawns delivered {obsMean:F3} pips/pawn");
-                sb.AppendLine($"    delta {delta:+0.000;-0.000} against tolerance {tol:F3} "
-                    + $"(4 x SE {se:F3}, floored at 0.150)");
-                if (Mathf.Abs(delta) > tol)
-                {
-                    sb.AppendLine("    *** MODEL/GENERATOR MISMATCH *** the score is describing a "
-                        + "pawn the generator does not roll.");
-                    sb.AppendLine("    This is the shape of audit findings Q-01, Q-04 and Q-14. "
-                        + "Check which generator branch has no mirror before adjusting anything.");
-                }
-                else
-                {
-                    sb.AppendLine("    OK -- the model describes the pawns being rolled.");
+                    if (groupPips.Count < MinGroupSizeToCompare)
+                    {
+                        sb.AppendLine($"  {groupLabel}: too few eligible pawns ({groupPips.Count}) "
+                            + $"to compare — need {MinGroupSizeToCompare}");
+                        continue;
+                    }
+
+                    DispersionModel.ExpectedPassionPips(groupValues, out float predMean, out float predSd);
+                    float obsMean = groupPips.Average();
+
+                    // Tolerance is DERIVED from the sample, not a hardcoded pip count: the standard
+                    // error shrinks as sqrt(n), so a fixed threshold would either false-fail at n=50
+                    // or sleep through real drift at n=1000. Four standard errors is ~1-in-16000 per
+                    // run. The 0.15-pip floor covers what the model knowingly does not represent:
+                    // capacity assumes MaxPassionPips/MajorPassionCost eligible skills, while real
+                    // pawns lose eligibility to conflicting traits and DropAll genes, so the observed
+                    // mean sits slightly BELOW the prediction for budgets near capacity.
+                    float se = predSd / Mathf.Sqrt(groupPips.Count);
+                    float tol = Mathf.Max(4f * se, 0.15f);
+                    float delta = obsMean - predMean;
+
+                    sb.AppendLine($"  GENERATOR vs MODEL [{groupLabel}] -- passion pips, "
+                        + $"{groupPips.Count} eligible pawns");
+                    sb.AppendLine($"    model predicts {predMean:F3} pips/pawn (sd {predSd:F3})");
+                    sb.AppendLine($"    pawns delivered {obsMean:F3} pips/pawn");
+                    sb.AppendLine($"    delta {delta:+0.000;-0.000} against tolerance {tol:F3} "
+                        + $"(4 x SE {se:F3}, floored at 0.150)");
+                    if (Mathf.Abs(delta) > tol)
+                    {
+                        sb.AppendLine("    *** MODEL/GENERATOR MISMATCH *** the score is describing "
+                            + "a pawn the generator does not roll.");
+                        sb.AppendLine("    This is the shape of audit findings Q-01, Q-04 and Q-14. "
+                            + "Check which generator branch has no mirror before adjusting anything.");
+                    }
+                    else
+                    {
+                        sb.AppendLine("    OK -- the model describes the pawns being rolled.");
+                    }
                 }
             }
             sb.AppendLine(Histogram("per-pawn mean skill", perPawnMeans, 12));

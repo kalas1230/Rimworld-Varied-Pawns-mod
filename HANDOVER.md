@@ -57,10 +57,14 @@ approximation is known to drift.
   read ~2.4× narrower. It did not.
 - Zeroing both spread fields moved `Best of 25` from +23% to +9%, proving the readout now actually
   responds to dispersion rather than only to the mean band.
-- [ ] **`Roll pawns and dump distribution` at 1000 pawns, on `Faithful`, with no overrides
-  active.** Expected: `GENERATOR vs MODEL` reports `model predicts ~4.55` and
-  `pawns delivered` within tolerance. A delta beyond tolerance on a preset means a
-  generator branch has no mirror. **This has never been run** — until it is, the
+- [ ] **`Roll pawns and dump distribution` at 1000 pawns.** No curated single-profile colony is
+  needed for this anymore — `DumpDistribution` groups eligible pawns by their RESOLVED profile
+  and prints one `GENERATOR vs MODEL` block per group (minimum 30 eligible pawns per group; a
+  smaller group is reported, not asserted), so a normal colony with override config active, which
+  routinely resolves several profiles at once, is asserted per profile rather than skipped
+  outright. Expected: each group's block reports `pawns delivered` within tolerance of what it
+  predicts — e.g. `Faithful` predicts `~4.55` pips/pawn. A delta beyond tolerance on a group means
+  a generator branch has no mirror. **This has never been run** — until it is, the
   assertion is argued, not measured.
 
 **Affordance worth knowing:** the profile editor can be opened directly via GABS with

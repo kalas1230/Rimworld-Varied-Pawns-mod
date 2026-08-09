@@ -265,13 +265,49 @@ namespace PawnVarianceMod
         // comparison in units a human can check against the log by hand.
         //
         // MIRRORS THE PASSION BRANCH OF Moments ABOVE, minus the efficiency/MaxPassionPips
-        // normalisation and the Clamp01. Do not let the two drift -- VerifyBestOfN asserts they
-        // agree (invariant 3), which is what keeps this honest.
+        // normalisation and the Clamp01. Do not let the two drift -- VerifyBestOfN's invariant 3
+        // pins this function two ways: per-q against Moments (at q = 0.10/0.50/0.90, via
+        // ExpectedPassionPipsAt) and, separately, against its own Beta-integrated mean
+        // reconstructed from those same per-q values. See the comment on invariant 3 in
+        // DebugActions.cs for what each half actually proves.
         public static void ExpectedPassionPips(VarianceProfileValues v, out float mean, out float sd)
         {
             mean = 0f;
             sd = 0f;
-            if (v == null || !v.enablePassionVariance) return;
+            if (v == null) return;
+
+            if (!v.enablePassionVariance)
+            {
+                // Mirrors Moments' passion-off branch: vanilla's own budget at vanilla's own Major
+                // bias, run through the same spend loop, with NO capacity cap (that asymmetry with
+                // the live branch is pre-existing and tracked separately -- see audit finding
+                // Q-04-style entry for the passion-disabled fallback split -- and is preserved here
+                // deliberately so this function keeps agreeing with Moments rather than "fixing"
+                // an asymmetry Moments itself still has).
+                //
+                // Returned in PIPS, not the normalised axis, so no efficiency/MaxPassionPips scale
+                // and no Clamp01 -- those belong to the caller that wants the composite axis.
+                var vOutcomes = PassionSpend.Outcomes(Constants.VanillaPassionBudget,
+                                                      Constants.VanillaMajorBias);
+                float vm1 = 0f, vm2 = 0f;
+                for (int k = 0; k < vOutcomes.Length; k++)
+                {
+                    float w = vOutcomes[k].Weight;
+                    float pips = vOutcomes[k].Pips;
+                    vm1 += w * pips;
+                    vm2 += w * pips * pips;
+                }
+                mean = vm1;
+                // Deliberately NOT zero, unlike Moments' pVar = 0f in this same branch. Moments is
+                // scoring the COMPOSITE axis, where a disabled passion axis is a zero-variance
+                // CONSTANT (the pawn's score does not move because of it). This function predicts
+                // the observed PIP count a rolled pawn receives, and vanilla's own spend loop
+                // genuinely disperses that count outcome to outcome -- the two are answering
+                // different questions, not disagreeing. Invariant 3 only ever compares MEANS
+                // between this function and Moments, so the differing sd is not a conflict.
+                sd = Mathf.Sqrt(Mathf.Max(0f, vm2 - vm1 * vm1));
+                return;
+            }
 
             EnsureNodes();
             v.GetBetaAlphaBeta(out float alpha, out float beta);
@@ -328,7 +364,22 @@ namespace PawnVarianceMod
         public static void ExpectedPassionPipsAt(VarianceProfileValues v, float q, out float mean)
         {
             mean = 0f;
-            if (v == null || !v.enablePassionVariance) return;
+            if (v == null) return;
+
+            if (!v.enablePassionVariance)
+            {
+                // Mirrors Moments' passion-off branch exactly -- see the long comment on the same
+                // fallback in ExpectedPassionPips above (this is the single-q version of it, so
+                // there is no q-dependence to integrate away: vanilla's budget does not vary with
+                // quality). No capacity cap, matching Moments; returns pips, not the normalised axis.
+                var vOutcomes = PassionSpend.Outcomes(Constants.VanillaPassionBudget,
+                                                      Constants.VanillaMajorBias);
+                float vm1 = 0f;
+                for (int k = 0; k < vOutcomes.Length; k++)
+                    vm1 += vOutcomes[k].Weight * vOutcomes[k].Pips;
+                mean = vm1;
+                return;
+            }
 
             EnsureNodes();
             float sig = Mathf.Lerp(Constants.PassionBudgetSpreadMin,

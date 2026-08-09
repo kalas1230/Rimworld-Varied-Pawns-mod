@@ -788,6 +788,14 @@ def check_mean_band_consistency(C, P):
     no preset has passionCountMin below 2.2 -- so vanilla's floor branch is unreachable from it.
     Finding Q-04 lived in exactly that gap: the floor was mirrored into four sites, missed in the
     fifth, and no gate could see the difference. The probes below are what make it reachable.
+
+    SINGLE-AXIS PROBES, IN ADDITION TO _probe-both-off. Both-off exercises the disabled-skill and
+    disabled-passion fallbacks TOGETHER, in the same profile, at the same time. That is not the
+    same coverage as exercising each alone: a regression confined to the skill-off/passion-ON path
+    (or the mirror image, skill-ON/passion-off) can cancel against, or simply hide behind, the
+    other axis's own fallback when both are off at once, and no shipped preset or existing probe
+    ever calls either fallback in isolation. `_probe-skill-off` and `_probe-passion-off` each flip
+    exactly one flag so the branch under test has nothing else changing alongside it.
     """
     composite = make_composite(C)
     moments = grid_moments(C)
@@ -813,6 +821,19 @@ def check_mean_band_consistency(C, P):
     off_probe["enableSkillVariance"] = False
     off_probe["enablePassionVariance"] = False
     probes["_probe-both-off"] = off_probe
+
+    # Skill axis off ALONE, passion axis left on: isolates the skill fallback from the passion
+    # live branch, which _probe-both-off cannot do because it changes both at once.
+    skill_off_probe = dict(P["Faithful"])
+    skill_off_probe["enableSkillVariance"] = False
+    probes["_probe-skill-off"] = skill_off_probe
+
+    # Passion axis off ALONE, skill axis left on: the mirror image of the probe above, isolating
+    # the passion fallback (and its own floor/spend-loop term-for-term requirement, see
+    # make_composite's else branch) from the skill live branch.
+    passion_off_probe = dict(P["Faithful"])
+    passion_off_probe["enablePassionVariance"] = False
+    probes["_probe-passion-off"] = passion_off_probe
 
     worst, worst_where = 0.0, ""
     for name, p in sorted(probes.items()):

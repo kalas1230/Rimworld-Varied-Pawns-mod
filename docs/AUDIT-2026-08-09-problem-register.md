@@ -66,17 +66,24 @@ confirms a finding nobody had connected to it (Q-14 again).
 | [Q-12](#q-12) | Comments | `VarianceProfile.cs:31` cites `PawnVarianceSettings.cs:1096/1106`; the real sites are `:1171/:1181` | **Cosmetic** — ✅ **FIXED 2026-08-09** |
 | [Q-15](#q-15) | Growth | A throw anywhere in the life-stage postfix locks that pawn out of adult variance permanently, because the stage is recorded before the work | **Minor** — ✅ **FIXED 2026-08-09** |
 | [Q-13](#q-13) | UI | The curve draw allocates an array and sorts already-sorted data every frame | **Cosmetic** — ✅ **FIXED 2026-08-09** |
+| [Q-17](#q-17) | Model drift | The passion-disabled fallback caps capacity in two different orders across the four mirrors; inert only because current constants never exercise the gap | **Major** — 🔍 **FILED, not fixed 2026-08-09** (owner-directed: record only, out of scope for the branch that found it) |
 
 *(Numbering is by discovery order; the index is grouped by area. `Q-14` and `Q-15` came from the
-adversarial pass, which ran last.)*
+adversarial pass, which ran last. `Q-17` was found by the 2026-08-09 generator-vs-model
+verification branch, after the register below it had already been closed.)*
 
 > [!NOTE]
-> **Register closed for defects 2026-08-09.** Every entry is ✅ except **Q-07** and **Q-08**, which
-> the owner deferred as not important. Both are defects *in an uncommitted diff* rather than in the
-> code, which is what makes deferring them cheap: they cost nothing until that diff is committed.
-> Before working this register again, re-read "What this pass changed about the method" at the
-> bottom — the closing sweep found two entries whose stated rationale had been invalidated by an
-> *earlier fix in the same register*, and that is now the failure mode to look for first.
+> **Register closed for defects 2026-08-09.** Every entry was ✅ at closing time except **Q-07** and
+> **Q-08**, which the owner deferred as not important. Both are defects *in an uncommitted diff*
+> rather than in the code, which is what makes deferring them cheap: they cost nothing until that
+> diff is committed. Before working this register again, re-read "What this pass changed about the
+> method" at the bottom — the closing sweep found two entries whose stated rationale had been
+> invalidated by an *earlier fix in the same register*, and that is now the failure mode to look for
+> first.
+>
+> **Q-17 was added after closing**, by a later branch (2026-08-09 generator-vs-model verification)
+> that found it as a byproduct of unrelated work. It is filed, not fixed, by explicit owner
+> direction — it is out of scope for the branch that found it.
 
 ### What was checked and found clean
 
@@ -1480,6 +1487,75 @@ a recovered pawn from a skipped one.
 filed and still is. What changed is the consequence of the trigger, not the odds of it. The
 untraced question above (can `Apply` throw after partially modifying a pawn?) is *why* the retry is
 bounded rather than unbounded: the fix is built to be correct whichever way that answer goes.
+
+---
+
+<a id="q-17"></a>
+## Q-17 — The passion-disabled fallback caps capacity in two different orders across the four mirrors, and only current constants hide it
+
+**Severity: Major.  Confidence: high. Filed, not fixed — pre-existing and out of scope for the
+branch that found it (2026-08-09 generator-vs-model verification work).**
+
+### What
+
+There are four mirrors of "how does a disabled passion axis score", and they apply the capacity
+cap in two different orders:
+
+- `docs/tools/envelope_check.py`'s `grid_moments` else-branch (`:501-507`) and
+  `Source/DispersionModel.cs`'s `Moments` else-branch (`:174-190`) compute
+  `min(1, pips * eff / pdiv)` with **no capacity cap applied to `pips` at all** — the raw
+  vanilla-budget outcome pips go straight into the efficiency/pdiv ratio and then into a `Clamp01`.
+- `docs/tools/envelope_check.py`'s `make_composite` → `passion_from` (`:309-331`, the disabled
+  branch calls it at `:361`) and `Source/PawnVarianceSettings.cs`'s `PassionNormFor` (`:1475-1499`,
+  called from the disabled branch of `CalculateCompositeScore` at `:1573-1575`) apply
+  `min(pips, capacity)` **first**, then divide by `pdiv` and clamp.
+
+So two of the four mirrors cap pips at `capacity` before scaling; the other two never cap pips at
+all and rely on the `Clamp01` at the very end to catch anything that overshoots.
+
+### Why it matters
+
+It is inert today, and only by luck of the current constants. `Constants.VanillaPassionBudget = 5.0`
+sits far below `capacity` at vanilla's own Major bias (`≈12` pips), so vanilla's outcome pips never
+approach `capacity` in the first place — the missing cap in the first pair of mirrors is a cap that
+never had anything to clamp. The four mirrors agree with each other today because the input never
+exercises the divergence, not because the formulas match.
+
+The condition that makes it live: raise `VanillaPassionBudget` past `capacity` (or lower `capacity`
+below the current budget, e.g. by retuning `MajorPassionCost`/`MinorPassionCost`). At that point the
+`Moments`/`grid_moments` pair keeps scoring the uncapped pips (bounded only by the late `Clamp01`,
+which saturates at 1.0 rather than at the pip figure `PassionNormFor`/`passion_from` would produce),
+while the `PassionNormFor`/`passion_from` pair caps first and produces a strictly lower figure for
+any outcome whose pips exceed capacity. The two pairs would silently diverge — a real defect with no
+gate watching it.
+
+This is the same shape as Q-04 and Q-14: the generator-agreement story ("all four mirrors agree") is
+true only because none of them is actually being exercised on the branch that would expose the
+difference, which is exactly the failure mode this whole audit series exists to catch.
+
+**Task 2's `check_mean_band_consistency` (`docs/tools/envelope_check.py`, its `_probe-both-off`,
+`_probe-skill-off` and `_probe-passion-off` probes) does NOT catch this either.** All three probes
+compare `grid_moments` (uncapped-first) against `make_composite` (capped-first) at zero spread —
+i.e. they compare exactly the two branches that disagree on capping order — but they do so at the
+CURRENT constants, where the divergence is a no-op. The probes exercise the branch on **both sides
+of the split equally**, so a new gate built the same way the Task 2 gate was would not close this
+gap; closing it needs a probe that raises the effective budget past capacity specifically, which is
+a scoring-constant change, not a profile-field probe.
+
+### What was not verified
+
+Whether raising `VanillaPassionBudget` past capacity in a scratch run actually produces a numeric
+divergence between the two mirror pairs — this entry states the mechanism and the exact trigger
+condition from reading the four sites, but no offline run forced the constants past the threshold to
+confirm the predicted divergence numerically.
+
+### Not fixed — filed only
+
+Out of scope for the branch that found it: the owner directed this be recorded, not corrected, so
+that a future retune of `VanillaPassionBudget`, `MajorPassionCost` or `MinorPassionCost` is not the
+first time anyone learns the four mirrors were never actually equivalent formulas. None of
+`Source/PawnVarianceSettings.cs`, `Source/DispersionModel.cs`, or the two functions in
+`docs/tools/envelope_check.py` named above were changed by this entry.
 
 ---
 
