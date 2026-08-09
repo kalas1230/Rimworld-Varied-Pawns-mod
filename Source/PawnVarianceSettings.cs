@@ -1462,6 +1462,12 @@ namespace PawnVarianceMod
         // in the one site that fix's enumeration ("the model sides") did not count as a model side.
         // Keep this condition identical to the applier's, minus its alreadyCommittedPips clause:
         // that clause is about the grow-up top-up path, which scores nothing.
+        //
+        // MIRRORS: passion-floor
+        // MIRRORS: passion-spend-loop
+        // MIRRORS: passion-capacity
+        // MIRRORS: enable-toggles
+        // MIRRORS: skill-clamp
         private static float PassionNormFor(float budget, float majorBias, bool floorToOne)
         {
             if (budget < 1f && floorToOne) budget = 1f;

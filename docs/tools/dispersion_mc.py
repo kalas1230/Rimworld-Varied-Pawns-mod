@@ -5,6 +5,22 @@ catch shared quadrature errors. It does NOT make verification fully independent:
 quadrature both substitute a flat AssumedVanillaSkillBaseline for each skill's real vanilla level.
 Only `Roll pawns and dump distribution` sees real baselines. Do not describe this as independent
 verification without that qualifier.
+
+MIRRORS: passion-floor
+MIRRORS: passion-spend-loop
+MIRRORS: passion-capacity
+MIRRORS: skill-clamp
+
+Enforced by envelope_check.py's GENERATOR_BRANCHES table. This file mirrors the generator by
+SAMPLING rather than by quadrature, which is the point of it -- but sampling the wrong model is
+still the wrong model, so it carries the same declarations as the analytic sides for the branches
+it actually implements.
+
+NOT declared: enable-toggles. This file does not read enableSkillVariance/enablePassionVariance at
+all (grep confirms it), so it is deliberately left off that branch's site list in
+GENERATOR_BRANCHES (TOGGLE_MIRROR_SITES) rather than carrying a marker for a mirror that does not
+exist. If this file ever learns the flags, move it back onto the full MIRROR_SITES tuple and add
+the marker here.
 """
 import math
 import os

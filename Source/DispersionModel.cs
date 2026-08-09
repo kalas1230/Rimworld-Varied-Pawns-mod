@@ -8,6 +8,17 @@ namespace PawnVarianceMod
     //
     // Monte Carlo deliberately does NOT live here: the gate cross-checks this against the Python
     // at 0.5pp, which only works while both sides are reproducible.
+    //
+    // MIRRORS: passion-floor
+    // MIRRORS: passion-spend-loop
+    // MIRRORS: passion-capacity
+    // MIRRORS: enable-toggles
+    // MIRRORS: skill-clamp
+    //
+    // Those five lines are enforced by docs/tools/envelope_check.py's GENERATOR_BRANCHES table.
+    // They declare which branches of the GENERATOR this file reproduces. Removing an
+    // implementation without removing its line, or adding a generator branch without adding a
+    // line here, fails the tool. See that table for why prose warnings were not enough.
     public static class DispersionModel
     {
         public const int QNodes = 256;
