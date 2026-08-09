@@ -665,6 +665,60 @@ def expected_best_of_n(profile, N, grid, composite):
     return acc
 
 
+def check_mean_band_consistency(C, P):
+    """At zero spread the dispersion model must reduce to the mean-band composite EXACTLY.
+
+    grid_moments with with_noise=False sets both spread terms to zero, so every integral it
+    performs collapses onto the mean band -- which is precisely what make_composite computes.
+    The two therefore have to agree to floating-point noise for EVERY profile at EVERY quality,
+    and they can only do so if both apply the same floor, the same spend loop, the same capacity
+    limit and the same clamps. It is a single equality that pins four separate correspondences.
+
+    WHY THIS IS NOT COVERED BY main()'s EXISTING SELF-CHECK. That one compares an INTEGRATED
+    Best-of-N figure at 1e-3, with a standing 4.1e-04 residual of quadrature error that would
+    comfortably hide a pointwise defect. More importantly it runs on the eight presets only, and
+    no preset has passionCountMin below 2.2 -- so vanilla's floor branch is unreachable from it.
+    Finding Q-04 lived in exactly that gap: the floor was mirrored into four sites, missed in the
+    fifth, and no gate could see the difference. The probes below are what make it reachable.
+    """
+    composite = make_composite(C)
+    moments = grid_moments(C)
+
+    probes = dict(P)
+
+    # Budget band entirely under one pip, with passionCountMin > 0: the floor MUST engage.
+    # Built from Faithful so every unrelated field is a real shipped value.
+    floor_probe = dict(P["Faithful"])
+    floor_probe["passionCountMin"] = 0.2
+    floor_probe["passionCountMax"] = 0.8
+    probes["_probe-floor"] = floor_probe
+
+    # passionCountMin == 0 is an explicit request for passionless pawns (Desperate's shape), and
+    # the floor must NOT engage. Same band otherwise, so a fix that floors unconditionally passes
+    # the probe above and fails this one.
+    open_probe = dict(floor_probe)
+    open_probe["passionCountMin"] = 0.0
+    probes["_probe-no-floor"] = open_probe
+
+    # Both axes off: the fallback branches, which have their own floor and their own spend loop.
+    off_probe = dict(P["Faithful"])
+    off_probe["enableSkillVariance"] = False
+    off_probe["enablePassionVariance"] = False
+    probes["_probe-both-off"] = off_probe
+
+    worst, worst_where = 0.0, ""
+    for name, p in sorted(probes.items()):
+        for i in range(41):
+            q = i / 40.0
+            mu, _ = moments(p, q, with_noise=False)
+            gap = abs(mu - composite(q, p))
+            if gap > worst:
+                worst, worst_where = gap, f"{name} @ q={q:.3f}"
+
+    print(f"mean-band consistency (zero spread, pointwise): {worst:.2e}  worst at {worst_where}")
+    return worst
+
+
 def main():
     C = parse_constants(read(CONSTANTS))
     P = parse_profiles(read(PROFILES))
@@ -682,6 +736,13 @@ def main():
     print(f"dispersion model self-check (zero noise vs analytic): {worst_selfcheck:.2e}")
     if worst_selfcheck > 1e-3:
         print("FAIL: the dispersion model does not reduce to the analytic score at zero noise")
+        return 1
+
+    worst_meanband = check_mean_band_consistency(C, P)
+    if worst_meanband > 1e-9:
+        print("FAIL: the dispersion model and the mean-band composite disagree at zero spread.")
+        print("      They integrate the same thing there, so a gap means one of them is missing")
+        print("      a branch the other has -- the floor, the spend loop, capacity or a clamp.")
         return 1
 
     # R carries the pip-efficiency factor, so it is a FUNCTION of the profile's Major bias, not a
