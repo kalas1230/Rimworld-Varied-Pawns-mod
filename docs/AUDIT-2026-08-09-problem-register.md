@@ -54,7 +54,7 @@ confirms a finding nobody had connected to it (Q-14 again).
 | [Q-16](#q-16) | Scoring | `CalculateCompositeScore` zeroes the weight of a disabled axis, making both of its own vanilla fallbacks dead code — the root cause under Q-01 | **Major** — ✅ **FIXED 2026-08-09** |
 | [Q-14](#q-14) | Scoring | The passion spend loop discretizes the budget into whole purchases and discards the remainder; no model side does — **1.60pp** on the enforcing metric | **Major** — ✅ **FIXED 2026-08-09** (models corrected, generator untouched; every published figure moved) |
 | [Q-02](#q-02) | Docs | Six `file.cs:NNN` citations in `HANDOVER.md` point at the wrong line; two are off by a consistent 66 | **Major** — ✅ **FIXED 2026-08-09** (a seventh was found and fixed in the same sweep) |
-| [Q-03](#q-03) | Scoring | The `Typical` readout divides a dispersion-aware numerator by a mean-band denominator — two different estimators of the same quantity | ~~Minor~~ → **Major**, ⏳ open — was `0.00pp`, **re-measured at −3.39%** on the shared denominator once Q-14 landed |
+| [Q-03](#q-03) | Scoring | The `Typical` readout divides a dispersion-aware numerator by a mean-band denominator — two different estimators of the same quantity | ~~Minor~~ → **Major** — ✅ **FIXED 2026-08-09** (was `0.00pp`, re-measured at −3.39% once Q-14 landed) |
 | [Q-04](#q-04) | Model drift | `CalculateCompositeScore` omits the vanilla passion floor that all four dispersion sites carry | **Minor** |
 | [Q-05](#q-05) | Model drift | Six constants that enter the score are outside the golden-file drift check | **Minor** |
 | [Q-06](#q-06) | Model drift | The ±4σ truncation window is hardcoded in two mirrors and derived from the constant in the third | **Minor** |
@@ -390,6 +390,15 @@ score must be vanilla's own — the `Faithful` baseline. Keeping the weights giv
 (0.8 × 0.25 + 1.5 × 0.260870) / 2.3 = 0.257089  ==  FaithfulBaseline()
 ```
 
+> [!NOTE]
+> **Both sides of this equation have since moved, and the right-hand name is now wrong.** The
+> passion term is `0.251087` and the total `0.250709`, because vanilla's 5-pip budget now runs
+> through vanilla's own discretizing spend loop (**Q-14**) — both sides moved together, so the
+> invariant itself is untouched and still exact. But it is no longer `FaithfulBaseline()`: that
+> function returns the dispersion-aware typical `0.2422` since **Q-03** was fixed. The invariant
+> compares against a constants-derived expression, not against that function, so it was never
+> affected — only this line's *name* for the quantity was. See Q-03's fix section.
+
 to nine decimal places, for every preset and at every quality. The old code returned `q` — the raw
 quality roll, on no meaningful scale at all. A second, independent confirmation: under the fallback
 semantics `Faithful` scores `0.257089` in **all four** flag combinations, which is what the
@@ -549,6 +558,52 @@ both model something (see "checked and clean"), but this is a mirror figure. Whe
 fix is to move `FaithfulBaseline` onto `TypicalAt` was not decided — it would change the published
 `0.2571` baseline by a currently-immeasurable amount but is a Rule 5 / Rule 6 action regardless,
 since it touches the reference every percentage is measured against.
+
+### ✅ Fixed 2026-08-09
+
+**The fix was the one this entry declined to commit to: `FaithfulBaseline()` moved onto
+`TypicalAt`.** By the time it was taken the amount was no longer "currently immeasurable" — Q-14
+made it `−3.39%` on `Faithful`, and since `FaithfulBaseline` is the denominator of every displayed
+percentage *and* the centre line of the distribution curve, the whole readout was skewed by it.
+
+One function changed. The numerators were already dispersion-aware
+(`ProfileEditorTab.cs:278` → `TypicalAt`); only the denominator was not.
+
+**The Best-of-N row was already correct** and is untouched: it divides by
+`FaithfulBestOfNBaseline(n)`, which is `Faithful`'s own Best-of-N at the same `N`, dispersion-aware
+on both sides. That is why the defect was confined to the `Typical` row — and it is worth noting
+that the *reason* it was correct is the "same-N baseline" warning already sitting on
+`FormatPowerPercent`, i.e. this class of bug had been reasoned about once and the reasoning simply
+was not carried to the other readout.
+
+**No shipped figure moves.** `envelope_check.py` reports `EnvelopeFigures.g.cs: unchanged` and Rule
+1 / Rule 2 still PASS — the envelope table always used the dispersion-aware estimator for both
+numerator and denominator, which is exactly why the tool could not see this defect. It is an
+in-game-readout defect only, and no offline gate could ever have caught it.
+
+### There are now two `Faithful` baselines, and conflating them is how this recurs
+
+This fix **splits a number that used to be one number**, which is a trap worth naming:
+
+| | value | what it is | used by |
+|---|---|---|---|
+| **readout** | `0.2422` | `Faithful`'s dispersion-aware typical | `FaithfulBaseline()`, the `Typical` row, the curve's centre |
+| **mean-band** | `0.2507` | what a zero-variance vanilla pawn scores | the both-axes-off invariant (**Q-16**), the `0.2500` argument |
+
+Both are correct and they measure different things: a disabled axis is a zero-variance constant,
+while `Faithful` with its axes on has real spread, and the composite is not linear across it. **The
+Q-16 invariant still holds and still reads `0.250709`** — it was never comparing against
+`FaithfulBaseline()`, it compares against a constants-derived expression, so it was unaffected. But
+its *prose* said "which is the Faithful baseline", and that sentence is now false. Corrected in
+`HANDOVER.md`, `Constants.cs`, `DebugActions.cs` and `PawnVarianceSettings.cs`; `envelope_check.py`
+now prints **both** figures side by side with their labels, so the next reader cannot quote one for
+the other.
+
+### What was not verified
+
+Not exercised in game. The readout should now show `Faithful` at `Baseline (0.24)` rather than a
+small non-zero percentage, and every other preset's `Typical` percentage moves by roughly +3.4pp
+relative to what it displayed before — neither has been observed on screen.
 
 ---
 
@@ -1078,9 +1133,10 @@ and are not on a step function.
 numerator and denominator, consistently. What is affected is the **in-game Row 3 readout**, whose
 denominator is `FaithfulBaseline` (mean-band) while its numerator is `TypicalAt`. That is now skewed
 by ~3.4%. Q-03's own entry says moving `FaithfulBaseline` onto `TypicalAt` is a Rule 5 / Rule 6
-action; it was **not** taken here, because it is a second scoring decision and landing it in the same
-edit would make this regeneration unattributable — the exact mistake the "Where to start" note warns
-about. **Q-03 should be re-read as Major and scheduled.**
+action; it was **not** taken in the same edit, because it is a second scoring decision and landing it
+here would make this regeneration unattributable — the exact mistake the "Where to start" note warns
+about. **It was taken immediately afterwards, as its own change: Q-03 is now ✅ fixed**, and because
+it moves no envelope figure the split was what let each change be attributed to its own cause.
 
 ### Still not verified in game
 

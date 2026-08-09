@@ -306,9 +306,17 @@ namespace PawnVarianceMod
             // are standalone INVARIANTS, derived from Constants rather than from the table.
             //
             // Invariant 1: with both axes off the mod changes nothing about the pawn, so the score
-            // must be vanilla's own -- which is the Faithful baseline -- for EVERY profile and at
-            // EVERY quality. Anything else means a disabled axis is being scored, or being dropped
-            // from the weighted average instead of falling back to vanilla.
+            // must be vanilla's own, for EVERY profile and at EVERY quality. Anything else means a
+            // disabled axis is being scored, or being dropped from the weighted average instead of
+            // falling back to vanilla.
+            //
+            // "Vanilla's own" is the MEAN-BAND composite of the vanilla-like profile. It is NOT
+            // PawnVarianceSettings.FaithfulBaseline(), which since 2026-08-09 returns the
+            // DISPERSION-AWARE typical instead (finding Q-03) and is a genuinely different
+            // quantity: a disabled axis is a zero-variance constant, while Faithful with its axes
+            // on is a profile with real spread, and the composite is not linear across it. The two
+            // read 0.2507 and 0.2422. This comment used to call them the same thing, which was
+            // harmless only while they happened to be equal to six decimals.
             //
             // The passion term runs through PassionSpend, because the pawn a disabled axis leaves
             // alone is a VANILLA pawn and vanilla's generator discretizes its own budget the same

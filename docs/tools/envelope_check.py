@@ -657,7 +657,21 @@ def main():
     print(f"  R = {ratio * eff(anchor):.2f} skill levels per passion pip at vanilla bias "
           f"{anchor:g}   (range {ratio * eff(0.0):.2f} at bias 0 .. "
           f"{ratio * eff(1.0):.2f} at bias 1)")
-    print(f"Faithful baseline @ q=0.50: {composite(0.50, P['Faithful']):.4f}\n")
+    # TWO different baselines, printed together because conflating them was audit finding Q-03.
+    #
+    #   readout   - what PawnVarianceSettings.FaithfulBaseline() returns and what the in-game
+    #               "Typical" row and the distribution curve are measured against. Dispersion-aware,
+    #               so it matches the numerators it divides.
+    #   mean-band - what a ZERO-VARIANCE vanilla pawn scores, i.e. the value the both-axes-off
+    #               invariant (Q-16) turns on. NOT the readout's denominator.
+    #
+    # These agreed to six decimals until the spend loop was modelled (Q-14) and now differ by
+    # ~3.4%: E[spent] is a staircase and the mean band lands just above one of its jumps, so
+    # f(E[X]) and E[f(X)] separate. Quoting either one as "the Faithful baseline" without saying
+    # which is how the readout ended up dividing one estimator by the other.
+    mu_readout, _ = grid_moments(C)(P["Faithful"], 0.50)
+    print(f"Faithful baseline @ q=0.50: {mu_readout:.4f} readout (dispersion-aware), "
+          f"{composite(0.50, P['Faithful']):.4f} mean-band (both-axes-off invariant)\n")
 
     dispersed = {n: grid_score(p, with_noise=True) for n, p in P.items()}
     score = {(n, N): dispersed[n][N] for n in P for N in BATCHES}

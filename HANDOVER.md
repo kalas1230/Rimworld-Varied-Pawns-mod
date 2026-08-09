@@ -104,7 +104,18 @@ fight the implementation** — each one has bitten at least once.
 - **No passion-budget clamp.** A rolled budget above what the pawn's eligible skills can hold is
   discarded, and that is what lets restricted-skill pawns max out. Widening `passionCountMax` past
   ~12 buys progressively less. See "Why the budget is not clamped".
-- **The `Faithful` baseline is `0.2507`, and an exactly-`0.2500` baseline was rejected.**
+- **Two baselines, and they are not interchangeable.** `Faithful` has two reference numbers and
+  quoting the wrong one is audit finding Q-03.
+  | | value | what it is | used by |
+  |---|---|---|---|
+  | **readout** | `0.2422` | `Faithful`'s **dispersion-aware** typical — noise integrated through the clamps | `FaithfulBaseline()`; the "Typical" row's denominator; the curve's centre line |
+  | **mean-band** | `0.2507` | what a **zero-variance** vanilla pawn scores | the both-axes-off invariant (Q-16); the `0.2500` argument below |
+
+  They agreed to six decimals until 2026-08-09 and now differ by ~3.4%, because `E[spent]` is a
+  staircase and the mean band lands just above one of its jumps. **The readout must divide like by
+  like** — that is the whole of Q-03. The Best-of-N row always did this correctly, via
+  `FaithfulBestOfNBaseline`, which is why only the "Typical" row was wrong.
+- **The `Faithful` mean-band baseline is `0.2507`, and an exactly-`0.2500` baseline was rejected.**
   `Faithful`'s budget midpoint is `5.0` to match **vanilla's own flat budget**, which is what the
   vanilla-like preset should have carried all along. Chasing a round `0.2500` reference instead
   would have needed a `4.79`-pip midpoint — a number picked to make a readout tidy rather than to
@@ -343,10 +354,16 @@ constant, so it contributes nothing to σ.
 > divided by the same `Faithful` baseline: two scales, one reference.
 >
 > **The invariant that catches this:** with both axes off the mod changes nothing, so the score must
-> be exactly the `Faithful` baseline.
-> `(0.8 × 0.25 + 1.5 × 0.251087) / 2.3 = 0.250709 = FaithfulBaseline()`. The old code returned `q`
-> there. `Faithful` must also score `0.250709` in **all four** flag combinations, being the
-> vanilla-mimicking preset. Both are checked by the in-game verify action.
+> be exactly vanilla's own, i.e. the **mean-band** composite of the vanilla-like profile:
+> `(0.8 × 0.25 + 1.5 × 0.251087) / 2.3 = 0.250709`. The old code returned `q` there. `Faithful` must
+> also score `0.250709` in **all four** flag combinations, being the vanilla-mimicking preset. Both
+> are checked by the in-game verify action.
+>
+> ⚠️ **This is no longer `FaithfulBaseline()`.** It was until 2026-08-09; that function now returns
+> the **dispersion-aware** typical, `0.2422`, because the readout it feeds is dispersion-aware and
+> was dividing one estimator by another (Q-03). Two different quantities, both correct: a disabled
+> axis is a zero-variance constant, while `Faithful` with its axes on is a profile with real spread,
+> and the composite is not linear across it. **Do not reconcile them.** See "Two baselines" below.
 >
 > The passion term is `0.251087`, not the `0.260870` this line carried until 2026-08-09, because
 > vanilla's 5-pip budget is now spent through vanilla's own discretizing loop like every other
@@ -414,7 +431,7 @@ dispersion model self-check (zero noise vs analytic): 4.10e-04
 wS=0.8  wP=1.5  pips/18  skill/20  K=8
 Exchange rate R(bias) = (20/18) * (1.5/0.8) * eff(bias)
   R = 1.96 skill levels per passion pip at vanilla bias 0.5   (range 1.77 at bias 0 .. 2.08 at bias 1)
-Faithful baseline @ q=0.50: 0.2507
+Faithful baseline @ q=0.50: 0.2422 readout (dispersion-aware), 0.2507 mean-band (both-axes-off invariant)
 
 profile                     N=1                N=5               N=25               N=50
 Faithful        0.2418   +0.0%     0.3041   +0.0%     0.3455   +0.0%     0.3595   +0.0% 

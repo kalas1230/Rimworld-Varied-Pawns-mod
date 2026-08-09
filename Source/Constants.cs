@@ -100,11 +100,19 @@ namespace PawnVarianceMod
         // factor CalculateCompositeScore applied to the budget, which was a 24-pip-era unit error
         // (see the note on that line) and was removed 2026-08-06. SETTLED 2026-08-07: Faithful's
         // budget midpoint was moved 4.0 -> 5.0, matching vanilla's own flat budget, which is what
-        // the vanilla-like preset should have carried all along. The baseline is now 0.2571 and the
-        // two axes deliberately do NOT coincide -- chasing an exactly-0.2500 reference would have
-        // needed a 4.79-pip midpoint (0.25 x 18 / 0.9391), i.e. a number picked to make a readout
-        // round rather than to match the game. The round 0.2500 is cosmetic and nothing depends on
-        // it, which is exactly why the old claim went unchallenged for so long.
+        // the vanilla-like preset should have carried all along. The mean-band baseline is now
+        // 0.2507 (was 0.2571 until 2026-08-09, when the score started spending budgets through the
+        // generator's own discretizing loop -- see PassionSpend) and the two axes deliberately do
+        // NOT coincide -- chasing an exactly-0.2500 reference would have needed a 4.79-pip midpoint
+        // (0.25 x 18 / 0.9391), i.e. a number picked to make a readout round rather than to match
+        // the game. The round 0.2500 is cosmetic and nothing depends on it, which is exactly why
+        // the old claim went unchallenged for so long -- and the near-miss is now from the other
+        // side, which changes nothing.
+        //
+        // 0.2507 is the MEAN-BAND baseline, the one the both-axes-off invariant uses. It is NOT
+        // what PawnVarianceSettings.FaithfulBaseline() returns: that is the dispersion-aware
+        // typical, 0.2422. Two different quantities since 2026-08-09 -- see HANDOVER "Two
+        // baselines" before quoting either.
         public const float MaxPassionPips = 18f;
 
         // NOTE: the assumed skill count (12) is NOT a constant of its own. It is already inside
@@ -141,7 +149,10 @@ namespace PawnVarianceMod
         // silently dragged the realised rate to 1.83 at vanilla bias while the comment here still
         // claimed 1.94; 1.5 puts it back at 1.96, i.e. the ~2.0 that was actually decided. Measured,
         // not assumed: envelope headroom IMPROVED (Sovereign @ N=1, 6.6pp -> 7.0pp; since widened
-        // again to 10.3pp by the 2026-08-07 passion-band retune), because the
+        // again to 10.3pp by the 2026-08-07 passion-band retune, and re-measured at 8.7pp on
+        // 2026-08-09 when the spend loop was modelled -- every preset tightened together, so the
+        // conclusion is unchanged and there is simply less room than this line used to imply),
+        // because the
         // power tiers differ from Faithful mostly in SKILL, so weighting passion higher pulls them
         // toward the reference. Wildcard is the one preset that genuinely moves (+18.3% -> +19.3% at
         // N=50), being the profile with the wide passion budget.

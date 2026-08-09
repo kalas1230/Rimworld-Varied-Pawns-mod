@@ -1541,8 +1541,15 @@ namespace PawnVarianceMod
             // The check that settles it: with BOTH axes off every pawn is untouched vanilla, so the
             // score must be exactly the Faithful baseline. Keeping the weights gives
             //     (0.8 x 0.25 + 1.5 x 0.251087) / 2.3 = 0.250709
-            // which is FaithfulBaseline() to six decimals. The old code returned `q` there — the
-            // raw quality roll, on no meaningful scale at all.
+            // which is the mean-band composite of the vanilla-like profile. The old code returned
+            // `q` there — the raw quality roll, on no meaningful scale at all.
+            //
+            // NOTE this is NOT FaithfulBaseline(). It was, until 2026-08-09; that function now
+            // returns the dispersion-aware typical (0.2422) because the readout it feeds is
+            // dispersion-aware and was dividing two different estimators (finding Q-03). Both
+            // numbers are correct and they measure different things — a disabled axis is a
+            // zero-variance constant, Faithful with its axes on has real spread. Do not "fix" one
+            // to match the other.
             //
             // The passion term is 0.251087 rather than the 0.260870 it was until 2026-08-09
             // because vanilla's 5-pip budget now runs through vanilla's own discretizing spend
@@ -1634,10 +1641,35 @@ namespace PawnVarianceMod
 
         private static float cachedFaithfulBaseline = -1f;
 
+        // The denominator of the "Typical" readout and the centre line of the distribution curve.
+        //
+        // DISPERSION-AWARE, and it must be. Until 2026-08-09 this read
+        // `CalculateCompositeScore(0.50f, ...)` -- the MEAN BAND, with no noise integrated -- while
+        // every numerator it divides is `DispersionModel.TypicalAt`, which integrates the noise
+        // through the same clamps the generator applies. Those are two different estimators of the
+        // same quantity, `f(E[X])` against `E[f(X)]` (audit finding Q-03), and they agree only
+        // where `f` is linear across the range the noise actually reaches.
+        //
+        // That WAS true to six decimals, which is why the mismatch was filed as Minor on a measured
+        // 0.00pp and left alone. It stopped being true the moment the passion axis started spending
+        // budgets through the generator's discretizing loop (Q-14): E[spent] is a staircase, the
+        // mean band lands at 5.0 pips which sits just ABOVE one of its jumps (4.8125 delivered),
+        // and the average of the staircase over the budget Gaussian is ~4.55. Faithful's two
+        // estimators went from agreeing to six decimals to differing by -3.39%, on the number that
+        // is the denominator of EVERY displayed percentage and the centre of the curve.
+        //
+        // Use TypicalAt, not CalculateCompositeScore, if this is ever touched again: the readout is
+        // dispersion-aware by design (see HANDOVER "Dispersion-aware scoring"), so the reference it
+        // is measured against has to be the same estimator. The Best-of-N row already did this
+        // correctly via FaithfulBestOfNBaseline, which is why only this one was wrong.
+        //
+        // Evaluated at 0.50 rather than at VanillaLike.averageQuality only because those are the
+        // same number; if Faithful's averageQuality ever moves, this should follow it.
         private static float FaithfulBaseline()
         {
             if (cachedFaithfulBaseline < 0f)
-                cachedFaithfulBaseline = CalculateCompositeScore(0.50f, VarianceProfiles.VanillaLike.MakeValues());
+                cachedFaithfulBaseline = DispersionModel.TypicalAt(
+                    VarianceProfiles.VanillaLike.MakeValues(), 0.50f);
             return cachedFaithfulBaseline;
         }
 
