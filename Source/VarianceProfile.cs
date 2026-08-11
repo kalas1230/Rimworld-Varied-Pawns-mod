@@ -26,12 +26,23 @@ namespace PawnVarianceMod
     {
         public float averageQuality = 0.5f;
         public float skillSpread = 0.857321f;
-        // These four match the Scribe_Values defaults in ExposeData below, which in turn match
-        // Faithful. They are effectively unreachable -- every creation path passes explicit values
-        // (PawnVarianceSettings.cs:1171/1181, Clone), and the parameterless ctor is only used by
-        // Scribe, which overwrites all four on load -- but they used to read 1.0/7.0/0.35/0.8, a
-        // stale copy of an older Distinct that matched no shipped preset. Keep them in step with
-        // the Scribe defaults so nothing here can be mistaken for a live default.
+        // These field initialisers do NOT all match the Scribe_Values defaults in ExposeData below.
+        // This comment used to claim they did, and to claim the Scribe defaults are Faithful's:
+        //   averageQuality  0.5       == Scribe 0.5       == Faithful     agrees
+        //   skillSpread     0.857321f != Scribe 0.489898f               DISAGREES (this is
+        //                                                               Distinct's value; the
+        //                                                               Scribe default is Faithful's)
+        //   passionSpread   1.0       == Scribe 1.0       == Faithful     agrees
+        //   passionMajorBias 0.5      == Scribe 0.5       == Faithful     agrees
+        // The same split runs through the fields below: skillShiftMin/Max initialise -4/6 against
+        // Scribe's -3/3, and traitCountMin/Max initialise 1/6 against Scribe's 2/3.
+        //
+        // ALL OF IT IS DEAD, and that is why it is documented rather than fixed. Every creation
+        // path passes explicit values (PawnVarianceSettings.cs:1172/1182, Clone, and every preset
+        // in this file), and the parameterless ctor is reached only by Scribe -- whose ExposeData
+        // overwrites every one of these fields on load. Nothing can observe the mismatch.
+        // **Do not chase it into agreement**: the edit would touch a file that pawn generation
+        // reads, to change values no code path can reach. Correct the claim, not the numbers.
         public float passionSpread = 1.0f;
         public float passionMajorBias = 0.5f;
 
