@@ -709,13 +709,14 @@ namespace PawnVarianceMod
 
             DrawFactionOverridesSection(listing);
 
-            // Not behind a Biotech check -- HAR races exist without it.
-            DrawRaceOverridesSection(listing);
-
             if (ModsConfig.BiotechActive)
             {
                 DrawXenotypeOverridesSection(listing);
             }
+
+            // Last on purpose: race overrides exist mainly for race mods, so they should not sit
+            // above xenotypes in the list. Not behind a Biotech check -- HAR races exist without it.
+            DrawRaceOverridesSection(listing);
 
             GUI.enabled = wasEnabled;
 
