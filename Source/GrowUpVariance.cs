@@ -8,11 +8,83 @@ using Verse;
 namespace PawnVarianceMod
 {
     // The single entry point for grow-up variance. Three triggers reach it — the life-stage change
-    // when no growth letter is outstanding, the growth-moment letter being resolved, and the
-    // fallback sweep — and all three must behave identically, which is why this lives in one place
-    // rather than being duplicated per trigger.
+    // when no growth letter is outstanding, the growth-moment letter being resolved, and the letter
+    // leaving the stack unresolved — and all three must behave identically, which is why this lives
+    // in one place rather than being duplicated per trigger.
+    //
+    // NONE of the three carries stored state. There is deliberately no record of "this pawn is
+    // pending" anywhere: the pending condition is derivable from the letter stack, and holding it
+    // instead would mean owning a GameComponent, whose type name RimWorld writes into every colony
+    // save (Game.ExposeData deep-saves Game.components by class name, with no opt-out). Removing
+    // the mod from a save would then log two errors per load. The whole mod now writes nothing to
+    // the save file — see the note on GrowthMomentMakeChoices_Postfix for how once-only
+    // application is guaranteed without a record.
     public static class GrowUpVariance
     {
+        // Is this the letter for the pawn's ADULTHOOD growth moment, as opposed to the age-7 or
+        // age-10 one? This distinction is what makes once-only per-PAWN rather than per-LETTER, and
+        // all three trigger paths must agree on it, which is why it lives here rather than being
+        // re-expressed at each site.
+        //
+        // Verified in decompiled Pawn_AgeTracker.BirthdayBiological — the ONLY site in
+        // Assembly-CSharp that constructs a growth letter at all:
+        //
+        //     bool flag = (float)birthdayAge == AdultMinAge;
+        //     ...
+        //     LetterDef negativeEvent = (flag ? LetterDefOf.ChildToAdult : LetterDefOf.ChildBirthday);
+        //
+        // So ChildToAdult marks the adulthood moment exactly, and the earlier moments never carry
+        // it. Letter.def is scribed by vanilla (Scribe_Defs.Look(ref def, "def")), so this survives
+        // save/load with nothing stored by us — the constraint that forced the GameComponent's
+        // deletion in the first place. AdultMinAge is race-driven, so this stays correct for HAR
+        // races that move the adult threshold, for the same reason the DevelopmentalStage checks do.
+        //
+        // WHY THIS EXISTS: the guard it replaces was the `choiceMade` false -> true transition
+        // alone, which is once per LETTER. A pawn reaching 13 with its age-7 and age-10 letters
+        // never clicked holds three letters, and clearing them fired Apply three times, each rolling
+        // a fresh quality (measured 2026-08-11: 0.68, 0.37, 0.44). Both appliers are add-only
+        // top-ups recomputed against current state, so that run happened to be a no-op — but a later
+        // pass rolling a HIGHER quality gets a higher target and genuinely adds, and rolling fresh
+        // per pass makes the pawn best-of-N on trait count, which a single-roll design must not be.
+        //
+        // LetterDefOf.ChildToAdult is [MayRequireBiotech] and therefore null without Biotech. That
+        // needs no guard: reference equality against null simply never matches, and without Biotech
+        // vanilla issues no growth letters for it to match against anyway.
+        public static bool IsAdulthoodGrowthLetter(ChoiceLetter_GrowthMoment letter)
+        {
+            return letter != null && letter.def == LetterDefOf.ChildToAdult;
+        }
+
+        // Does this pawn have its ADULTHOOD growth-moment letter still waiting on the player?
+        //
+        // This IS the pending state — computed, never stored. Previously a scribed list on a
+        // GameComponent held the same answer; that list was only ever populated when this method
+        // already returned true (the single Register call site gated on it), so the list was a
+        // cache of a question the letter stack can always answer directly.
+        //
+        // Narrowed to the adulthood letter alongside the two appliers, and that is not optional
+        // symmetry — it is what stops the fix creating a worse bug. If only the appliers checked
+        // IsAdulthoodGrowthLetter, a pawn turning 13 while holding a stale age-7 letter would make
+        // the life-stage hook defer on a letter neither applier will ever act on, and that pawn
+        // would silently receive NO variance at all. The deferral condition and the thing that
+        // finishes the deferral have to name the same letter.
+        public static bool HasUnresolvedGrowthLetter(Pawn pawn)
+        {
+            List<Letter> letters = Find.LetterStack?.LettersListForReading;
+            if (letters == null) return false;
+
+            for (int i = 0; i < letters.Count; i++)
+            {
+                if (letters[i] is ChoiceLetter_GrowthMoment growthLetter
+                    && growthLetter.pawn == pawn
+                    && IsAdulthoodGrowthLetter(growthLetter)
+                    && !growthLetter.choiceMade
+                    && !growthLetter.TimeoutPassed)
+                    return true;
+            }
+            return false;
+        }
+
         // triggerPath is purely diagnostic: it names which of the three routes got here, so a
         // verbose trace says why the pass ran at the moment it did.
         public static void Apply(Pawn pawn, string triggerPath)
@@ -25,11 +97,11 @@ namespace PawnVarianceMod
 
             var settings = PawnVarianceMod.Settings;
 
-            // The decline checks live INSIDE the try, not above it: GrowUpPendingComponent's sweep
-            // calls this straight from GameComponentTick with no handler of its own, so anything that
-            // throws here — Faction.OfPlayer being null, most plausibly — would escape into vanilla's
-            // component-tick loop and repeat every sweep. The suppression logging is not worth
-            // throwing for.
+            // The decline checks live INSIDE the try, not above it: the letter-removal trigger calls
+            // this from inside vanilla's LetterStack UI update, so anything that throws here —
+            // Faction.OfPlayer being null, most plausibly — would escape into the letter stack and
+            // repeat every frame the letter is still being removed. The suppression logging is not
+            // worth throwing for.
             try
             {
                 // Repeated here even though DevelopmentalStage_Postfix already checked both at

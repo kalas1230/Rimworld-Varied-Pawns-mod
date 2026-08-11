@@ -121,6 +121,94 @@ namespace PawnVarianceMod
             Log.Message(sb.ToString());
         }
 
+        // ------------------------------------------------------------------------------------
+        // Growth-moment observability.
+        // ------------------------------------------------------------------------------------
+        // The grow-up path is the least observable thing in the mod: it holds NO state (the
+        // pending condition is derived from the letter stack -- see GrowUpVariance), it is off by
+        // default, and every one of its decline paths is a bare `return`. So a pawn that "should"
+        // have received grow-up variance and did not looks identical to a broken mod, with nothing
+        // in the log either way unless verboseLogging happens to be on.
+        //
+        // This action prints, for every humanlike pawn on the map, the four facts that actually
+        // decide the outcome: the pawn's age, its developmental stage, whether this hook has
+        // OBSERVED it at a prior stage (the !hadBaseline gate), and whether it currently has an
+        // unresolved growth letter. It calls the real GrowUpVariance.HasUnresolvedGrowthLetter
+        // rather than re-deriving the answer, so a regression in the predicate cannot pass here --
+        // the same reason "Dump override resolution matrix" calls the real ValuesFor.
+        //
+        // It REPORTS, it does not assert. There is no expected-value table to compare against:
+        // whether a given pawn should be pending depends on what the player has clicked.
+        [DebugAction(Category, "Dump growth-moment state",
+            allowedGameStates = AllowedGameStates.PlayingOnMap)]
+        private static void DumpGrowthMomentState()
+        {
+            var settings = PawnVarianceMod.Settings;
+            var sb = new StringBuilder();
+            sb.AppendLine("[PawnVarianceMod] GROWTH-MOMENT STATE");
+            sb.AppendLine($"  applyVarianceToChildren: {settings.applyVarianceToChildren}"
+                          + $"   verboseLogging: {settings.verboseLogging}");
+            if (!settings.applyVarianceToChildren)
+                sb.AppendLine("  ^^ OFF -- the grow-up path will decline every pawn below, whatever else this says.");
+
+            // Growth letters currently on the stack, with the two fields the triggers read.
+            List<Letter> letters = Find.LetterStack?.LettersListForReading;
+            var growthLetters = letters == null
+                ? new List<ChoiceLetter_GrowthMoment>()
+                : letters.OfType<ChoiceLetter_GrowthMoment>().ToList();
+            sb.AppendLine($"  growth letters on the stack: {growthLetters.Count}");
+            foreach (var gl in growthLetters)
+            {
+                // def is the per-PAWN discriminator: ChildToAdult is the adulthood moment,
+                // ChildBirthday is the age-7 or age-10 one that must NOT trigger a pass. Printed
+                // because a pawn holding three letters is the exact shape of the defect this
+                // separates, and choiceMade/tier alone cannot tell those three apart.
+                sb.AppendLine($"    {gl.pawn?.LabelShortCap ?? "(null pawn)"}"
+                              + $"  choiceMade={gl.choiceMade}  timeoutPassed={gl.TimeoutPassed}"
+                              + $"  tier={gl.growthTier}  def={gl.def?.defName ?? "(null)"}"
+                              + $"  {(GrowUpVariance.IsAdulthoodGrowthLetter(gl) ? "<- ADULTHOOD (actionable)" : "(childhood -- ignored)")}");
+            }
+
+            var pawns = Find.CurrentMap?.mapPawns?.AllPawnsSpawned;
+            if (pawns == null)
+            {
+                sb.Append("  no current map.");
+                Log.Message(sb.ToString());
+                return;
+            }
+
+            sb.AppendLine();
+            sb.AppendLine("  pawn                 age  stage        observed-as  letter?  verdict");
+            foreach (Pawn pawn in pawns.Where(p => p?.RaceProps != null && p.RaceProps.Humanlike)
+                                       .OrderBy(p => p.ageTracker?.AgeBiologicalYears ?? 0))
+            {
+                int age = pawn.ageTracker?.AgeBiologicalYears ?? -1;
+                DevelopmentalStage stage = pawn.DevelopmentalStage;
+                bool hasBaseline = DevelopmentalStage_Postfix.TryGetObservedStage(pawn, out DevelopmentalStage seen);
+                bool letterOut = GrowUpVariance.HasUnresolvedGrowthLetter(pawn);
+
+                // Mirrors PostfixInner's gate order so the verdict explains itself. "would defer"
+                // is the derived pending state -- the thing that used to be a scribed list.
+                string verdict;
+                if (!settings.applyVarianceToChildren) verdict = "declined (children off)";
+                else if (letterOut) verdict = "WOULD DEFER (letter outstanding)";
+                else if (stage != DevelopmentalStage.Adult) verdict = "not adult yet";
+                else if (!hasBaseline) verdict = "NOT ACTIONABLE -- no observed baseline; tick the game";
+                else if (seen == DevelopmentalStage.Adult) verdict = "already adult when last observed";
+                else verdict = "would apply on next transition";
+
+                sb.AppendLine($"  {pawn.LabelShort,-18} {age,4}  {stage,-11}  "
+                              + $"{(hasBaseline ? seen.ToString() : "(none)"),-11}  "
+                              + $"{(letterOut ? "yes" : "no"),-7}  {verdict}");
+            }
+
+            sb.AppendLine();
+            sb.Append("  NOTE: 'observed-as' is this mod's own baseline, not vanilla's. It is only "
+                      + "recorded when Pawn_AgeTracker.AgeTickInterval runs, so it stays empty while "
+                      + "the game is paused -- and without it an Adult transition applies nothing.");
+            Log.Message(sb.ToString());
+        }
+
         [DebugAction(Category, "Verify Best-of-N against envelope_check.py",
             allowedGameStates = AllowedGameStates.PlayingOnMap)]
         private static void VerifyBestOfN()
@@ -155,33 +243,56 @@ namespace PawnVarianceMod
             //     1024 belong to the retired scheme; keep them out of this reasoning.
             //
             // So the expected raw gap is now float-precision-scale (float32 against float64, plus
-            // MathUtil.NormalCdf's ~1.5e-7 Erf approximation) rather than ~0.9%, and 3% is roughly
-            // four orders of magnitude looser than the disagreement it is nominally sized for.
-            // It is left at 3% ANYWAY, deliberately: this gate has never been run against a
-            // running build since the dispersion model landed, so the real gap is predicted, not
-            // measured, and tightening a threshold on a prediction is how a gate starts crying
-            // wolf. TIGHTEN IT ONCE THE GATE HAS ACTUALLY BEEN RUN and the observed raw deviations
-            // are in hand -- the 0.5pp DISPLAY tolerance is the one carrying the weight until then.
+            // MathUtil.NormalCdf's ~1.5e-7 Erf approximation) rather than ~0.9%.
+            //
+            // THE RAW TOLERANCE IS 0.1%, TIGHTENED FROM 3% ON A MEASUREMENT, NOT A PREDICTION.
+            // 3% was inherited from the retired slip and then held on the explicit condition that
+            // the gate had never been run against a running build since the dispersion model
+            // landed -- tightening onto a prediction is how a gate starts crying wolf. That
+            // condition has since been met: the gate ran against the shipped build 32/32 with a
+            // worst raw deviation of 0.01%. 0.1% is 10x that observed worst, and still ~30x
+            // tighter than the 3% it replaces. If a future run trips it, the first question is
+            // whether the two integrators diverged in METHOD -- which is the failure 3% was too
+            // loose to see -- not whether to widen the number back.
+            //
+            // Do NOT push it below ~0.05%: the two sides differ in float width by construction
+            // (C# float32 vs Python float64), so some daylight here is structural, not a defect.
             //
             // Gating the raw score at 0.5% (as this did originally, while its comment claimed to be
             // measuring percentage points) failed 16 times: 15 on the shared right-edge bias of the
             // day, and one on the genuine n == 1 shortcut defect in CalculateBestOfNScoreCore --
             // which was indistinguishable from the noise precisely because the noise was so loud.
-            // That history is why the number is wide; it is not evidence that it is still right.
+            // That history is why the number WAS wide; those 15 shared-bias failures cannot recur,
+            // because the bias that produced them is gone (see the bullets above).
             const float DisplayTolerancePp = 0.5f;
-            const float RawToleranceRelPct = 3.0f;
+            const float RawToleranceRelPct = 0.1f;
 
             var sb = new StringBuilder();
             sb.AppendLine($"[PawnVarianceMod] Best-of-N cross-check vs {EnvelopeFigures.Tool}");
             // Node counts reported from the grids that actually produced both sides of this
-            // comparison. EnvelopeFigures.ReferenceNodes (20000) and BestOfNIntegrationNodes
-            // (1024) describe the retired analytic scheme and printing them here implied a
-            // resolution gap that no longer exists -- see the tolerance note above.
+            // comparison. This line used to print EnvelopeFigures.ReferenceNodes (20000) against
+            // BestOfNIntegrationNodes (1024) and so implied a resolution gap that no longer exists;
+            // both belonged to the retired analytic scheme -- see the tolerance note above.
             sb.AppendLine($"  dispersion grid {DispersionModel.QNodes}q x {DispersionModel.XNodes}x "
                 + "on both sides; "
                 + $"readout tolerance {DisplayTolerancePp:F2}pp, raw {RawToleranceRelPct:F2}%");
 
             int failures = 0;
+
+            // THE GRID ITSELF IS NOW ASSERTED, not just printed. Everything above about the raw
+            // tolerance rests on one premise -- that the reference figures and the live integrator
+            // were produced on the SAME grid -- and until this check existed, that premise was
+            // load-bearing prose. Retuning DispersionModel.QNodes/XNodes without re-running
+            // envelope_check.py (or vice versa) reintroduces exactly the resolution gap Q-09
+            // retired, and the raw comparison below would absorb a small drift silently while the
+            // 0.5pp display tolerance never noticed.
+            //
+            // This is the same class of check as the Gen* constant drift checks further down, and
+            // it exists for the same reason: "both sides agree" is only meaningful if something
+            // verifies they were asked the same question. Two integrators agreeing with each other
+            // while measuring different things is this project's most-repeated defect.
+            failures += CheckGrid(sb, "QNodes", DispersionModel.QNodes, EnvelopeFigures.ReferenceQNodes);
+            failures += CheckGrid(sb, "XNodes", DispersionModel.XNodes, EnvelopeFigures.ReferenceXNodes);
 
             // Modded skills change what the passion axis MEANS, and nothing else can detect it.
             // The score's capacity term assumes MaxPassionPips / MajorPassionCost skills, because
@@ -208,6 +319,12 @@ namespace PawnVarianceMod
             // every figure below is measuring against the wrong reference, and a table that is
             // merely SELF-consistent would otherwise pass while being wrong -- which is exactly
             // the failure mode a golden file is supposed to prevent.
+            //
+            // Snapshotted rather than tested as `failures > 0`: the advisory below names
+            // Constants.cs specifically, so it must fire only for failures THIS block produced.
+            // Reading the shared counter made the grid check above misreport as constant drift,
+            // and would do the same to any check inserted here later.
+            int failuresBeforeConstants = failures;
             failures += CheckConstant(sb, "CompositeSkillWeight",
                 Constants.CompositeSkillWeight, EnvelopeFigures.GenCompositeSkillWeight);
             failures += CheckConstant(sb, "CompositePassionWeight",
@@ -275,7 +392,7 @@ namespace PawnVarianceMod
             failures += CheckConstant(sb, "VanillaPassionBudget",
                 Constants.VanillaPassionBudget, EnvelopeFigures.GenVanillaPassionBudget);
 
-            if (failures > 0)
+            if (failures > failuresBeforeConstants)
             {
                 sb.AppendLine("  ^^ Constants.cs has moved since the reference was generated.");
                 sb.AppendLine("     Re-run `python docs/tools/envelope_check.py` and commit "
@@ -632,6 +749,20 @@ namespace PawnVarianceMod
             return 1;
         }
 
+        // Exact integer equality, deliberately: unlike the Gen* float constants there is no
+        // tolerance to reason about, and a grid that is off by even one node is a different
+        // quadrature. The remedy is always to re-run envelope_check.py, never to edit the
+        // generated file -- which is why the message says so.
+        private static int CheckGrid(StringBuilder sb, string name, int live, int reference)
+        {
+            if (live == reference) return 0;
+            sb.AppendLine($"  GRID MISMATCH: DispersionModel.{name} is {live} but the reference "
+                + $"figures were integrated at {reference}. The two implementations are no longer "
+                + "running the same quadrature, so every raw comparison below is measuring a "
+                + "resolution gap on top of any real defect. Re-run docs/tools/envelope_check.py.");
+            return 1;
+        }
+
         // ------------------------------------------------------------------------------------
         // 2. Roll a batch of pawns and dump the distribution.
         // ------------------------------------------------------------------------------------
@@ -776,7 +907,7 @@ namespace PawnVarianceMod
                     }
                     finally
                     {
-                        pawn?.Discard(true);
+                        DiscardThrowawayPawn(pawn);
                     }
                 }
 
@@ -853,7 +984,7 @@ namespace PawnVarianceMod
                             }
                             finally
                             {
-                                p?.Discard(true);
+                                DiscardThrowawayPawn(p);
                             }
                         }
                     }
@@ -1009,9 +1140,7 @@ namespace PawnVarianceMod
                     }
                     finally
                     {
-                        // Unspawned throwaway pawns must be discarded explicitly or they leak into
-                        // the world pawn pool and show up in later events.
-                        pawn?.Discard(true);
+                        DiscardThrowawayPawn(pawn);
                     }
                 }
             }
@@ -1180,6 +1309,40 @@ namespace PawnVarianceMod
                     + $"{DispersionModel.BestOfN(v, 50),9:F4}");
             }
             Log.Message(sb.ToString());
+        }
+
+        // Cleanup for a pawn that was generated only to be measured and must leave no trace.
+        //
+        // Every step here is load-bearing, and each one exists because the step before it opened a
+        // new refusal path -- all three of these debug actions used to end in a bare Discard(true),
+        // which is a NO-OP:
+        //
+        //   1. Verse.Thing.Discard bails out unless the thing is already destroyed, logging
+        //      "Tried to discard <name> whose state is -1." A freshly generated, never-spawned pawn
+        //      is state -1, so the discard never ran -- one warning per pawn (1000 on the largest
+        //      batch, each a candidate to trip GABS's attention gate) and no cleanup at all.
+        //   2. Destroying first clears that, but Pawn.Destroy hands the pawn to the world pawn
+        //      pool, and Pawn.Discard refuses a world pawn too ("Tried to discard a world pawn
+        //      <name>."). So destroying ALONE is worse than the original bug: it converts throwaway
+        //      pawns into retained world pawns, which is precisely the leak the old comment here
+        //      claimed to prevent.
+        //   3. RemoveAndDiscardPawnViaGC is vanilla's own remove-then-discard for exactly this, and
+        //      by this point the pawn is destroyed, so the discard inside it goes through.
+        //
+        // Verify by log, not by reading: a clean run emits NEITHER warning above.
+        private static void DiscardThrowawayPawn(Pawn pawn)
+        {
+            if (pawn == null) return;
+
+            if (!pawn.Destroyed) pawn.Destroy();
+
+            if (Find.WorldPawns != null && Find.WorldPawns.Contains(pawn))
+            {
+                Find.WorldPawns.RemoveAndDiscardPawnViaGC(pawn);
+                return;
+            }
+
+            pawn.Discard(true);
         }
 
         private static string Describe(string label, List<float> xs)

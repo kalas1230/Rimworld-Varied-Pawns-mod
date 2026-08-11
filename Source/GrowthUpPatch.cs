@@ -143,7 +143,12 @@ namespace PawnVarianceMod
             // AFTER this point: BirthdayBiological sends its letter on the tick before
             // PostResolveLifeStageChange fires, and the player clicks it whenever they like. Applying
             // now would stack our full budget on top of that grant. So if a letter is outstanding,
-            // wait for it — GrowthMomentMakeChoices_Postfix or the sweep will finish the job.
+            // wait for it — GrowthMomentMakeChoices_Postfix (the player resolved it) or
+            // LetterStackRemoveLetter_Postfix (it left the stack unresolved) will finish the job.
+            //
+            // NOTHING IS RECORDED HERE. This used to call Register on a scribed GameComponent; the
+            // deferral is now implicit, because both finishing triggers re-derive the same condition
+            // from the letter itself. A bare `return` is the whole of "defer".
             //
             // No unresolved letter means one of three things, and all are safe to apply immediately:
             // either the pawn took vanilla's silent auto-apply path (non-player faction, not
@@ -151,14 +156,8 @@ namespace PawnVarianceMod
             // the growth tier offered nothing at all, or the player already resolved the letter
             // (via GrowthMomentMakeChoices_Postfix) in the window between BirthdayBiological sending
             // it and this hook firing.
-            var pending = GrowUpPendingComponent.Instance;
-            if (pending == null)
+            if (GrowUpVariance.HasUnresolvedGrowthLetter(___pawn))
             {
-                Log.Warning($"[PawnVarianceMod] GrowUpPendingComponent.Instance was null while processing {___pawn.LabelShort}'s life-stage change; cannot check for an outstanding growth-moment letter, so proceeding as if none exists.");
-            }
-            else if (GrowUpPendingComponent.HasUnresolvedGrowthLetter(___pawn))
-            {
-                pending.Register(___pawn);
                 if (settings.verboseLogging)
                     Log.Message($"[PawnVarianceMod] {___pawn.LabelShortCap} became adult with a growth-moment letter outstanding — deferring variance until it resolves.");
                 return;
@@ -173,6 +172,23 @@ namespace PawnVarianceMod
         // files loaded in the same RimWorld session (IDs are assigned per-save, not globally
         // unique) can't misattribute one pawn's last-known stage to an unrelated pawn in a newly
         // loaded save.
+        // Exposed for the "Dump growth-moment state" debug action. Whether this hook has yet
+        // OBSERVED the pawn at some life stage is not visible from anywhere else, and it decides
+        // whether an Adult transition is actionable at all: with no baseline, PostfixInner takes
+        // the `!hadBaseline` return and applies nothing.
+        //
+        // This is worth surfacing because it is the state that makes a correctly-working mod look
+        // broken. A freshly spawned 12-year-old has no baseline until PostResolveLifeStageChange
+        // has fired at least once, and its only caller is AgeTickInterval -- so on a PAUSED game
+        // the baseline never gets recorded, forcing a birthday straight to 13 does nothing, and
+        // there is no log line explaining why. That cost a whole verification session on
+        // 2026-08-11 before the guard was recognised as the cause.
+        internal static bool TryGetObservedStage(Pawn pawn, out DevelopmentalStage stage)
+        {
+            stage = default(DevelopmentalStage);
+            return pawn != null && LastKnownStage.TryGetValue(pawn.thingIDNumber, out stage);
+        }
+
         internal static void ClearForNewGame()
         {
             LastKnownStage.Clear();
@@ -221,19 +237,58 @@ namespace PawnVarianceMod
     [HarmonyPatch(typeof(ChoiceLetter_GrowthMoment), nameof(ChoiceLetter_GrowthMoment.MakeChoices))]
     public static class GrowthMomentMakeChoices_Postfix
     {
-        public static void Postfix(ChoiceLetter_GrowthMoment __instance)
+        // ONCE-ONLY WITHOUT A RECORD. It takes TWO independent guards, and conflating them was a
+        // real, measured defect rather than a hypothetical.
+        //
+        // A scribed pending list used to give this for free: it held one entry PER PAWN and
+        // Deregister consumed it, so any further growth letter for that pawn found nothing and did
+        // nothing. With the list gone, both halves of that guarantee come from vanilla's own scribed
+        // state instead:
+        //
+        //   once per LETTER -- the prefix/postfix pair below. MakeChoices sets choiceMade = true and
+        //     returns early on ArchiveView (which is true once choiceMade is set), so `choiceMade`
+        //     transitions false -> true exactly once in the letter's lifetime, and that transition
+        //     is scribed with the letter.
+        //   once per PAWN -- GrowUpVariance.IsAdulthoodGrowthLetter, checked below. A pawn has three
+        //     growth letters over its life (ages 7, 10 and 13) and only the last is an adulthood
+        //     transition; the per-letter guard alone let all three apply.
+        //
+        // The per-letter guard was originally written as if it were the whole mechanism. It is not:
+        // a pawn reaching 13 with its age-7 and age-10 letters unclicked holds three letters that
+        // all satisfy it independently, and clearing them ran three full passes at three different
+        // rolled qualities. See IsAdulthoodGrowthLetter for the measurement and why the observed
+        // zero damage was luck rather than the guard working.
+        //
+        // The case this exists for is real, not theoretical: the letter can be re-opened from the
+        // History tab (ArchiveView keeps a destroyed pawn's letter visible) and its OK button calls
+        // MakeChoices again. Reading choiceMade only in the postfix would see `true` on both the
+        // genuine resolution and the re-open and could not tell them apart — hence the prefix
+        // snapshot. GrowUpVariance is add-only and permanent, so a double application would
+        // silently give one pawn two full grow-up passes.
+        public static void Prefix(ChoiceLetter_GrowthMoment __instance, out bool __state)
         {
+            __state = __instance != null && __instance.choiceMade;
+        }
+
+        public static void Postfix(ChoiceLetter_GrowthMoment __instance, bool __state)
+        {
+            if (__instance == null) return;
+            if (__state) return;                 // already resolved before this call — a History-tab re-open
+            if (!__instance.choiceMade) return;  // MakeChoices bailed on ArchiveView; nothing was granted
+
+            // Not one of ours — a growth moment at age 7 or 10. This is the per-PAWN half of the
+            // once-only guard and it must come before anything else: the choiceMade transition above
+            // is per-LETTER, so without this a pawn who reached 13 with earlier letters unclicked
+            // gets one Apply per letter. See GrowUpVariance.IsAdulthoodGrowthLetter for the vanilla
+            // source this is read off and the measured triple-application it fixes.
+            if (!GrowUpVariance.IsAdulthoodGrowthLetter(__instance)) return;
+
             Pawn pawn = __instance.pawn;
             if (pawn == null) return;
-
-            var pending = GrowUpPendingComponent.Instance;
-            if (pending == null) return;
-            if (!pending.Deregister(pawn, out int ticksPending)) return; // not one of ours — a growth moment at age 7 or 10
-            // The letter can be re-opened from the History tab after the pawn was destroyed
-            // (ChoiceLetter_GrowthMoment.ArchiveView keeps a destroyed pawn's letter visible), and its
-            // OK button still calls MakeChoices even though MakeChoices itself grants nothing for a
-            // dead/destroyed pawn. Deregister already ran above so the pending entry is consumed
-            // either way; bail before building the log line or touching the pawn further.
+            // Kept as a sanity check now that the letter def above is the real discriminator: a
+            // ChildToAdult letter resolved while its pawn somehow reads as non-Adult (de-aged in a
+            // growth vat before clicking, most plausibly) is not an adulthood transition to vary.
+            if (pawn.DevelopmentalStage != DevelopmentalStage.Adult) return;
             if (pawn.Dead || pawn.DestroyedOrNull()) return;
 
             // This postfix runs inside vanilla's UI dialog-close path, so an escaping exception would
@@ -248,14 +303,63 @@ namespace PawnVarianceMod
                     string grantedPassions = __instance.chosenPassions.NullOrEmpty()
                         ? "none"
                         : string.Join(", ", __instance.chosenPassions.Select(s => s.defName));
-                    Log.Message($"[PawnVarianceMod] Growth moment resolved for {pawn.LabelShortCap} after {ticksPending} ticks: trait {grantedTrait}, passion increments {grantedPassions}");
+                    Log.Message($"[PawnVarianceMod] Growth moment resolved for {pawn.LabelShortCap}: trait {grantedTrait}, passion increments {grantedPassions}");
                 }
 
-                GrowUpVariance.Apply(pawn, $"letter resolved after {ticksPending} ticks pending");
+                GrowUpVariance.Apply(pawn, "letter resolved");
             }
             catch (Exception ex)
             {
                 Log.Error($"[PawnVarianceMod] Exception resolving growth moment for {pawn.LabelShort}: {ex}");
+            }
+        }
+    }
+
+    // The other way a deferred pawn's letter can end: it leaves the stack WITHOUT the player
+    // choosing. LetterStack.LetterStackUpdate removes any letter whose CanShowInLetterStack has
+    // gone false, and for a growth letter that means the timeout passed (LetterWithTimeout), the
+    // choice was made, or the pawn was destroyed (ChoiceLetter_GrowthMoment.ArchiveView).
+    //
+    // This replaces the 2500-tick sweep that used to run on GameComponentTick. The sweep's stated
+    // main job — "cleaning up a pawn that died or was otherwise lost while pending" — does not
+    // exist any more, because there is no pending list to clean up; a lost pawn simply stops
+    // satisfying the derived condition. What remained was the timeout case, and that is an event,
+    // so it gets an event hook rather than a poll. Removing a letter is rare, unlike a tick.
+    //
+    // Isolated as its own patch class per this mod's per-class patch isolation.
+    [HarmonyPatch(typeof(LetterStack), nameof(LetterStack.RemoveLetter))]
+    public static class LetterStackRemoveLetter_Postfix
+    {
+        public static void Postfix(Letter let)
+        {
+            if (!(let is ChoiceLetter_GrowthMoment growth)) return;
+            // Resolved normally — GrowthMomentMakeChoices_Postfix already owns this pawn and has
+            // already run. This is the removal that FOLLOWS a choice (CanShowInLetterStack goes
+            // false via ArchiveView once choiceMade is set), and double-applying here is exactly
+            // what the check prevents.
+            if (growth.choiceMade) return;
+            // The same per-PAWN gate as the MakeChoices postfix, and needed here for the same
+            // reason: a stale age-7 letter timing out after its pawn had already turned 13 passes
+            // the DevelopmentalStage check below and would apply a second full pass.
+            if (!GrowUpVariance.IsAdulthoodGrowthLetter(growth)) return;
+
+            Pawn pawn = growth.pawn;
+            if (pawn == null) return;
+            if (pawn.Dead || pawn.DestroyedOrNull()) return;  // removal via ArchiveView; Apply would decline anyway
+            if (pawn.DevelopmentalStage != DevelopmentalStage.Adult) return; // sanity check; the letter def above is the real discriminator
+
+            // Runs inside vanilla's letter-stack update loop, so an escaping exception would break
+            // the letter UI every frame. Apply has its own internal guard, but the pre-checks above
+            // and the pawn label below are outside it.
+            try
+            {
+                GrowUpVariance.Apply(pawn, "growth letter left the stack unresolved");
+            }
+            catch (Exception ex)
+            {
+                Log.ErrorOnce(
+                    $"[PawnVarianceMod] Exception applying grow-up variance after {pawn.LabelShort}'s "
+                    + $"growth letter expired: {ex}", pawn.thingIDNumber ^ 0x2E7A9C41);
             }
         }
     }
