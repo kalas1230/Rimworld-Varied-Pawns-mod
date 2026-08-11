@@ -9,7 +9,17 @@
   <supportedVersions>
     <li>1.6</li>
   </supportedVersions>
-  <description>Adds configurable, randomized variance to a pawn's skill levels, trait count/quality, and passion assignment at generation time.</description>
+  <!-- Player-facing. This is the in-game mod list text; the fuller Steam Workshop version is
+       kept at docs/workshop-description.txt. If what the mod does changes, change both. -->
+  <description>Two vanilla colonists of the same type are more alike than they should be. Varied Pawns widens that band and hands you the dial.
+
+Every pawn rolls a single hidden quality value at generation, and that one roll drives its skill levels, how many traits it gets, and its passion budget together — so a lucky pawn is good at things and driven about them, rather than three unrelated numbers. It changes how many traits a pawn gets, never which ones; trait selection stays entirely vanilla's.
+
+Eight presets, from Faithful (close to unmodded) through Desperate, Scavenger, Specialist, Elite and Sovereign, plus Distinct and Wildcard for spread rather than strength. Build your own in the Profile Editor, with a live distribution curve and a power readout so you can see what a slider actually does.
+
+Assign different profiles per faction, per race and per xenotype, with priority levels to settle pawns that match more than one rule. Ships with sensible defaults, so raiders, tribes and imperial nobles feel different from the start.
+
+Children are left alone unless you turn them on. Safe to add mid-save: it affects newly generated pawns, so existing colonists are unchanged. Safe to remove too — the mod writes nothing into your save, so taking it out leaves no orphaned data and no load errors. Requires Harmony. Biotech optional.</description>
   <modDependencies>
     <li>
       <packageId>brrainz.harmony</packageId>

@@ -1,0 +1,96 @@
+Steam Workshop description for "Varied Pawns" — Steam BBCode, paste as-is into the Workshop
+item's description box.
+
+This is the PLAYER-FACING text. The developer document is README.md; do not merge them. The
+shorter in-game version of this text lives in About/About.xml's <description>, which is what
+shows in RimWorld's mod list — if you change what the mod does, change both.
+
+================================================================================
+
+[h1]Varied Pawns[/h1]
+
+Two vanilla colonists of the same type are more alike than they should be. Skills land in a narrow band, passions land in a narrow band, and after a few colonies you stop being surprised by anyone.
+
+Varied Pawns widens that band and hands you the dial.
+
+[h2]What it does[/h2]
+
+Every pawn rolls a single hidden [b]quality[/b] value when generated. That one roll drives three things together:
+
+[list]
+[*][b]Skill levels[/b] — shifted up or down from vanilla, with per-pawn noise on top
+[*][b]Trait count[/b] — how many traits the pawn gets
+[*][b]Passions[/b] — the budget the pawn spends on Minor and Major passions
+[/list]
+
+Because it is [i]one[/i] roll and not three, a pawn holds together: a lucky roll is good at things [i]and[/i] driven about them. An unlucky one is neither. You get colonists worth remembering instead of eight variations on the same person.
+
+[b]It changes how many traits a pawn gets — never which ones.[/b] Trait selection stays entirely vanilla's, including every mod-added trait. Nothing here scores traits or plays favourites.
+
+[h2]Out of the box[/h2]
+
+Install it and your colonists roll close to unmodded RimWorld, while the rest of the world stops being uniform. Raiders, tribes, imperial nobles and xenotypes come pre-assigned to profiles that suit them — a Sanguophage lord reads as a Sanguophage lord, and a tribal raid reads as scraped-together survivors.
+
+Change any of it, or all of it, in the settings.
+
+[h2]Eight presets[/h2]
+
+[list]
+[*][b]Faithful[/b] — closest to unmodded RimWorld. Two to three traits, a vanilla passion budget, a narrow skill spread.
+[*][b]Distinct[/b] — the mod's signature tuning. Strong individual strengths and weaknesses, with a fair colony average.
+[*][b]Wildcard[/b] — maximum variation. Anywhere from 0 to 8 traits, zero or many passions, wide skill swings.
+[*][b]Desperate[/b] — scraped-together survivors. Low skills, few passions, poor rolls common.
+[*][b]Scavenger[/b] — wasteland survivors and pirates. Lower baseline skills, tough survival rolls.
+[*][b]Specialist[/b] — engineered single-domain specialists such as Genies and Hussars. Focused skill spikes.
+[*][b]Elite[/b] — imperial nobility and high-born. Consistently high capability.
+[*][b]Sovereign[/b] — archite lords, Sanguophages, supreme leaders. Top-tier skills and wide passions.
+[/list]
+
+[b]Distinct and Wildcard are not power tiers.[/b] They sit around a normal average and spread pawns out around it — more range, not more strength. If you reroll a start until you like it, they reward you more than the tiers do, which is the point of them.
+
+[h2]Build your own[/h2]
+
+The Profile Editor gives you unlimited custom profiles. Every slider updates a live distribution curve and a power readout comparing the profile against vanilla, so you can see what a change actually does before you start a colony instead of finding out ten hours in.
+
+New, Duplicate, Rename, Reset and Delete are all there. The eight presets are read-only — duplicate one to start from it.
+
+[h2]Per-faction, per-race and per-xenotype overrides[/h2]
+
+Assign different profiles to different pawns:
+
+[list]
+[*][b]Faction[/b] — the Empire gets Elite, pirates get Scavenger, tribes get Desperate. Ships with sensible defaults.
+[*][b]Xenotype[/b] — Sanguophages get Sovereign, Hussars get Specialist, Impids get Wildcard. Requires Biotech.
+[*][b]Race[/b] — works with Humanoid Alien Races mods. Ships empty, since your installed races are yours.
+[/list]
+
+Each override carries a priority from Lowest to Highest, so when a pawn matches more than one, the winner is the one you decided on rather than whichever rule happened to be checked first.
+
+[h2]Children are left alone by default[/h2]
+
+Growth moments are untouched unless you turn them on. If you do, the mod adds to a growing child at 13 and never takes anything away.
+
+[h2]Sharing your setup[/h2]
+
+Export your whole configuration — custom profiles, overrides, toggles — to the clipboard, and paste it back on another save or send it to a friend.
+
+[hr][/hr]
+[h2]Compatibility[/h2]
+
+[list]
+[*][b]RimWorld 1.6[/b] only.
+[*][b]Requires Harmony.[/b]
+[*][b]Safe to add to an existing save.[/b] It affects newly generated pawns, so colonists you already have will not change — new arrivals, raiders and quest pawns will.
+[*][b]Removing it mid-save is clean.[/b] The mod writes [i]nothing[/i] into your colony save — not one byte — so pulling it out leaves no orphaned data and no load errors. Your pawns keep everything they were given, because it lives on the pawn in RimWorld's own format.
+[*][b]Biotech is optional.[/b] Without it the xenotype overrides are simply skipped; faction and race overrides work regardless.
+[*]Works with mod-added traits, skills, factions and races. It rides on RimWorld's own pawn generation rather than replacing it.
+[/list]
+
+[b]Known limitation:[/b] Milian pawns from Milira cannot be targeted by a race override. They are created in code rather than generated from a normal pawn kind, so they never appear in the race list.
+
+[h2]Source[/h2]
+
+MIT licensed. Source, and rather more documentation than anyone asked for, at:
+https://github.com/kalas1230/Rimworld-Pawn-variance-mod
+
+Bug reports are welcome. Please include your RimWorld version, your mod list, and what you expected the pawn to look like versus what arrived.
