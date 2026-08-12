@@ -1033,6 +1033,25 @@ namespace PawnVarianceMod
             var settings = PawnVarianceMod.Settings;
             var levels = new List<int>();       // every skill of every pawn, flattened
             var perPawnMeans = new List<float>();
+            // The same quantity averaged over only the skills the pawn can actually use.
+            //
+            // WHY BOTH EXIST. perPawnMeans divides by all 12 skills, and SkillRecord.GetLevel
+            // returns 0 for a TotallyDisabled skill (verified against the shipped assembly: the
+            // first IL instruction of GetLevel is a call to get_TotallyDisabled). So a pawn
+            // Incapable of Violent contributes two structural zeros to its own average through no
+            // decision of this mod's -- incapability comes from backstories, which nothing here
+            // touches. Measured over the 784 core BackstoryDefs, that is ~1.6 of 12 skills per
+            // pawn, so the all-12 mean runs roughly 14% below the level a player would read off
+            // the pawn's own skill bars.
+            //
+            // That bias is near enough constant across profiles, so the all-12 figure stays valid
+            // for comparing presets and is KEPT -- every run recorded in
+            // docs\workshop\distribution-data.md before 2026-08-12 reports it, and replacing it
+            // would silently break continuity with those runs. The capable-only figure is what a
+            // player-facing graphic should plot, because a reader benchmarks the number against
+            // the 0-20 skill bar they know.
+            var perPawnMeansCapable = new List<float>();
+            var disabledCounts = new List<int>();
             var traitCounts = new List<int>();
             var passionPips = new List<float>();
             // Pips for ONLY the pawns the passion model actually describes, grouped by the profile
@@ -1093,6 +1112,8 @@ namespace PawnVarianceMod
                         resolved[label] = seen + 1;
 
                         float sum = 0f;
+                        float capableSum = 0f;
+                        int capableCount = 0;
                         foreach (SkillRecord r in pawn.skills.skills)
                         {
                             // Raw learned level, not Level: Level folds in the Biotech aptitude
@@ -1101,6 +1122,12 @@ namespace PawnVarianceMod
                             int lv = r.GetLevel(includeAptitudes: false);
                             levels.Add(lv);
                             sum += lv;
+
+                            if (!r.TotallyDisabled)
+                            {
+                                capableSum += lv;
+                                capableCount++;
+                            }
 
                             switch (r.passion)
                             {
@@ -1111,6 +1138,11 @@ namespace PawnVarianceMod
                         }
 
                         perPawnMeans.Add(sum / pawn.skills.skills.Count);
+                        disabledCounts.Add(pawn.skills.skills.Count - capableCount);
+                        // A pawn with every skill disabled would divide by zero. Nothing in vanilla
+                        // produces one, but this loop runs a thousand times a click and a guard is
+                        // cheaper than a run that dies at pawn 847.
+                        if (capableCount > 0) perPawnMeansCapable.Add(capableSum / capableCount);
                         traitCounts.Add(pawn.story?.traits?.allTraits?.Count ?? 0);
 
                         // Priced the same way PassionVarianceApplier's spend loop prices them:
@@ -1181,6 +1213,7 @@ namespace PawnVarianceMod
             sb.AppendLine();
             sb.AppendLine(Describe("per-skill level", levels.Select(x => (float)x).ToList()));
             sb.AppendLine(Describe("per-pawn mean skill", perPawnMeans));
+            sb.AppendLine(Describe("per-pawn mean skill (capable)", perPawnMeansCapable));
             sb.AppendLine(Describe("passion pips/pawn", passionPips));
             sb.AppendLine(Describe("traits/pawn", traitCounts.Select(x => (float)x).ToList()));
             sb.AppendLine($"  passions: {majors} Major, {minors} Minor, {nones} None"
@@ -1284,6 +1317,15 @@ namespace PawnVarianceMod
                 }
             }
             sb.AppendLine(Histogram("per-pawn mean skill", perPawnMeans, 12));
+            // Plotted by tools\make-distribution.ps1. Same 12-bin, own-min..max, lower-edge
+            // convention as the block above, so the same two corrections apply when plotting it:
+            // convert counts to density (bin widths differ between runs) and draw through
+            // edge + width/2.
+            sb.AppendLine(Histogram("per-pawn mean skill (capable)", perPawnMeansCapable, 12));
+            sb.AppendLine($"  skills disabled/pawn: mean "
+                + $"{(disabledCounts.Count > 0 ? disabledCounts.Average() : 0f):F2} of 12"
+                + $"   pawns with none disabled: "
+                + $"{(disabledCounts.Count > 0 ? 100f * disabledCounts.Count(x => x == 0) / disabledCounts.Count : 0f):F1}%");
 
             Log.Message(sb.ToString().TrimEnd());
             Messages.Message($"Varied Pawns: rolled {perPawnMeans.Count} pawns — see log.",
