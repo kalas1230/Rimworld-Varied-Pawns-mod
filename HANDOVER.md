@@ -1756,15 +1756,23 @@ staged build — these are the things those gates structurally cannot see.
     (both audit registers, the superpowers plans and specs, the workshop art sources and the raw
     pawn captures), `HANDOVER.md`, and `TRAIT-DESIRABILITY-RESEARCH.md`. Ignored: `Assemblies/`,
     `Release/`, `temp/`, `*.log`, IDE files, and `zzz-Do-Not-Commit/` via `.git/info/exclude`.
-    Two specific things to decide rather than drift into:
-    - **The internal record is a genuine asset and also a full account of every mistake this
-      project made.** Publishing it is defensible and unusual; nobody has weighed it.
-    - **Five tracked files contain this machine's absolute paths** (`HANDOVER.md` and four
-      `docs/superpowers/` plans and specs, all naming `C:\Users\gokal\…`). Harmless, but it is a
-      real name on a public repo and it is trivial to relativise.
-    Also worth settling: `.git/info/exclude` is **local only**, so a clone does not inherit the
-    `zzz-Do-Not-Commit/` rule — a contributor, or a future clone of this repo, would not have that
-    protection. If that folder's convention matters, the rule belongs in `.gitignore`.
+    The thing to decide rather than drift into: **the internal record is a genuine asset and also a
+    full account of every mistake this project made.** Publishing it is defensible and unusual;
+    nobody has weighed it. Items 15 and 16 are the two concrete consequences of that drift and can
+    be settled independently of the larger question.
+15. **Relativise the absolute paths in tracked files.** Five carry this machine's own paths:
+    `HANDOVER.md` and four `docs/superpowers/` plans and specs, all naming `C:\Users\gokal\…`.
+    Technically harmless — nothing depends on them resolving — but it is a real user name on a
+    public repo, and every one of them reads just as well as a repo-relative path or `…\RimWorld\`.
+    `HANDOVER.md` line 3 is the one a visitor hits first.
+16. **Move the `zzz-Do-Not-Commit/` rule from `.git/info/exclude` into `.gitignore`.**
+    `.git/info/exclude` is **local to this working copy** — it is not part of the repository and no
+    clone inherits it. So the convention that scratch files, dumps and test fixtures never get
+    committed is protected on exactly one machine: this one. A fresh clone, on a new machine or by
+    anyone else, has that protection silently absent, and the folder's contents are exactly the
+    things that must never ship (`TestOnly_PlayerColonyXenotypes.xml` among them). If the
+    convention matters — and `build-release.ps1`'s forbidden-content check says it does — the rule
+    belongs in the tracked file.
 
 ### `About\PublishedFileId.txt` — the trap that splits a mod in two
 
