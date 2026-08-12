@@ -63,7 +63,7 @@ namespace PawnVarianceMod
             Text.Font = GameFont.Small;
 
             bool val = enabled;
-            Widgets.CheckboxLabeled(boxRect, "Enable", ref val);
+            Widgets.CheckboxLabeled(boxRect, "VP_Enable".Translate(), ref val);
             if (PawnVarianceMod.Settings.EditingCustom) enabled = val;
 
             if (!tooltip.NullOrEmpty())
@@ -126,16 +126,16 @@ namespace PawnVarianceMod
             Rect NextBtn(int i) => new Rect(stripX + i * (btnW + 6f), pickerRow.y, btnW, 28f);
 
             GUI.color = new Color(0.4f, 0.85f, 0.4f);
-            if (Widgets.ButtonText(NextBtn(0), "+ New"))
+            if (Widgets.ButtonText(NextBtn(0), "VP_Btn_New".Translate()))
                 CreateNewCustomProfile();
             GUI.color = Color.white;
 
-            if (Widgets.ButtonText(NextBtn(1), "Duplicate"))
+            if (Widgets.ButtonText(NextBtn(1), "VP_Btn_Duplicate".Translate()))
                 DuplicateCurrentProfile();
 
             GUI.enabled = outerEnabled && customProfile != null;
 
-            if (Widgets.ButtonText(NextBtn(2), "Rename") && customProfile != null)
+            if (Widgets.ButtonText(NextBtn(2), "VP_Btn_Rename".Translate()) && customProfile != null)
                 Find.WindowStack.Add(new Dialog_RenameProfile(customProfile, () =>
                 {
                     RefreshEditor();
@@ -143,10 +143,13 @@ namespace PawnVarianceMod
                 }));
 
             GUI.color = new Color(0.9f, 0.75f, 0.3f);
-            if (Widgets.ButtonText(NextBtn(3), "Reset") && customProfile != null)
+            if (Widgets.ButtonText(NextBtn(3), "VP_Btn_Reset".Translate()) && customProfile != null)
             {
+                // The preset name is substituted rather than written into the sentence: the reset
+                // target is VanillaLike below, so naming it from the same object keeps the two
+                // from drifting apart, and a translator gets the localised preset name for free.
                 Find.WindowStack.Add(Dialog_MessageBox.CreateConfirmation(
-                    "Reset this profile to Faithful? All of its current values will be replaced.",
+                    "VP_Confirm_ResetProfile".Translate(VarianceProfiles.VanillaLike.label),
                     () =>
                     {
                         customProfile.values = VarianceProfiles.VanillaLike.MakeValues();
@@ -160,10 +163,10 @@ namespace PawnVarianceMod
 
             GUI.enabled = outerEnabled && customProfile != null;
             GUI.color = new Color(1f, 0.4f, 0.4f);
-            if (Widgets.ButtonText(NextBtn(4), "Delete") && customProfile != null)
+            if (Widgets.ButtonText(NextBtn(4), "VP_Btn_Delete".Translate()) && customProfile != null)
             {
                 Find.WindowStack.Add(Dialog_MessageBox.CreateConfirmation(
-                    $"Delete the profile \"{customProfile.name}\"? This cannot be undone.",
+                    "VP_Confirm_DeleteProfile".Translate(customProfile.name),
                     () =>
                     {
                         string deletedId = customProfile.id;
@@ -230,9 +233,11 @@ namespace PawnVarianceMod
             // wrap onto a second line and overlap the distribution curve below.
             bool prevQualityWordWrap = Text.WordWrap;
             Text.WordWrap = false;
+            // Numbers are pre-formatted and passed in as strings: .Translate() substitutes {0}
+            // but cannot apply a :F2 format specifier, so the rounding has to happen here.
             Widgets.Label(qLabel, EditingCustom
-                ? $"Average pawn quality:  {v.averageQuality:F2}"
-                : $"Average pawn quality:  {v.averageQuality:F2}  (read-only)");
+                ? "VP_AverageQuality".Translate(v.averageQuality.ToString("F2"))
+                : "VP_AverageQualityReadOnly".Translate(v.averageQuality.ToString("F2")));
             Text.WordWrap = prevQualityWordWrap;
 
             // Belt AND braces, matching every other editable control in this file: GUI.enabled
@@ -263,14 +268,7 @@ namespace PawnVarianceMod
             // This is the control that gives every range below its meaning, so it is the right
             // place to state the shared rule once. Each range then says which of the two kinds
             // it is, in its own tooltip.
-            TooltipHandler.TipRegion(qLabelAndSlider,
-                "Drives every roll below. Each pawn rolls a quality, and that quality picks one "
-                + "point between the handles of every range you set: 0 lands on the low handle, "
-                + "1 on the high handle.\n\n"
-                + "This slider sets the AVERAGE quality. Individual pawns roll around it.\n\n"
-                + "Trait count and Child shift stop there — their handles are hard limits. Skill "
-                + "shift and Passion budget then have their noise setting added on top, so those "
-                + "handles are targets a pawn can be carried past.");
+            TooltipHandler.TipRegion(qLabelAndSlider, "VP_QualityTip".Translate().ToString());
 
             // The readout is output, not input -- always full opacity, even on a
             // read-only preset, so presets stay comparable by cycling the picker.
@@ -278,7 +276,8 @@ namespace PawnVarianceMod
             float meanComposite = DispersionModel.TypicalAt(v, v.averageQuality);
             bool prevReadoutWordWrap = Text.WordWrap;
             Text.WordWrap = false;
-            Widgets.Label(qReadout, $"→  Typical  {PawnVarianceSettings.FormatPowerReadout(meanComposite)}");
+            Widgets.Label(qReadout, "VP_TypicalReadout".Translate(
+                PawnVarianceSettings.FormatPowerReadout(meanComposite)));
             Text.WordWrap = prevReadoutWordWrap;
             // The second paragraph is the load-bearing half. Without it a player reads Distinct's
             // -10% as "weaker than Faithful" and picks against the profile for the exact reason it
@@ -286,11 +285,7 @@ namespace PawnVarianceMod
             // see skillSpread and passionSpread, via DispersionModel), but it is still a single
             // number describing an average pawn -- it does not show how much pawns differ from each
             // other, so two profiles with the same figure can still play very differently.
-            TooltipHandler.TipRegion(qReadout,
-                "The average pawn this profile generates, compared to the Faithful baseline (0.25).\n\n"
-                + "Based on starting skill levels and the passion budget only. It does not include "
-                + "traits, and it does not show how much pawns differ from each other, so two "
-                + "profiles with the same figure can still play very differently.");
+            TooltipHandler.TipRegion(qReadout, "VP_TypicalTip".Translate().ToString());
 
             // Row 3b: the Best-of-N anchor.
             //
@@ -313,21 +308,16 @@ namespace PawnVarianceMod
             GUI.color = new Color(1f, 1f, 1f, 0.75f);
             bool prevBestWordWrap = Text.WordWrap;
             Text.WordWrap = false;
-            Widgets.Label(bestRow,
-                $"Best of {Constants.BestOfNSampleCount} rerolls:  "
-                + $"{PawnVarianceSettings.FormatPowerPercent(bestComposite, bestBaseline)} vs Faithful ({bestComposite:F2})"
-                + "   —   what you actually get if you reroll for this profile");
+            Widgets.Label(bestRow, "VP_BestOfNRow".Translate(
+                Constants.BestOfNSampleCount,
+                PawnVarianceSettings.FormatPowerPercent(bestComposite, bestBaseline),
+                bestComposite.ToString("F2")));
             Text.WordWrap = prevBestWordWrap;
             GUI.color = Color.white;
             Text.Font = GameFont.Small;
 
             TooltipHandler.TipRegion(bestRow,
-                "Generate " + Constants.BestOfNSampleCount + " pawns and keep the best one.\n\n"
-                + "This is closer to how the game is actually played: you reroll starting colonists, "
-                + "choose which captures to recruit, and refuse quest pawns you do not want.\n\n"
-                + "A profile whose two figures are close is a power tier -- consistent. A profile "
-                + "that climbs steeply between them is a variance preset -- it pays off when you "
-                + "get to choose.");
+                "VP_BestOfNTip".Translate(Constants.BestOfNSampleCount).ToString());
 
             // Row 4: the distribution curve, full width, never greyed.
             Rect curveRect = new Rect(rect.x, bestRow.yMax + 4f, rect.width, CurveHeight);
@@ -337,26 +327,25 @@ namespace PawnVarianceMod
         // One-line summary of a custom profile's values. Never returns empty.
         private static string ProfileFingerprint(VarianceProfileValues v)
         {
-            return string.Format(
-                "Traits {0:F0}–{1:F0}  ·  Passions {2:F1}–{3:F1}  ·  Skill shift {4:F1} to {5:F1}  ·  Quality {6:F2}",
-                v.traitCountMin, v.traitCountMax,
-                v.passionCountMin, v.passionCountMax,
-                v.skillShiftMin, v.skillShiftMax,
-                v.averageQuality);
+            return "VP_Fingerprint".Translate(
+                v.traitCountMin.ToString("F0"), v.traitCountMax.ToString("F0"),
+                v.passionCountMin.ToString("F1"), v.passionCountMax.ToString("F1"),
+                v.skillShiftMin.ToString("F1"), v.skillShiftMax.ToString("F1"),
+                v.averageQuality.ToString("F2"));
         }
 
         private void DrawGenerationSettings(Listing_Standard listing)
         {
             var v = Editing;
 
-            SectionHeader(listing, "Skills", ref v.enableSkillVariance,
-                "When off, this profile leaves vanilla skill levels untouched.");
+            SectionHeader(listing, "VP_Section_Skills".Translate(), ref v.enableSkillVariance,
+                "VP_Section_SkillsTip".Translate());
             Rect noiseRow = listing.GetRect(28f);
             Rect noiseLabelRect = noiseRow.LeftPart(0.42f);
             // Vertically centre the label against the range control.
             noiseLabelRect.y += 4f;
             float sMax = Constants.MaxMagnitude / Mathf.Sqrt(6f);
-            Widgets.Label(noiseLabelRect, $"Skill spread:  ±{v.skillSpread:F2} lv");
+            Widgets.Label(noiseLabelRect, "VP_SkillSpread".Translate(v.skillSpread.ToString("F2")));
             float sSpreadVal = Widgets.HorizontalSlider(noiseRow.RightPart(0.56f),
                                                         v.skillSpread, 0f, sMax);
             if (EditingCustom) v.skillSpread = sSpreadVal;
@@ -364,14 +353,7 @@ namespace PawnVarianceMod
             // easy to lose: this magnitude is drawn independently per skill around one shared
             // baseline, so it separates a pawn's own skills. Passion spread perturbs a single
             // per-pawn budget, so it separates pawns. Keep both halves of that contrast.
-            TooltipHandler.TipRegion(noiseRow,
-                "How widely a single pawn's own skills spread apart from each other, in skill "
-                + "levels. This is the typical (standard-deviation) spread, not the maximum -- see "
-                + "the line below for the extreme.\n\n"
-                + "Drawn separately for every skill, so it makes one pawn uneven. It does not make "
-                + "pawns differ from each other; the quality roll does that.\n\n"
-                + "Because it is added on top of the Skill shift range, a high value can push "
-                + "individual skills past either handle of that range.");
+            TooltipHandler.TipRegion(noiseRow, "VP_SkillSpreadTip".Translate().ToString());
 
             Rect skillDerived = listing.GetRect(18f);
             float skillMag = v.skillSpread * Mathf.Sqrt(6f);
@@ -384,51 +366,40 @@ namespace PawnVarianceMod
                                  + bandAtMedian + v.skillSpread);
             Text.Font = GameFont.Tiny;
             GUI.color = Color.gray;
-            Widgets.Label(skillDerived,
-                $"extreme ±{skillMag:F1} lv per skill · most skills land {lo:F1} – {hi:F1}");
+            Widgets.Label(skillDerived, "VP_SkillSpreadDerived".Translate(
+                skillMag.ToString("F1"), lo.ToString("F1"), hi.ToString("F1")));
             GUI.color = Color.white;
             Text.Font = GameFont.Small;
             listing.Gap(ControlGap);
-            LabeledFloatRange(listing, "Skill shift", SkillShiftRangeId,
+            LabeledFloatRange(listing, "VP_SkillShift".Translate(), SkillShiftRangeId,
                 ref v.skillShiftMin, ref v.skillShiftMax, -20f, 20f, ToStringStyle.FloatOne,
-                "Levels added to or taken from every skill, on top of the vanilla roll.\n\n"
-                + "A TARGET, NOT A LIMIT. Quality picks one point between the handles: the low "
-                + "handle is what the lowest-quality pawn aims for, the high handle the highest. "
-                + "Skill noise then scatters that pawn's twelve skills around that point, and can "
-                + "carry them past either handle.\n\n"
-                + "Set the handles for the pawn you expect. Set Skill noise for how far the "
-                + "exceptions stray.");
+                "VP_SkillShiftTip".Translate());
 
             if (ModsConfig.BiotechActive)
                 DrawChildSkillShift(listing, v);
 
-            SectionHeader(listing, "Traits", ref v.enableTraitVariance,
-                "When off, this profile leaves vanilla trait generation untouched.");
+            SectionHeader(listing, "VP_Section_Traits".Translate(), ref v.enableTraitVariance,
+                "VP_Section_TraitsTip".Translate());
             bool countVal = v.countProtectedTraits;
             listing.CheckboxLabeled(
-                "Count xenotype/forced traits toward the trait count",
+                "VP_CountProtectedTraits".Translate(),
                 ref countVal,
-                "When off, the range below counts only traits this mod rolls, and traits forced by a xenotype, gene, backstory or scenario are added on top. When on, the range counts every trait the pawn has. Forced traits are never removed either way.");
+                "VP_CountProtectedTraitsTip".Translate());
             if (EditingCustom) v.countProtectedTraits = countVal;
             listing.Gap(ControlGap);
             // Unlike Skill shift and Passion budget, this one really is a bound --
             // TraitVarianceApplier clamps the rolled target to [min, max] and there is no trait
             // noise knob to push past it. Say so, or a player reasonably assumes the looser
             // semantics they just read two controls above.
-            LabeledFloatRange(listing, "Trait count", TraitCountRangeId,
+            LabeledFloatRange(listing, "VP_TraitCount".Translate(), TraitCountRangeId,
                 ref v.traitCountMin, ref v.traitCountMax, 0f, 15f, ToStringStyle.Integer,
                 (v.countProtectedTraits
-                    ? "Total traits on the pawn, including xenotype and forced traits."
-                    : "Traits this mod rolls. Xenotype, gene, backstory and scenario traits are added on top.")
-                + "\n\nA HARD LIMIT, unlike Skill shift and Passion budget. Quality picks a point "
-                + "between the handles and the roll never leaves them. There is no trait noise "
-                + "setting.\n\n"
-                + "More traits is not better. Vanilla picks traits without regard to quality, so a "
-                + "wider range only buys more draws from the same pool, including the ones that "
-                + "cause mental breaks. Vanilla's own range is 2 to 3.");
+                    ? "VP_TraitCountTipTotal".Translate()
+                    : "VP_TraitCountTipRolled".Translate())
+                + "\n\n" + "VP_TraitCountTipBody".Translate());
 
-            SectionHeader(listing, "Passions", ref v.enablePassionVariance,
-                "When off, this profile leaves vanilla passion assignment untouched.");
+            SectionHeader(listing, "VP_Section_Passions".Translate(), ref v.enablePassionVariance,
+                "VP_Section_PassionsTip".Translate());
             Rect passionRow = listing.GetRect(28f);
             Rect leftHalf = passionRow.LeftPart(0.48f);
             Rect rightHalf = passionRow.RightPart(0.48f);
@@ -436,18 +407,11 @@ namespace PawnVarianceMod
             Rect passionNoiseLabelRect = leftHalf.LeftPart(0.52f);
             // Vertically centre the label against the range control.
             passionNoiseLabelRect.y += 4f;
-            Widgets.Label(passionNoiseLabelRect, $"Passion spread:  ±{v.passionSpread:F2} pips");
+            Widgets.Label(passionNoiseLabelRect, "VP_PassionSpread".Translate(v.passionSpread.ToString("F2")));
             float pSpreadVal = Widgets.HorizontalSlider(leftHalf.RightPart(0.46f),
                 v.passionSpread, 0f, Constants.PassionBudgetSpreadMax);
             if (EditingCustom) v.passionSpread = pSpreadVal;
-            TooltipHandler.TipRegion(leftHalf,
-                "How much the total passion budget varies between pawns, in pips (a Minor passion "
-                + "costs 1, a Major costs 1.5). This is the typical (standard-deviation) spread, not "
-                + "the maximum -- see the line below for the extreme.\n\n"
-                + "The opposite of Skill spread: this one perturbs a single per-pawn budget, so it "
-                + "makes pawns differ from each other rather than making one pawn uneven.\n\n"
-                + "Because it is added on top of the Passion budget range, a high value can push a "
-                + "pawn's budget past either handle of that range.");
+            TooltipHandler.TipRegion(leftHalf, "VP_PassionSpreadTip".Translate().ToString());
 
             Rect passionDerived = listing.GetRect(18f);
             float pipExtreme = v.passionSpread * Constants.PassionBudgetClampFactor;
@@ -457,18 +421,18 @@ namespace PawnVarianceMod
             float bHi = budgetMid + v.passionSpread;
             Text.Font = GameFont.Tiny;
             GUI.color = Color.gray;
-            Widgets.Label(passionDerived,
-                $"extreme ±{pipExtreme:F1} pips · budget usually {bLo:F1} – {bHi:F1}");
+            Widgets.Label(passionDerived, "VP_PassionSpreadDerived".Translate(
+                pipExtreme.ToString("F1"), bLo.ToString("F1"), bHi.ToString("F1")));
             GUI.color = Color.white;
             Text.Font = GameFont.Small;
 
             Rect majorBiasLabelRect = rightHalf.LeftPart(0.52f);
             // Vertically centre the label against the range control.
             majorBiasLabelRect.y += 4f;
-            Widgets.Label(majorBiasLabelRect, $"Major bias:  {v.passionMajorBias:F2}");
+            Widgets.Label(majorBiasLabelRect, "VP_MajorBias".Translate(v.passionMajorBias.ToString("F2")));
             float mBiasVal = Widgets.HorizontalSlider(rightHalf.RightPart(0.46f), v.passionMajorBias, 0f, 1f);
             if (EditingCustom) v.passionMajorBias = mBiasVal;
-            TooltipHandler.TipRegion(rightHalf, "How often the budget is spent on a Major passion instead of a Minor one. Majors always go to the pawn's best skills first.");
+            TooltipHandler.TipRegion(rightHalf, "VP_MajorBiasTip".Translate().ToString());
 
             listing.Gap(ControlGap);
             // Ceiling is MaxPassionPips (18 = 12 skills x 1.5), not a literal: it is the most the
@@ -477,20 +441,12 @@ namespace PawnVarianceMod
             // 2". That string was fixed on 2026-08-04 and this bound was not, leaving 6 pips of
             // range that could never buy anything. No preset was affected: the highest any of them
             // reaches is Wildcard at 9.8, so nothing was ever calibrated against the old bound.
-            LabeledFloatRange(listing, "Passion budget", PassionCountRangeId,
+            LabeledFloatRange(listing, "VP_PassionBudget".Translate(), PassionCountRangeId,
                 ref v.passionCountMin, ref v.passionCountMax, 0f, Constants.MaxPassionPips, ToStringStyle.FloatOne,
-                "Points spent on passions. Minor passion = 1, Major passion = 1.5. Presets use "
-                + "fractional budgets, so this reads to one decimal.\n\n"
-                + "A TARGET, NOT A LIMIT. Quality picks one point between the handles: the low "
-                + "handle is what the lowest-quality pawn aims for, the high handle the highest. "
-                + "Passion noise then varies each pawn around that point, and can carry them past "
-                + "either handle.\n\n"
-                + "A pawn has 12 skills and each holds at most one passion, so "
-                + Constants.MaxPassionPips.ToString("F0") + " is the most a budget can buy: every skill Major. "
-                + "Reaching it needs Major bias at maximum; at lower bias the budget runs out of skills sooner.");
+                "VP_PassionBudgetTip".Translate(Constants.MaxPassionPips.ToString("F0")));
             Caption(listing, v.passionCountMin > 0f
-                ? "Targets, not limits — Passion noise can carry a pawn outside them. Every pawn still gets at least one passion."
-                : "Minimum is 0, so pawns with no passions are possible.");
+                ? "VP_PassionCaptionTargets".Translate()
+                : "VP_PassionCaptionZero".Translate());
         }
 
         private void DrawChildSkillShift(Listing_Standard listing, VarianceProfileValues v)
@@ -498,27 +454,20 @@ namespace PawnVarianceMod
             listing.Gap(ControlGap);
             bool childVal = v.applyChildSkillShift;
             listing.CheckboxLabeled(
-                "Also shift skills when a child grows up",
+                "VP_ChildShiftToggle".Translate(),
                 ref childVal,
-                "Not recommended. Diverges from vanilla growth mechanics.\n\n"
-                + "Vanilla never re-rolls skill levels at age 13. Enabling this shifts skills at that growth moment, so colonists can gain or lose skill levels on their birthday.\n\n"
-                + "Traits and passions at 13 are unaffected by this toggle. Requires \"Apply variance to children growing up\" in General settings.");
+                "VP_ChildShiftToggleTip".Translate());
             if (EditingCustom) v.applyChildSkillShift = childVal;
 
             if (v.applyChildSkillShift)
             {
                 listing.Gap(ControlGap);
-                LabeledFloatRange(listing, "Child shift at 13", ChildSkillShiftRangeId,
+                LabeledFloatRange(listing, "VP_ChildShift".Translate(), ChildSkillShiftRangeId,
                     ref v.childSkillShiftMin, ref v.childSkillShiftMax, -20f, 20f, ToStringStyle.FloatOne,
-                    "Levels added to or taken from each skill at the age-13 growth moment.\n\n"
-                    + "A HARD LIMIT, unlike Skill shift above. Skill noise still varies each skill "
-                    + "inside these handles, but no skill can be carried past them.\n\n"
-                    + "The difference is deliberate. At generation the pawn's levels were just "
-                    + "rolled, so straying costs nothing. At 13 they are twelve years of play, so "
-                    + "a minimum of 0 has to genuinely mean \"never takes levels away\".");
+                    "VP_ChildShiftTip".Translate());
                 Caption(listing, v.childSkillShiftMin >= 0f
-                    ? "The minimum is at or above zero, so growing up can never cost a pawn skill levels."
-                    : $"The minimum is below zero, so a low-quality pawn can lose up to {-v.childSkillShiftMin:F0} levels in a skill on their birthday.");
+                    ? "VP_ChildShiftCaptionSafe".Translate()
+                    : "VP_ChildShiftCaptionLossy".Translate((-v.childSkillShiftMin).ToString("F0")));
             }
         }
 

@@ -1,0 +1,260 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Varied Pawns - English UI text.
+
+  Every player-visible string in the mod lives here. Two things are deliberately NOT here:
+
+    * DebugActions.cs. It is Prefs.DevMode-only, it is the verification harness rather than
+      player content, and RimWorld's own debug actions are untranslated too. Its output is
+      read against this document and against envelope_check.py, both of which are English.
+    * VarianceProfile.devName ("Faithful", "Sovereign", ...). Those are identities, not
+      labels: EnvelopeFigures.Profiles is a generated table keyed by them and DebugActions
+      matches presets on them. The player-facing name of a preset is VP_Preset_<devName>
+      below, and the two are allowed to differ.
+
+  The preset keys are built by concatenation in code (VP_Preset_ + devName), so
+  tools\check-translation-keys.ps1 cannot see them, so VarianceProfiles.VerifyPresetKeys()
+  covers those at startup instead. Every other key is checked by the script.
+
+  Note for anyone editing these comments: a double hyphen is ILLEGAL inside an XML comment.
+  The C# in this repo uses it constantly as a dash, and copying that habit in here makes the
+  whole file unparseable, which in RimWorld means every key in it silently goes missing.
+
+  A key used in code but missing here does not throw and does not fail the build: RimWorld
+  renders the raw key text where the label should be. Run tools\check-translation-keys.ps1
+  after touching either side.
+-->
+<LanguageData>
+
+  <!-- ===================== Presets ===================== -->
+  <!-- Keys are VP_Preset_<devName> and VP_Preset_<devName>Desc, derived in VarianceProfile.
+       Renaming a devName in code silently orphans both of these. -->
+
+  <VP_Preset_Faithful>Faithful</VP_Preset_Faithful>
+  <VP_Preset_FaithfulDesc>Closest to unmodded RimWorld. Two to three traits, a vanilla passion budget, and a narrow skill spread.</VP_Preset_FaithfulDesc>
+
+  <VP_Preset_Distinct>Distinct</VP_Preset_Distinct>
+  <VP_Preset_DistinctDesc>The mod's signature tuning. Pawns have strong individual strengths and weaknesses while maintaining a fair colony average.</VP_Preset_DistinctDesc>
+
+  <VP_Preset_Wildcard>Wildcard</VP_Preset_Wildcard>
+  <VP_Preset_WildcardDesc>Maximum variation. Pawns can arrive with 0 to 8 traits, zero or many passions, and wide skill swings.</VP_Preset_WildcardDesc>
+
+  <VP_Preset_Desperate>Desperate</VP_Preset_Desperate>
+  <VP_Preset_DesperateDesc>Scraped together survivors. Low skills, few passions, and poor rolls are common.</VP_Preset_DesperateDesc>
+
+  <VP_Preset_Elite>Elite</VP_Preset_Elite>
+  <VP_Preset_EliteDesc>Refined imperial nobility and high-born pawns. Consistently high capability and polished skills.</VP_Preset_EliteDesc>
+
+  <VP_Preset_Sovereign>Sovereign</VP_Preset_Sovereign>
+  <VP_Preset_SovereignDesc>Archite lords, Sanguophages, and supreme leaders. Top-tier skill growth and wide passions.</VP_Preset_SovereignDesc>
+
+  <VP_Preset_Specialist>Specialist</VP_Preset_Specialist>
+  <VP_Preset_SpecialistDesc>Engineered single-domain specialists (Genies, Hussars). Focused skill spikes with domain passions.</VP_Preset_SpecialistDesc>
+
+  <VP_Preset_Scavenger>Scavenger</VP_Preset_Scavenger>
+  <VP_Preset_ScavengerDesc>Wasteland survivors, pirates, and scavengers. Lower baseline skills with tough survival rolls.</VP_Preset_ScavengerDesc>
+
+  <VP_CustomProfileDesc>Editable custom profile. Adjust sliders below to customize pawn generation.</VP_CustomProfileDesc>
+
+
+  <!-- ===================== Profile editor: header ===================== -->
+
+  <VP_Btn_New>+ New</VP_Btn_New>
+  <VP_Btn_Duplicate>Duplicate</VP_Btn_Duplicate>
+  <VP_Btn_Rename>Rename</VP_Btn_Rename>
+  <VP_Btn_Reset>Reset</VP_Btn_Reset>
+  <VP_Btn_Delete>Delete</VP_Btn_Delete>
+  <VP_Enable>Enable</VP_Enable>
+
+  <!-- {0} is the target preset's name, translated, rather than a hardcoded "Faithful".
+       The code resets to VarianceProfiles.VanillaLike, so the two cannot drift apart. -->
+  <VP_Confirm_ResetProfile>Reset this profile to {0}? All of its current values will be replaced.</VP_Confirm_ResetProfile>
+  <VP_Confirm_DeleteProfile>Delete the profile "{0}"? This cannot be undone.</VP_Confirm_DeleteProfile>
+
+  <VP_AverageQuality>Average pawn quality:  {0}</VP_AverageQuality>
+  <VP_AverageQualityReadOnly>Average pawn quality:  {0}  (read-only)</VP_AverageQualityReadOnly>
+
+  <!-- Row 3 and Row 2 of the header are fixed-height with word wrap OFF, so a long
+       translation clips rather than wrapping. Keep these two short in any language. -->
+  <VP_QualityTip>Every pawn rolls a quality. That roll picks one point between the handles of each range below: 0 lands on the low handle, 1 on the high handle.\n\nThis slider sets the average. Individual pawns roll around it.\n\nTrait count and Child shift stop there, because their handles are hard limits. Skill shift and Passion budget add their spread on top, so pawns can be carried past those handles.</VP_QualityTip>
+
+  <VP_TypicalReadout>→  Typical  {0}</VP_TypicalReadout>
+  <VP_TypicalTip>The average pawn this profile generates, against the Faithful baseline (0.25).\n\nCounts starting skill levels and the passion budget only, not traits. It also says nothing about how much pawns differ from each other, so two profiles with the same figure can play very differently.</VP_TypicalTip>
+
+  <!-- {0} sample count, {1} percentage vs Faithful, {2} raw figure. -->
+  <VP_BestOfNRow>Best of {0} rerolls:  {1} vs Faithful ({2})   —   what you actually get if you reroll for this profile</VP_BestOfNRow>
+  <VP_BestOfNTip>Generate {0} pawns and keep the best one.\n\nCloser to how the game is actually played: you reroll starting colonists, choose which prisoners to recruit, and turn down quest pawns.\n\nTwo figures close together means a consistent profile. A steep climb between them means a gambling one, and it pays off when you get to choose.</VP_BestOfNTip>
+
+  <VP_Fingerprint>Traits {0}–{1}  ·  Passions {2}–{3}  ·  Skill shift {4} to {5}  ·  Quality {6}</VP_Fingerprint>
+
+
+  <!-- ===================== Profile editor: skills ===================== -->
+
+  <VP_Section_Skills>Skills</VP_Section_Skills>
+  <VP_Section_SkillsTip>When off, this profile leaves vanilla skill levels untouched.</VP_Section_SkillsTip>
+
+  <VP_SkillSpread>Skill spread:  ±{0} lv</VP_SkillSpread>
+  <VP_SkillSpreadTip>How far a single pawn's own skills spread apart from each other, in skill levels. This is the typical spread, not the maximum; the line below shows the extreme.\n\nDrawn separately for every skill, so it makes one pawn uneven. It does not make pawns differ from each other, which is what the quality roll does.\n\nIt is added on top of Skill shift, so a high value can push individual skills past either handle of that range.</VP_SkillSpreadTip>
+  <VP_SkillSpreadDerived>extreme ±{0} lv per skill · most skills land {1} – {2}</VP_SkillSpreadDerived>
+
+  <VP_SkillShift>Skill shift</VP_SkillShift>
+  <VP_SkillShiftTip>Levels added to or taken from every skill, on top of the vanilla roll.\n\nA TARGET, NOT A LIMIT. Quality picks one point between the handles: the low handle is what the lowest-quality pawn aims for, the high handle the highest. Skill spread then scatters that pawn's twelve skills around that point, and can carry them past either handle.\n\nSet the handles for the pawn you expect. Set Skill spread for how far the exceptions stray.</VP_SkillShiftTip>
+
+  <VP_ChildShiftToggle>Also shift skills when a child grows up</VP_ChildShiftToggle>
+  <VP_ChildShiftToggleTip>Not recommended. Diverges from vanilla growth.\n\nVanilla never re-rolls skill levels at age 13. This shifts them at that growth moment, so colonists can gain or lose skill levels on their birthday.\n\nTraits and passions at 13 are unaffected. Requires "Apply variance to children growing up" in General settings.</VP_ChildShiftToggleTip>
+
+  <VP_ChildShift>Child shift at 13</VP_ChildShift>
+  <VP_ChildShiftTip>Levels added to or taken from each skill at the age-13 growth moment.\n\nA HARD LIMIT, unlike Skill shift above. Skill spread still varies each skill inside these handles, but no skill is carried past them.\n\nThe difference is deliberate. At generation the pawn's levels were just rolled, so straying costs nothing. At 13 they are twelve years of play, so a minimum of 0 has to genuinely mean "never takes levels away".</VP_ChildShiftTip>
+  <VP_ChildShiftCaptionSafe>The minimum is at or above zero, so growing up can never cost a pawn skill levels.</VP_ChildShiftCaptionSafe>
+  <VP_ChildShiftCaptionLossy>The minimum is below zero, so a low-quality pawn can lose up to {0} levels in a skill on their birthday.</VP_ChildShiftCaptionLossy>
+
+
+  <!-- ===================== Profile editor: traits ===================== -->
+
+  <VP_Section_Traits>Traits</VP_Section_Traits>
+  <VP_Section_TraitsTip>When off, this profile leaves vanilla trait generation untouched.</VP_Section_TraitsTip>
+
+  <VP_CountProtectedTraits>Count xenotype/forced traits toward the trait count</VP_CountProtectedTraits>
+  <VP_CountProtectedTraitsTip>When off, the range below counts only traits this mod rolls, and traits forced by a xenotype, gene, backstory or scenario are added on top. When on, the range counts every trait the pawn has. Forced traits are never removed either way.</VP_CountProtectedTraitsTip>
+
+  <VP_TraitCount>Trait count</VP_TraitCount>
+  <!-- Head varies with the countProtectedTraits toggle; body is shared. -->
+  <VP_TraitCountTipTotal>Total traits on the pawn, including xenotype and forced traits.</VP_TraitCountTipTotal>
+  <VP_TraitCountTipRolled>Traits this mod rolls. Xenotype, gene, backstory and scenario traits are added on top.</VP_TraitCountTipRolled>
+  <VP_TraitCountTipBody>A HARD LIMIT, unlike Skill shift and Passion budget. Quality picks a point between the handles and the roll never leaves them. There is no trait spread setting.\n\nMore traits is not better. Traits are picked without regard to quality, so a wider range only buys more draws from the same pool, including the ones that cause mental breaks. Vanilla's own range is 2 to 3.</VP_TraitCountTipBody>
+
+
+  <!-- ===================== Profile editor: passions ===================== -->
+
+  <VP_Section_Passions>Passions</VP_Section_Passions>
+  <VP_Section_PassionsTip>When off, this profile leaves vanilla passion assignment untouched.</VP_Section_PassionsTip>
+
+  <VP_PassionSpread>Passion spread:  ±{0} pips</VP_PassionSpread>
+  <VP_PassionSpreadTip>How much the total passion budget varies between pawns, in pips (a Minor passion costs 1, a Major costs 1.5). This is the typical spread, not the maximum; the line below shows the extreme.\n\nThe opposite of Skill spread: this varies one budget per pawn, so it makes pawns differ from each other rather than making one pawn uneven.\n\nIt is added on top of Passion budget, so a high value can push a pawn past either handle of that range.</VP_PassionSpreadTip>
+  <VP_PassionSpreadDerived>extreme ±{0} pips · budget usually {1} – {2}</VP_PassionSpreadDerived>
+
+  <VP_MajorBias>Major bias:  {0}</VP_MajorBias>
+  <VP_MajorBiasTip>How often the budget is spent on a Major passion instead of a Minor one. Majors always go to the pawn's best skills first.</VP_MajorBiasTip>
+
+  <VP_PassionBudget>Passion budget</VP_PassionBudget>
+  <!-- {0} is Constants.MaxPassionPips (18 = 12 skills x 1.5). Never hardcode it here:
+       it was 24 in the text long after the constant changed, leaving 6 pips of range
+       that could not buy anything. -->
+  <VP_PassionBudgetTip>Points spent on passions. A Minor passion costs 1, a Major costs 1.5. Presets use fractional budgets, so this reads to one decimal.\n\nA TARGET, NOT A LIMIT. Quality picks one point between the handles: the low handle is what the lowest-quality pawn aims for, the high handle the highest. Passion spread then varies each pawn around that point, and can carry them past either handle.\n\nA pawn has 12 skills and each holds at most one passion, so {0} is the most a budget can buy: every skill Major. Reaching it needs Major bias at maximum, and at lower bias the budget runs out of skills sooner.</VP_PassionBudgetTip>
+  <VP_PassionCaptionTargets>Targets, not limits. Passion spread can carry a pawn outside them, and every pawn still gets at least one passion.</VP_PassionCaptionTargets>
+  <VP_PassionCaptionZero>Minimum is 0, so pawns with no passions are possible.</VP_PassionCaptionZero>
+
+
+  <!-- ===================== Tabs and General ===================== -->
+
+  <VP_Tab_General>General</VP_Tab_General>
+  <VP_Tab_ProfileEditor>Profile Editor</VP_Tab_ProfileEditor>
+  <VP_Tab_Overrides>Overrides</VP_Tab_Overrides>
+
+  <VP_ActiveColonyProfile>Active Colony Profile</VP_ActiveColonyProfile>
+  <VP_ActiveColonyProfileCaption>Default profile for player colonists and neutral pawns:</VP_ActiveColonyProfileCaption>
+  <!-- Load-bearing, do not drop. Without it the General tab names a profile that may never
+       apply to a single colonist: a Human race override at Normal silently supersedes it. -->
+  <VP_OverridesBeatThis>Overrides on a pawn's faction, race or xenotype take precedence over this.</VP_OverridesBeatThis>
+
+  <VP_Section_General>General</VP_Section_General>
+  <VP_GeneralCaption>These apply to every profile and are not changed by switching profiles.</VP_GeneralCaption>
+
+  <VP_HostileToggle>Apply to hostile-faction pawns</VP_HostileToggle>
+  <VP_HostileToggleTip>When off, raiders and other hostile pawns are generated exactly as in vanilla and this mod never touches them. When on, they are generated from the profile you pick below.</VP_HostileToggleTip>
+  <VP_HostileProfileCaption>Profile used for raiders and other hostiles:</VP_HostileProfileCaption>
+  <VP_HostileProfileTip>Colonists are selected by the player, but raiders arrive directly. A separate hostile profile balances raider difficulty independently from your colony.</VP_HostileProfileTip>
+
+  <VP_GrowUpToggle>Apply variance to children growing up</VP_GrowUpToggle>
+  <VP_GrowUpToggleTip>Applies trait and passion variance when a child turns 13. The mod waits for growth choices to resolve, then tops up traits and passions to match profile targets. Existing traits and passions are never removed.</VP_GrowUpToggleTip>
+
+  <VP_VerboseLogging>Verbose logging (dev mode)</VP_VerboseLogging>
+  <VP_VerboseLoggingTip>Rethrows exceptions instead of swallowing them, and logs a per-pawn breakdown of how traits and passions were assigned. Leave off for normal play.</VP_VerboseLoggingTip>
+
+  <VP_ResetAllSettings>Reset All Settings</VP_ResetAllSettings>
+  <VP_Confirm_ResetAll>Reset all settings to defaults? Every custom profile, override and option will be restored.</VP_Confirm_ResetAll>
+
+
+  <!-- ===================== Share settings ===================== -->
+
+  <VP_Section_Share>Share Settings</VP_Section_Share>
+  <VP_ShareTip>Copies your whole configuration to the clipboard as text: every custom profile, both override lists with their priorities, and the options above. Paste it anywhere to share, or import someone else's.</VP_ShareTip>
+  <VP_Btn_Export>Export to Clipboard</VP_Btn_Export>
+  <VP_Btn_Import>Import from Clipboard</VP_Btn_Import>
+  <VP_Msg_Exported>Varied Pawns settings copied to the clipboard.</VP_Msg_Exported>
+  <VP_Msg_ExportFailed>Could not export settings. See the log for details.</VP_Msg_ExportFailed>
+  <VP_Msg_Imported>Varied Pawns settings imported.</VP_Msg_Imported>
+  <VP_Confirm_Import>Importing replaces ALL of your Varied Pawns settings: every custom profile, both override lists, and the general options.\n\nThis cannot be undone. Continue?</VP_Confirm_Import>
+
+
+  <!-- ===================== Overrides ===================== -->
+
+  <VP_EnableOverrides>Enable Faction, Race &amp; Xenotype Overrides</VP_EnableOverrides>
+  <VP_EnableOverridesTip>When enabled, specific faction, race and xenotype profiles take precedence over the Hostile and General profiles.</VP_EnableOverridesTip>
+  <VP_EnableOverridesHint>Enable the checkbox above to configure per-faction, per-race and per-xenotype profiles.</VP_EnableOverridesHint>
+
+  <VP_FactionPrecedence>Faction Overrides Take Priority Over Race &amp; Xenotype Overrides</VP_FactionPrecedence>
+  <VP_FactionPrecedenceTip>When checked, a pawn matching a Faction override and also a Race or Xenotype override at the same priority (an Empire Neanderthal, say) uses the Faction override. When unchecked, Race and Xenotype win.\n\nRace always beats Xenotype at equal priority, whatever this is set to.</VP_FactionPrecedenceTip>
+
+  <VP_Col_Profile>Profile</VP_Col_Profile>
+  <VP_Col_Priority>Priority</VP_Col_Priority>
+  <VP_Col_Faction>Faction</VP_Col_Faction>
+  <VP_Col_Xenotype>Xenotype</VP_Col_Xenotype>
+  <VP_Col_Race>Race</VP_Col_Race>
+  <VP_Btn_Remove>Remove</VP_Btn_Remove>
+
+  <VP_PriorityTip>Every override defaults to Normal. Higher priorities win over lower ones.\n\nAt equal priority the order is Faction, then Race, then Xenotype, or Race, Xenotype, then Faction if the faction-precedence toggle above is off.\n\nAnything not listed here has no override and falls back to the hostile or colony profile.</VP_PriorityTip>
+
+  <VP_Section_FactionOverrides>Faction Overrides</VP_Section_FactionOverrides>
+  <VP_NoFactionOverrides>No faction overrides configured.</VP_NoFactionOverrides>
+  <VP_Add_FactionOverride>+ Add Faction Override</VP_Add_FactionOverride>
+  <VP_NoRemainingFactions>No remaining factions available</VP_NoRemainingFactions>
+  <VP_Btn_DeleteAllFactionOverrides>Delete All Faction Overrides</VP_Btn_DeleteAllFactionOverrides>
+  <VP_Confirm_DeleteAllFactionOverrides>Delete all faction overrides? Every custom faction assignment will be cleared.</VP_Confirm_DeleteAllFactionOverrides>
+  <VP_Btn_RestoreFactionOverrides>Restore Default Faction Overrides</VP_Btn_RestoreFactionOverrides>
+  <VP_Confirm_RestoreFactionOverrides>Restore default faction overrides? Every faction assignment goes back to its shipped default.</VP_Confirm_RestoreFactionOverrides>
+
+  <VP_Section_XenotypeOverrides>Xenotype Overrides</VP_Section_XenotypeOverrides>
+  <VP_NoXenotypeOverrides>No xenotype overrides configured.</VP_NoXenotypeOverrides>
+  <VP_Add_XenotypeOverride>+ Add Xenotype Override</VP_Add_XenotypeOverride>
+  <VP_NoRemainingXenotypes>No remaining xenotypes available</VP_NoRemainingXenotypes>
+  <VP_Btn_DeleteAllXenotypeOverrides>Delete All Xenotype Overrides</VP_Btn_DeleteAllXenotypeOverrides>
+  <VP_Confirm_DeleteAllXenotypeOverrides>Delete all xenotype overrides? Every custom xenotype assignment will be cleared.</VP_Confirm_DeleteAllXenotypeOverrides>
+  <VP_Btn_RestoreXenotypeOverrides>Restore Default Xenotype Overrides</VP_Btn_RestoreXenotypeOverrides>
+  <VP_Confirm_RestoreXenotypeOverrides>Restore default xenotype overrides? Every xenotype assignment goes back to its shipped default.</VP_Confirm_RestoreXenotypeOverrides>
+
+  <VP_Section_RaceOverrides>Race Overrides</VP_Section_RaceOverrides>
+  <VP_NoRaceOverrides>No race overrides configured. None ship by default, because the races available depend on which race mods you have installed.</VP_NoRaceOverrides>
+  <VP_Add_RaceOverride>+ Add Race Override</VP_Add_RaceOverride>
+  <VP_NoRemainingRaces>No remaining races available</VP_NoRemainingRaces>
+  <VP_Btn_DeleteAllRaceOverrides>Delete All Race Overrides</VP_Btn_DeleteAllRaceOverrides>
+  <VP_Confirm_DeleteAllRaceOverrides>Delete all race overrides? Every custom race assignment will be cleared.</VP_Confirm_DeleteAllRaceOverrides>
+
+
+  <!-- ===================== Profile names and readouts ===================== -->
+
+  <VP_DefaultCustomProfileName>Custom Profile</VP_DefaultCustomProfileName>
+  <VP_NewCustomProfileName>Custom {0}</VP_NewCustomProfileName>
+  <VP_DuplicateProfileName>{0} Copy</VP_DuplicateProfileName>
+
+  <!-- Disambiguating suffix when two defs share a display label, e.g. two mods both
+       adding an "Outlander union". {0} label, {1} defName. -->
+  <VP_LabelWithDefName>{0} ({1})</VP_LabelWithDefName>
+
+  <VP_PowerReadout>Power: {0}</VP_PowerReadout>
+  <VP_BaselineReadout>Baseline ({0})</VP_BaselineReadout>
+  <!-- {0} sign, {1} percentage, {2} raw figure. -->
+  <VP_PercentVsFaithful>{0}{1}% vs Faithful ({2})</VP_PercentVsFaithful>
+  <VP_BaselineWord>baseline</VP_BaselineWord>
+
+  <!-- OverridePriority, shown on the priority button and in its menu. These reached the
+       player as raw enum names (.ToString()) until the translation pass, which is why they
+       are worth a note: a grep for string literals does not find them, because there is no
+       literal to find. Any other enum rendered with .ToString() has the same problem. -->
+  <VP_Priority_Lowest>Lowest</VP_Priority_Lowest>
+  <VP_Priority_Low>Low</VP_Priority_Low>
+  <VP_Priority_Normal>Normal</VP_Priority_Normal>
+  <VP_Priority_High>High</VP_Priority_High>
+  <VP_Priority_Highest>Highest</VP_Priority_Highest>
+
+</LanguageData>

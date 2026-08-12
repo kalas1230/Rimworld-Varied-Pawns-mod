@@ -403,7 +403,7 @@ namespace PawnVarianceMod
             // there is nothing to compare and the run is meaningless rather than merely failing.
             int faithfulIdx = Array.IndexOf(EnvelopeFigures.Profiles, "Faithful");
             VarianceProfile faithfulPreset = VarianceProfiles.Presets
-                .FirstOrDefault(x => x.label == "Faithful");
+                .FirstOrDefault(x => x.devName == "Faithful");
             if (faithfulIdx < 0 || faithfulPreset == null)
             {
                 sb.AppendLine("  ABORT: Faithful is missing from the reference table or from "
@@ -430,7 +430,7 @@ namespace PawnVarianceMod
             {
                 string label = EnvelopeFigures.Profiles[p];
                 VarianceProfile preset = VarianceProfiles.Presets
-                    .FirstOrDefault(x => x.label == label);
+                    .FirstOrDefault(x => x.devName == label);
 
                 // A preset present in the reference but absent from the code means one was
                 // renamed or removed without regenerating -- report it rather than skipping,
@@ -529,7 +529,7 @@ namespace PawnVarianceMod
                     float got = DispersionModel.TypicalAt(off, q);
                     if (Mathf.Abs(got - vanillaComposite) > ToggleTolerance)
                     {
-                        sb.AppendLine($"  {preset.label,-12} q={q:F2} both axes off -> {got:F6}, "
+                        sb.AppendLine($"  {preset.devName,-12} q={q:F2} both axes off -> {got:F6}, "
                             + $"expected {vanillaComposite:F6}  *** TOGGLE MISMATCH ***");
                         toggleFailures++;
                     }
@@ -557,7 +557,7 @@ namespace PawnVarianceMod
             // its centre and the two estimators must coincide exactly, which is the comparison
             // that actually has meaning here.
             VarianceProfile faithful = VarianceProfiles.Presets
-                .FirstOrDefault(x => x.label == "Faithful");
+                .FirstOrDefault(x => x.devName == "Faithful");
             if (faithful == null)
             {
                 sb.AppendLine("  NOTE  Faithful missing; the cross-branch baseline check was skipped.");
@@ -588,7 +588,7 @@ namespace PawnVarianceMod
             // so the largest signal; the threshold is far below the real effect (~0.03 raw, worth
             // ~14pp of the displayed figure) and far above integration noise.
             VarianceProfile sovereign = VarianceProfiles.Presets
-                .FirstOrDefault(x => x.label == "Sovereign");
+                .FirstOrDefault(x => x.devName == "Sovereign");
             if (sovereign == null)
             {
                 sb.AppendLine("  NOTE  Sovereign missing; the toggles-do-something check was skipped.");
@@ -672,7 +672,7 @@ namespace PawnVarianceMod
                 // A failure here is a structural divergence, never accumulated rounding.
                 if (worstQDelta > 1e-4f)
                 {
-                    sb.AppendLine($"  {preset.label,-12} pip/moment mismatch, worst at q={worstQ:F2}: "
+                    sb.AppendLine($"  {preset.devName,-12} pip/moment mismatch, worst at q={worstQ:F2}: "
                         + $"delta {worstQDelta:E2}  *** PIP MISMATCH ***");
                     pipFailures++;
                 }
@@ -712,7 +712,7 @@ namespace PawnVarianceMod
                 float relErr = Mathf.Abs(recon - betaMean) / Mathf.Max(Mathf.Abs(betaMean), 1e-6f);
                 if (relErr > 1e-3f)
                 {
-                    sb.AppendLine($"  {preset.label,-12} Beta-integral mismatch: reconstructed "
+                    sb.AppendLine($"  {preset.devName,-12} Beta-integral mismatch: reconstructed "
                         + $"{recon:F6} vs ExpectedPassionPips {betaMean:F6} "
                         + $"(rel {relErr:E2})  *** PIP INTEGRAL MISMATCH ***");
                     pipFailures++;
@@ -1344,7 +1344,7 @@ namespace PawnVarianceMod
             foreach (var preset in VarianceProfiles.Presets)
             {
                 var v = preset.MakeValues();
-                sb.AppendLine($"  {preset.label,-12}"
+                sb.AppendLine($"  {preset.devName,-12}"
                     + $"{DispersionModel.BestOfN(v, 1),9:F4}"
                     + $"{DispersionModel.BestOfN(v, 5),9:F4}"
                     + $"{DispersionModel.BestOfN(v, 25),9:F4}"

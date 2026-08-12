@@ -16,6 +16,29 @@ namespace PawnVarianceMod
         Highest = 4
     }
 
+    public static class OverridePriorityExtensions
+    {
+        // These are drawn on the priority button and in its float menu, so they are player
+        // text. They reached the UI as raw .ToString() enum names until the translation pass
+        // and were nearly missed: a search for string literals cannot find them, because
+        // there is no literal to find. The key is built from the enum name, so adding a
+        // member without adding its key renders the raw name again -- which is why
+        // VerifyPriorityKeys() below asserts every member has one.
+        public static string TranslatedLabel(this OverridePriority p) =>
+            ("VP_Priority_" + p).Translate();
+
+        public static void VerifyPriorityKeys()
+        {
+            foreach (OverridePriority p in System.Enum.GetValues(typeof(OverridePriority)))
+            {
+                string key = "VP_Priority_" + p;
+                if (!key.CanTranslate())
+                    Log.Error("[PawnVarianceMod] Missing translation key " + key
+                        + "; the override priority button will show the raw enum name.");
+            }
+        }
+    }
+
     public partial class PawnVarianceSettings : ModSettings
     {
         // Housekeeping preferences: deliberately outside the profile system, so switching profiles
@@ -239,7 +262,7 @@ namespace PawnVarianceMod
                 // the payload does not itself carry (SettingsTransfer.CopyFrom does not validate).
                 else
                 {
-                    Log.WarningOnce($"[PawnVarianceMod] Profile id '{id}' resolves to nothing; falling back to {VarianceProfiles.VanillaLike.label}. A settings import may reference a profile it did not include.", ("PawnVarianceMod.DanglingProfileId." + id).GetHashCode());
+                    Log.WarningOnce($"[PawnVarianceMod] Profile id '{id}' resolves to nothing; falling back to {VarianceProfiles.VanillaLike.devName}. A settings import may reference a profile it did not include.", ("PawnVarianceMod.DanglingProfileId." + id).GetHashCode());
                     vals = VarianceProfiles.VanillaLike.MakeValues();
                 }
             }
@@ -455,7 +478,7 @@ namespace PawnVarianceMod
                 {
                     profile.values?.ClampAndSwap();
                     if (string.IsNullOrWhiteSpace(profile.name))
-                        profile.name = "Custom Profile";
+                        profile.name = "VP_DefaultCustomProfileName".Translate();
                 }
 
                 if (string.IsNullOrEmpty(activeProfileId))
@@ -600,7 +623,7 @@ namespace PawnVarianceMod
                 {
                     profile.values?.ClampAndSwap();
                     if (string.IsNullOrWhiteSpace(profile.name))
-                        profile.name = "Custom Profile";
+                        profile.name = "VP_DefaultCustomProfileName".Translate();
                 }
             }
             RefreshResolved();
@@ -615,9 +638,9 @@ namespace PawnVarianceMod
         {
             var tabs = new List<TabRecord>
             {
-                new TabRecord("General", () => currentTab = SettingsTab.General, currentTab == SettingsTab.General),
-                new TabRecord("Profile Editor", () => currentTab = SettingsTab.ProfileEditor, currentTab == SettingsTab.ProfileEditor),
-                new TabRecord("Overrides", () => currentTab = SettingsTab.Overrides, currentTab == SettingsTab.Overrides)
+                new TabRecord("VP_Tab_General".Translate(), () => currentTab = SettingsTab.General, currentTab == SettingsTab.General),
+                new TabRecord("VP_Tab_ProfileEditor".Translate(), () => currentTab = SettingsTab.ProfileEditor, currentTab == SettingsTab.ProfileEditor),
+                new TabRecord("VP_Tab_Overrides".Translate(), () => currentTab = SettingsTab.Overrides, currentTab == SettingsTab.Overrides)
             };
 
             Rect tabRect = new Rect(inRect.x, inRect.y + 40f, inRect.width, inRect.height - 40f);
@@ -649,9 +672,9 @@ namespace PawnVarianceMod
             listing.Begin(viewRect);
 
             Text.Font = GameFont.Medium;
-            listing.Label("Active Colony Profile");
+            listing.Label("VP_ActiveColonyProfile".Translate());
             Text.Font = GameFont.Small;
-            Caption(listing, "Default profile applied to player colonists and neutral pawns:");
+            Caption(listing, "VP_ActiveColonyProfileCaption".Translate());
 
             if (listing.ButtonText(LabelFor(activeProfileId)))
                 ProfileMenu(id => { activeProfileId = id; RefreshResolved(); });
@@ -664,7 +687,7 @@ namespace PawnVarianceMod
             // General tab names a profile that may never apply to a single colonist. Observed
             // 2026-08-06: a Human race override at Normal silently supersedes it, because the
             // player faction has no override and the race one is then the only match.
-            Caption(listing, "Overrides on a pawn's faction, race or xenotype take precedence over this.");
+            Caption(listing, "VP_OverridesBeatThis".Translate());
 
             listing.Gap(SectionGap);
 
@@ -685,9 +708,9 @@ namespace PawnVarianceMod
             listing.Begin(viewRect);
 
             listing.CheckboxLabeled(
-                "Enable Faction, Race & Xenotype Overrides",
+                "VP_EnableOverrides".Translate(),
                 ref enableOverrides,
-                "When enabled, specific faction, race and xenotype profiles take precedence over Hostile and General profiles.");
+                "VP_EnableOverridesTip".Translate());
 
             listing.Gap(4f);
 
@@ -695,15 +718,15 @@ namespace PawnVarianceMod
             if (!enableOverrides)
             {
                 GUI.enabled = false;
-                Caption(listing, "Enable the checkbox above to configure per-faction, per-race and per-xenotype profiles.");
+                Caption(listing, "VP_EnableOverridesHint".Translate());
             }
 
             // Field name is deliberately unchanged -- it is Scribed as
             // "factionOverridesTakePrecedence" and renaming it would orphan every saved config.
             listing.CheckboxLabeled(
-                "Faction Overrides Take Priority Over Race & Xenotype Overrides",
+                "VP_FactionPrecedence".Translate(),
                 ref factionOverridesTakePrecedence,
-                "When checked, if a pawn matches a Faction override and also a Race or Xenotype override at the same priority (e.g. an Empire Neanderthal), the Faction override is used. If unchecked, Race and Xenotype overrides take priority.\n\nRace always beats Xenotype at equal priority, regardless of this setting.");
+                "VP_FactionPrecedenceTip".Translate());
 
             listing.Gap(SectionGap);
 
@@ -737,19 +760,14 @@ namespace PawnVarianceMod
             Text.Font = GameFont.Tiny;
             GUI.color = new Color(1f, 1f, 1f, 0.65f);
             Widgets.Label(c1, firstColumn);
-            Widgets.Label(c2, "Profile");
-            Widgets.Label(c3, "Priority");
+            Widgets.Label(c2, "VP_Col_Profile".Translate());
+            Widgets.Label(c3, "VP_Col_Priority".Translate());
             GUI.color = Color.white;
             Text.Font = GameFont.Small;
 
             // The fourth column is the Remove button and needs no caption.
             TooltipHandler.TipRegion(c3,
-                "Every override defaults to Normal. Higher priority levels take precedence over "
-                + "lower ones.\n\n"
-                + "At equal priority the order is Faction, then Race, then Xenotype -- or Race, "
-                + "Xenotype, then Faction if the faction-precedence toggle above is off.\n\n"
-                + "Factions, races and xenotypes not listed here have no override and fall back to "
-                + "the hostile or colony profile.");
+                "VP_PriorityTip".Translate().ToString());
 
             listing.Gap(2f);
         }
@@ -794,12 +812,12 @@ namespace PawnVarianceMod
                     string k = key;
                     ProfileMenu(id => overrides[k] = id);
                 }
-                if (Widgets.ButtonText(prioRect, currentPrio.ToString()))
+                if (Widgets.ButtonText(prioRect, currentPrio.TranslatedLabel()))
                 {
                     string k = key;
                     PriorityMenu(pr => priorities[k] = pr);
                 }
-                if (Widgets.ButtonText(removeRect, "Remove"))
+                if (Widgets.ButtonText(removeRect, "VP_Btn_Remove".Translate()))
                 {
                     toRemove = key;
                 }
@@ -814,22 +832,22 @@ namespace PawnVarianceMod
 
         private void DrawFactionOverridesSection(Listing_Standard listing)
         {
-            Section(listing, "Faction Overrides");
+            Section(listing, "VP_Section_FactionOverrides".Translate());
 
             if (factionOverrides.Count == 0)
             {
-                Caption(listing, "No faction overrides configured.");
+                Caption(listing, "VP_NoFactionOverrides".Translate());
             }
             else
             {
-                OverrideColumnHeaders(listing, "Faction");
+                OverrideColumnHeaders(listing, "VP_Col_Faction".Translate());
                 DrawOverrideRows(listing, factionOverrides, factionPriorities,
                     key => FactionMenuDefs.LabelForKey(key));
             }
 
             Color oldColor = GUI.color;
             GUI.color = new Color(0.4f, 0.85f, 0.4f);
-            if (listing.ButtonText("+ Add Faction Override"))
+            if (listing.ButtonText("VP_Add_FactionOverride".Translate()))
             {
                 var options = new List<FloatMenuOption>();
                 foreach (var factionDef in FactionMenuDefs.Defs)
@@ -846,7 +864,7 @@ namespace PawnVarianceMod
                 }
                 if (options.Count == 0)
                 {
-                    options.Add(new FloatMenuOption("No remaining factions available", null));
+                    options.Add(new FloatMenuOption("VP_NoRemainingFactions".Translate(), null));
                 }
                 Find.WindowStack.Add(new FloatMenu(options));
             }
@@ -859,10 +877,10 @@ namespace PawnVarianceMod
             Rect restoreFactionRect = new Rect(factionActionRow.x + halfWF + 8f, factionActionRow.y, halfWF, factionActionRow.height);
 
             GUI.color = new Color(1f, 0.4f, 0.4f);
-            if (Widgets.ButtonText(delFactionRect, "Delete All Faction Overrides"))
+            if (Widgets.ButtonText(delFactionRect, "VP_Btn_DeleteAllFactionOverrides".Translate()))
             {
                 Find.WindowStack.Add(Dialog_MessageBox.CreateConfirmation(
-                    "Are you sure you want to delete all faction overrides? This will clear all custom faction profile assignments.",
+                    "VP_Confirm_DeleteAllFactionOverrides".Translate(),
                     () =>
                     {
                         factionOverrides.Clear();
@@ -872,10 +890,10 @@ namespace PawnVarianceMod
             }
 
             GUI.color = new Color(0.9f, 0.75f, 0.3f);
-            if (Widgets.ButtonText(restoreFactionRect, "Restore Default Faction Overrides"))
+            if (Widgets.ButtonText(restoreFactionRect, "VP_Btn_RestoreFactionOverrides".Translate()))
             {
                 Find.WindowStack.Add(Dialog_MessageBox.CreateConfirmation(
-                    "Are you sure you want to restore default faction overrides? This will reset all faction profile overrides to their default assignments.",
+                    "VP_Confirm_RestoreFactionOverrides".Translate(),
                     () =>
                     {
                         RestoreDefaultFactionOverrides();
@@ -887,22 +905,22 @@ namespace PawnVarianceMod
 
         private void DrawXenotypeOverridesSection(Listing_Standard listing)
         {
-            Section(listing, "Xenotype Overrides");
+            Section(listing, "VP_Section_XenotypeOverrides".Translate());
 
             if (xenotypeOverrides.Count == 0)
             {
-                Caption(listing, "No xenotype overrides configured.");
+                Caption(listing, "VP_NoXenotypeOverrides".Translate());
             }
             else
             {
-                OverrideColumnHeaders(listing, "Xenotype");
+                OverrideColumnHeaders(listing, "VP_Col_Xenotype".Translate());
                 DrawOverrideRows(listing, xenotypeOverrides, xenotypePriorities,
                     key => XenotypeMenuDefs.LabelForKey(key));
             }
 
             Color oldColor = GUI.color;
             GUI.color = new Color(0.4f, 0.85f, 0.4f);
-            if (listing.ButtonText("+ Add Xenotype Override"))
+            if (listing.ButtonText("VP_Add_XenotypeOverride".Translate()))
             {
                 var options = new List<FloatMenuOption>();
                 foreach (var xenoDef in XenotypeMenuDefs.Defs)
@@ -919,7 +937,7 @@ namespace PawnVarianceMod
                 }
                 if (options.Count == 0)
                 {
-                    options.Add(new FloatMenuOption("No remaining xenotypes available", null));
+                    options.Add(new FloatMenuOption("VP_NoRemainingXenotypes".Translate(), null));
                 }
                 Find.WindowStack.Add(new FloatMenu(options));
             }
@@ -932,10 +950,10 @@ namespace PawnVarianceMod
             Rect restoreXenoRect = new Rect(xenoActionRow.x + halfWX + 8f, xenoActionRow.y, halfWX, xenoActionRow.height);
 
             GUI.color = new Color(1f, 0.4f, 0.4f);
-            if (Widgets.ButtonText(delXenoRect, "Delete All Xenotype Overrides"))
+            if (Widgets.ButtonText(delXenoRect, "VP_Btn_DeleteAllXenotypeOverrides".Translate()))
             {
                 Find.WindowStack.Add(Dialog_MessageBox.CreateConfirmation(
-                    "Are you sure you want to delete all xenotype overrides? This will clear all custom xenotype profile assignments.",
+                    "VP_Confirm_DeleteAllXenotypeOverrides".Translate(),
                     () =>
                     {
                         xenotypeOverrides.Clear();
@@ -945,10 +963,10 @@ namespace PawnVarianceMod
             }
 
             GUI.color = new Color(0.9f, 0.75f, 0.3f);
-            if (Widgets.ButtonText(restoreXenoRect, "Restore Default Xenotype Overrides"))
+            if (Widgets.ButtonText(restoreXenoRect, "VP_Btn_RestoreXenotypeOverrides".Translate()))
             {
                 Find.WindowStack.Add(Dialog_MessageBox.CreateConfirmation(
-                    "Are you sure you want to restore default xenotype overrides? This will reset all xenotype profile overrides to their default assignments.",
+                    "VP_Confirm_RestoreXenotypeOverrides".Translate(),
                     () =>
                     {
                         RestoreDefaultXenotypeOverrides();
@@ -960,22 +978,22 @@ namespace PawnVarianceMod
 
         private void DrawRaceOverridesSection(Listing_Standard listing)
         {
-            Section(listing, "Race Overrides");
+            Section(listing, "VP_Section_RaceOverrides".Translate());
 
             if (raceOverrides.Count == 0)
             {
-                Caption(listing, "No race overrides configured. Race overrides ship empty because the available races depend on which race mods are installed.");
+                Caption(listing, "VP_NoRaceOverrides".Translate());
             }
             else
             {
-                OverrideColumnHeaders(listing, "Race");
+                OverrideColumnHeaders(listing, "VP_Col_Race".Translate());
                 DrawOverrideRows(listing, raceOverrides, racePriorities,
                     key => RaceMenuDefs.LabelForKey(key));
             }
 
             Color oldColor = GUI.color;
             GUI.color = new Color(0.4f, 0.85f, 0.4f);
-            if (listing.ButtonText("+ Add Race Override"))
+            if (listing.ButtonText("VP_Add_RaceOverride".Translate()))
             {
                 var options = new List<FloatMenuOption>();
                 foreach (var raceDef in RaceMenuDefs.Defs)
@@ -992,7 +1010,7 @@ namespace PawnVarianceMod
                 }
                 if (options.Count == 0)
                 {
-                    options.Add(new FloatMenuOption("No remaining races available", null));
+                    options.Add(new FloatMenuOption("VP_NoRemainingRaces".Translate(), null));
                 }
                 Find.WindowStack.Add(new FloatMenu(options));
             }
@@ -1002,10 +1020,10 @@ namespace PawnVarianceMod
             Rect raceActionRow = listing.GetRect(28f);
 
             GUI.color = new Color(1f, 0.4f, 0.4f);
-            if (Widgets.ButtonText(raceActionRow, "Delete All Race Overrides"))
+            if (Widgets.ButtonText(raceActionRow, "VP_Btn_DeleteAllRaceOverrides".Translate()))
             {
                 Find.WindowStack.Add(Dialog_MessageBox.CreateConfirmation(
-                    "Are you sure you want to delete all race overrides? This will clear all custom race profile assignments.",
+                    "VP_Confirm_DeleteAllRaceOverrides".Translate(),
                     () =>
                     {
                         raceOverrides.Clear();
@@ -1065,7 +1083,7 @@ namespace PawnVarianceMod
             internal string LabelFor(T d)
             {
                 string label = LabelOf(d);
-                return ambiguous.Contains(label) ? $"{label} ({d.defName})" : label;
+                return ambiguous.Contains(label) ? "VP_LabelWithDefName".Translate(label, d.defName).ToString() : label;
             }
 
             // The same label, resolved from the stored override key. Falls back to the raw key for
@@ -1177,7 +1195,7 @@ namespace PawnVarianceMod
             foreach (OverridePriority p in Enum.GetValues(typeof(OverridePriority)))
             {
                 var captured = p;
-                options.Add(new FloatMenuOption(captured.ToString(), () => onPick(captured)));
+                options.Add(new FloatMenuOption(captured.TranslatedLabel(), () => onPick(captured)));
             }
             Find.WindowStack.Add(new FloatMenu(options));
         }
@@ -1220,7 +1238,7 @@ namespace PawnVarianceMod
         private void CreateNewCustomProfile()
         {
             string newId = NewCustomProfileId();
-            string newName = "Custom " + (customProfiles.Count + 1);
+            string newName = "VP_NewCustomProfileName".Translate(customProfiles.Count + 1);
             var profile = new CustomProfile(newId, newName, VarianceProfiles.VanillaLike.MakeValues());
             customProfiles.Add(profile);
             // Selects it in the editor only. The colony keeps whatever profile it was using.
@@ -1230,7 +1248,7 @@ namespace PawnVarianceMod
         private void DuplicateCurrentProfile()
         {
             string newId = NewCustomProfileId();
-            string newName = LabelFor(EditorProfileId) + " Copy";
+            string newName = "VP_DuplicateProfileName".Translate(LabelFor(EditorProfileId));
             var profile = new CustomProfile(newId, newName, Resolve(EditorProfileId).Clone());
             customProfiles.Add(profile);
             SetEditorProfile(newId);
@@ -1238,32 +1256,31 @@ namespace PawnVarianceMod
 
         private void DrawGlobalSettings(Listing_Standard listing)
         {
-            Section(listing, "General");
-            Caption(listing, "These apply to every profile and are not changed by switching profiles.");
+            Section(listing, "VP_Section_General".Translate());
+            Caption(listing, "VP_GeneralCaption".Translate());
 
             listing.CheckboxLabeled(
-                "Apply to hostile-faction pawns",
+                "VP_HostileToggle".Translate(),
                 ref applyToHostilePawns,
-                "When off, raiders and other hostile pawns are generated exactly as in vanilla and this mod never touches them. When on, they are generated from the profile you pick below.");
+                "VP_HostileToggleTip".Translate());
 
             if (applyToHostilePawns)
             {
                 listing.Gap(ControlGap);
-                Caption(listing, "Profile used for raiders and other hostiles:");
+                Caption(listing, "VP_HostileProfileCaption".Translate());
                 Rect hostileRow = listing.GetRect(30f);
                 if (Widgets.ButtonText(hostileRow, LabelFor(hostileProfileId)))
                     ProfileMenu(id => { hostileProfileId = id; RefreshResolved(); });
                 TooltipHandler.TipRegion(hostileRow,
-                    "Colonists are selected by the player, but raiders arrive directly. Using a "
-                    + "separate hostile profile balances raider difficulty independently from your colony.");
+                    "VP_HostileProfileTip".Translate().ToString());
                 listing.Gap(ControlGap);
             }
 
             if (ModsConfig.BiotechActive)
                 listing.CheckboxLabeled(
-                    "Apply variance to children growing up",
+                    "VP_GrowUpToggle".Translate(),
                     ref applyVarianceToChildren,
-                    "Applies trait and passion variance when a child turns 13. The mod waits for growth choices to resolve, then tops up traits and passions to match profile targets. Existing traits and passions are never removed.");
+                    "VP_GrowUpToggleTip".Translate());
             // Gated on Prefs.DevMode, the same way the row above is gated on ModsConfig.BiotechActive.
             // The label said "(dev mode)" while the control was drawn for everyone, so the setting a
             // player reaches for BECAUSE something is going wrong was the one that turns a logged,
@@ -1273,18 +1290,18 @@ namespace PawnVarianceMod
             // at the throw site so an already-ticked setting cannot fire for a normal player.
             if (Prefs.DevMode)
                 listing.CheckboxLabeled(
-                    "Verbose logging (dev mode)",
+                    "VP_VerboseLogging".Translate(),
                     ref verboseLogging,
-                    "Rethrows exceptions instead of swallowing them, and logs a per-pawn breakdown of how traits and passions were assigned. Leave off for normal play.");
+                    "VP_VerboseLoggingTip".Translate());
 
             DrawShareSettingsSection(listing);
 
             listing.Gap(SectionGap);
             GUI.color = new Color(0.9f, 0.75f, 0.3f);
-            if (listing.ButtonText("Reset All Settings"))
+            if (listing.ButtonText("VP_ResetAllSettings".Translate()))
             {
                 Find.WindowStack.Add(Dialog_MessageBox.CreateConfirmation(
-                    "Reset all settings to defaults? All custom profiles, overrides, and options will be restored to defaults.",
+                    "VP_Confirm_ResetAll".Translate(),
                     () => ResetToDefaults(),
                     destructive: false));
             }
@@ -1293,7 +1310,7 @@ namespace PawnVarianceMod
 
         private void DrawShareSettingsSection(Listing_Standard listing)
         {
-            Section(listing, "Share Settings");
+            Section(listing, "VP_Section_Share".Translate());
 
             Rect row = listing.GetRect(30f);
             float halfW = (row.width - 8f) / 2f;
@@ -1301,31 +1318,29 @@ namespace PawnVarianceMod
             Rect importRect = new Rect(row.x + halfW + 8f, row.y, halfW, row.height);
 
             TooltipHandler.TipRegion(exportRect,
-                "Copies your whole configuration to the clipboard as text: every custom profile, "
-                + "both override lists with their priorities, and the options above. Paste it "
-                + "anywhere to share it, or import someone else's.");
+                "VP_ShareTip".Translate().ToString());
 
-            if (Widgets.ButtonText(exportRect, "Export to Clipboard"))
+            if (Widgets.ButtonText(exportRect, "VP_Btn_Export".Translate()))
             {
                 string payload = SettingsTransfer.Export(this);
                 if (payload != null)
                 {
                     SettingsTransfer.CopyToClipboard(payload);
-                    Messages.Message("Varied Pawns settings copied to the clipboard.",
+                    Messages.Message("VP_Msg_Exported".Translate(),
                         MessageTypeDefOf.TaskCompletion, false);
                 }
                 else
                 {
-                    Messages.Message("Could not export settings. See the log for details.",
+                    Messages.Message("VP_Msg_ExportFailed".Translate(),
                         MessageTypeDefOf.RejectInput, false);
                 }
             }
 
-            if (Widgets.ButtonText(importRect, "Import from Clipboard"))
+            if (Widgets.ButtonText(importRect, "VP_Btn_Import".Translate()))
             {
                 // Replaces everything, so it asks first. There is no merge mode by design.
                 Find.WindowStack.Add(Dialog_MessageBox.CreateConfirmation(
-                    "Importing replaces ALL of your Varied Pawns settings: every custom profile, both override lists, and the general options.\n\nThis cannot be undone. Continue?",
+                    "VP_Confirm_Import".Translate(),
                     ImportFromClipboard,
                     destructive: true));
             }
@@ -1337,7 +1352,7 @@ namespace PawnVarianceMod
             if (SettingsTransfer.Import(this, SettingsTransfer.ReadClipboard(), out error))
             {
                 Write();
-                Messages.Message("Varied Pawns settings imported.", MessageTypeDefOf.TaskCompletion, false);
+                Messages.Message("VP_Msg_Imported".Translate(), MessageTypeDefOf.TaskCompletion, false);
             }
             else
             {
@@ -1374,16 +1389,16 @@ namespace PawnVarianceMod
         public static string FormatPowerReadout(float meanComposite)
         {
             float baseC = FaithfulBaseline();
-            if (baseC <= 0f) return $"Power: {meanComposite:F2}";
+            if (baseC <= 0f) return "VP_PowerReadout".Translate(meanComposite.ToString("F2"));
 
             float diffPct = ((meanComposite - baseC) / baseC) * 100f;
             if (Mathf.Abs(diffPct) < 0.5f)
             {
-                return $"Baseline ({meanComposite:F2})";
+                return "VP_BaselineReadout".Translate(meanComposite.ToString("F2"));
             }
 
             string sign = diffPct > 0f ? "+" : "";
-            return $"{sign}{diffPct:F0}% vs Faithful ({meanComposite:F2})";
+            return "VP_PercentVsFaithful".Translate(sign, diffPct.ToString("F0"), meanComposite.ToString("F2"));
         }
 
         // Just the signed percentage. FormatPowerReadout returns a whole sentence, which would
@@ -1400,7 +1415,7 @@ namespace PawnVarianceMod
             if (baseline <= 0f) return composite.ToString("F2");
 
             float diffPct = ((composite - baseline) / baseline) * 100f;
-            if (Mathf.Abs(diffPct) < 0.5f) return "baseline";
+            if (Mathf.Abs(diffPct) < 0.5f) return "VP_BaselineWord".Translate();
 
             return $"{(diffPct > 0f ? "+" : "")}{diffPct:F0}%";
         }

@@ -229,16 +229,35 @@ namespace PawnVarianceMod
     {
         public readonly VarianceProfileId id;
         public readonly string stringId;
-        public readonly string label;
-        public readonly string description;
+
+        // The invariant English name. NEVER translated, and never shown to a player.
+        // It is the identity the dev harness matches on: EnvelopeFigures.Profiles is a
+        // generated table keyed by these names, and DebugActions looks presets up by them.
+        // Those lookups used to match on the display label, which meant that translating
+        // the label would have silently stopped the whole verification harness from finding
+        // any preset -- no exception, clean build, the gate just never fires. Keep the two
+        // concepts apart: devName is identity, label is presentation.
+        public readonly string devName;
         private readonly VarianceProfileValues values;
 
-        public VarianceProfile(VarianceProfileId id, string stringId, string label, string description, VarianceProfileValues values)
+        // Derived rather than passed in, so a preset cannot have a name and a key that
+        // disagree. tools\check-translation-keys.ps1 does not see through this indirection,
+        // so these two keys are asserted by VarianceProfiles.PresetKeysExist() instead.
+        public string LabelKey       => "VP_Preset_" + devName;
+        public string DescriptionKey => "VP_Preset_" + devName + "Desc";
+
+        // Translated on ACCESS, never at construction. Every preset below is a
+        // static readonly field initializer, which runs at type-init time -- potentially
+        // before LanguageDatabase has loaded. Translating there would bake the raw key
+        // text into the object permanently, and no later language change would fix it.
+        public string label       => LabelKey.Translate();
+        public string description => DescriptionKey.Translate();
+
+        public VarianceProfile(VarianceProfileId id, string stringId, string devName, VarianceProfileValues values)
         {
             this.id = id;
             this.stringId = stringId;
-            this.label = label;
-            this.description = description;
+            this.devName = devName;
             this.values = values;
         }
 
@@ -264,7 +283,6 @@ namespace PawnVarianceMod
             VarianceProfileId.VanillaLike,
             FaithfulId,
             "Faithful",
-            "Closest to unmodded RimWorld. Two to three traits, a vanilla passion budget, and a narrow skill spread.",
             new VarianceProfileValues
             {
                 averageQuality = 0.5f,
@@ -287,7 +305,6 @@ namespace PawnVarianceMod
             VarianceProfileId.BalancedVariance,
             DistinctId,
             "Distinct",
-            "The mod's signature tuning. Pawns have strong individual strengths and weaknesses while maintaining a fair colony average.",
             new VarianceProfileValues
             {
                 averageQuality = 0.32f,
@@ -312,7 +329,6 @@ namespace PawnVarianceMod
             VarianceProfileId.WildSpread,
             WildcardId,
             "Wildcard",
-            "Maximum variation. Pawns can arrive with 0 to 8 traits, zero or many passions, and wide skill swings.",
             new VarianceProfileValues
             {
                 // averageQuality is deliberately kept NEAR the old 0.37. The N=1 penalty is bought
@@ -460,7 +476,6 @@ namespace PawnVarianceMod
             VarianceProfileId.Hardscrabble,
             DesperateId,
             "Desperate",
-            "Scraped together survivors. Low skills, few passions, and poor rolls are common.",
             new VarianceProfileValues
             {
                 averageQuality = 0.37f,
@@ -485,7 +500,6 @@ namespace PawnVarianceMod
             VarianceProfileId.Elite,
             EliteId,
             "Elite",
-            "Refined imperial nobility and high-born pawns. Consistently high capability and polished skills.",
             new VarianceProfileValues
             {
                 averageQuality = 0.53f,
@@ -506,7 +520,6 @@ namespace PawnVarianceMod
             VarianceProfileId.Sovereign,
             SovereignId,
             "Sovereign",
-            "Archite lords, Sanguophages, and supreme leaders. Top-tier skill growth and wide passions.",
             new VarianceProfileValues
             {
                 averageQuality = 0.55f,
@@ -536,7 +549,6 @@ namespace PawnVarianceMod
             VarianceProfileId.Specialist,
             SpecialistId,
             "Specialist",
-            "Engineered single-domain specialists (Genies, Hussars). Focused skill spikes with domain passions.",
             new VarianceProfileValues
             {
                 averageQuality = 0.50f,
@@ -557,7 +569,6 @@ namespace PawnVarianceMod
             VarianceProfileId.Scavenger,
             ScavengerId,
             "Scavenger",
-            "Wasteland survivors, pirates, and scavengers. Lower baseline skills with tough survival rolls.",
             new VarianceProfileValues
             {
                 averageQuality = 0.43f,
@@ -588,7 +599,32 @@ namespace PawnVarianceMod
             Scavenger,
         };
 
-        public const string CustomDescription = "Editable custom profile. Adjust sliders below to customize pawn generation.";
+        // A property, not a const: a const would be inlined into every call site at compile
+        // time, which is the one form that cannot be translated at all.
+        public static string CustomDescription => "VP_CustomProfileDesc".Translate();
+
+        // Asserts that every preset's two derived keys actually exist. The offline checker
+        // (tools\check-translation-keys.ps1) greps for "VP_X".Translate() literals and so is
+        // blind to keys built by concatenation from devName -- this is the gate that covers
+        // that hole. Called from PawnVarianceMod's constructor, after the language DB is up.
+        //
+        // Worth the code: a missing preset key does not throw. It renders the raw key text as
+        // the profile's name in the dropdown, which nothing but a human opening that dropdown
+        // would ever notice.
+        public static void VerifyPresetKeys()
+        {
+            var missing = new List<string>();
+            foreach (var p in Presets)
+            {
+                if (!p.LabelKey.CanTranslate())       missing.Add(p.LabelKey);
+                if (!p.DescriptionKey.CanTranslate()) missing.Add(p.DescriptionKey);
+            }
+            if (!"VP_CustomProfileDesc".CanTranslate()) missing.Add("VP_CustomProfileDesc");
+
+            if (missing.Count > 0)
+                Log.Error("[PawnVarianceMod] Missing translation keys, these render as raw key "
+                    + "text in the profile dropdown: " + string.Join(", ", missing));
+        }
 
         public static bool IsCustom(VarianceProfileId id) => GetPreset(id) == null;
 

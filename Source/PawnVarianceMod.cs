@@ -40,6 +40,9 @@ namespace PawnVarianceMod
             }
         }
 
+        // Deliberately not translated: this is the mod's name, matching About.xml's <name>.
+        // Proper nouns do not get keys -- a translator changing this would make the settings
+        // entry disagree with the mod list row right above it.
         public override string SettingsCategory() => "Varied Pawns";
 
         public override void DoSettingsWindowContents(Rect inRect)
@@ -51,6 +54,19 @@ namespace PawnVarianceMod
         {
             base.WriteSettings();
             Settings.MarkDirtyOnWrite();
+        }
+    }
+
+    // Runs after defs AND language data are loaded, which is why the check lives here rather
+    // than in the Mod constructor above: mod class construction is not a safe point to assume
+    // LanguageDatabase is populated, and a check that runs too early reports false failures.
+    [StaticConstructorOnStartup]
+    public static class PawnVarianceStartupChecks
+    {
+        static PawnVarianceStartupChecks()
+        {
+            VarianceProfiles.VerifyPresetKeys();
+            OverridePriorityExtensions.VerifyPriorityKeys();
         }
     }
 }
