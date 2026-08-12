@@ -824,7 +824,7 @@ namespace PawnVarianceMod
             {
                 OverrideColumnHeaders(listing, "Faction");
                 DrawOverrideRows(listing, factionOverrides, factionPriorities,
-                    key => LabelOf(DefDatabase<FactionDef>.GetNamedSilentFail(key)) ?? key);
+                    key => FactionMenuDefs.LabelForKey(key));
             }
 
             Color oldColor = GUI.color;
@@ -832,12 +832,12 @@ namespace PawnVarianceMod
             if (listing.ButtonText("+ Add Faction Override"))
             {
                 var options = new List<FloatMenuOption>();
-                foreach (var factionDef in DefDatabase<FactionDef>.AllDefs)
+                foreach (var factionDef in FactionMenuDefs.Defs)
                 {
                     if (!factionOverrides.ContainsKey(factionDef.defName))
                     {
                         var fDef = factionDef;
-                        options.Add(new FloatMenuOption(LabelOf(fDef), () =>
+                        options.Add(new FloatMenuOption(FactionMenuDefs.LabelFor(fDef), () =>
                         {
                             factionOverrides[fDef.defName] = VarianceProfiles.DistinctId;
                             factionPriorities[fDef.defName] = OverridePriority.Normal;
@@ -897,7 +897,7 @@ namespace PawnVarianceMod
             {
                 OverrideColumnHeaders(listing, "Xenotype");
                 DrawOverrideRows(listing, xenotypeOverrides, xenotypePriorities,
-                    key => LabelOf(DefDatabase<XenotypeDef>.GetNamedSilentFail(key)) ?? key);
+                    key => XenotypeMenuDefs.LabelForKey(key));
             }
 
             Color oldColor = GUI.color;
@@ -905,12 +905,12 @@ namespace PawnVarianceMod
             if (listing.ButtonText("+ Add Xenotype Override"))
             {
                 var options = new List<FloatMenuOption>();
-                foreach (var xenoDef in DefDatabase<XenotypeDef>.AllDefs)
+                foreach (var xenoDef in XenotypeMenuDefs.Defs)
                 {
                     if (!xenotypeOverrides.ContainsKey(xenoDef.defName))
                     {
                         var xDef = xenoDef;
-                        options.Add(new FloatMenuOption(LabelOf(xDef), () =>
+                        options.Add(new FloatMenuOption(XenotypeMenuDefs.LabelFor(xDef), () =>
                         {
                             xenotypeOverrides[xDef.defName] = VarianceProfiles.DistinctId;
                             xenotypePriorities[xDef.defName] = OverridePriority.Normal;
@@ -962,12 +962,6 @@ namespace PawnVarianceMod
         {
             Section(listing, "Race Overrides");
 
-            var selectableList = SelectableRaces().ToList();
-            var duplicateLabels = selectableList.GroupBy(r => LabelOf(r))
-                                                .Where(g => g.Count() > 1)
-                                                .Select(g => g.Key)
-                                                .ToHashSet();
-
             if (raceOverrides.Count == 0)
             {
                 Caption(listing, "No race overrides configured. Race overrides ship empty because the available races depend on which race mods are installed.");
@@ -976,13 +970,7 @@ namespace PawnVarianceMod
             {
                 OverrideColumnHeaders(listing, "Race");
                 DrawOverrideRows(listing, raceOverrides, racePriorities,
-                    key =>
-                    {
-                        ThingDef d = DefDatabase<ThingDef>.GetNamedSilentFail(key);
-                        if (d == null) return key;
-                        string labelStr = LabelOf(d);
-                        return duplicateLabels.Contains(labelStr) ? $"{labelStr} ({d.defName})" : labelStr;
-                    });
+                    key => RaceMenuDefs.LabelForKey(key));
             }
 
             Color oldColor = GUI.color;
@@ -990,17 +978,12 @@ namespace PawnVarianceMod
             if (listing.ButtonText("+ Add Race Override"))
             {
                 var options = new List<FloatMenuOption>();
-                foreach (var raceDef in selectableList)
+                foreach (var raceDef in RaceMenuDefs.Defs)
                 {
                     if (!raceOverrides.ContainsKey(raceDef.defName))
                     {
                         var rDef = raceDef;
-                        string labelStr = LabelOf(rDef);
-                        string displayLabel = duplicateLabels.Contains(labelStr)
-                            ? $"{labelStr} ({rDef.defName})"
-                            : labelStr;
-
-                        options.Add(new FloatMenuOption(displayLabel, () =>
+                        options.Add(new FloatMenuOption(RaceMenuDefs.LabelFor(rDef), () =>
                         {
                             raceOverrides[rDef.defName] = VarianceProfiles.DistinctId;
                             racePriorities[rDef.defName] = OverridePriority.Normal;
@@ -1041,6 +1024,75 @@ namespace PawnVarianceMod
             if (d == null) return null;
             return string.IsNullOrEmpty(d.label) ? d.defName : d.LabelCap.ToString();
         }
+
+        // The def list behind one Add-override menu: sorted by label, with labels that collide
+        // between mods disambiguated by defName.
+        //
+        // WHY SORTED. The faction and xenotype menus used to walk DefDatabase.AllDefs directly,
+        // which is mod load order. That is fine against vanilla's ~31 concrete FactionDefs and
+        // unusable against the ~500 a large workshop library carries (measured on a 1376-mod
+        // install: 534 FactionDef tags, 35 of them Abstract="True"). Note the volume itself was
+        // never the problem -- Verse.FloatMenu lays options into columns and scrolls once they
+        // pass MaxScreenHeightPercent (0.9), so it does not clip or overflow. Finding one entry
+        // in an unordered wall of 500 is the problem.
+        //
+        // WHY DISAMBIGUATED. Mods reuse vanilla-style faction names freely -- 202 of those 534
+        // workshop defs inherit from OutlanderFactionBase alone -- so two menu rows reading
+        // "Outlander union" is a realistic outcome, and picking the wrong one is invisible until
+        // pawns generate. The race menu already disambiguated this way (CreepJoiner labels itself
+        // "Human"); factions and xenotypes now match it, and the OVERRIDE ROWS use the same labels
+        // as the menu so a row can be traced back to the entry that created it.
+        //
+        // WHY CACHED. These are rebuilt on every frame the settings window draws, and building one
+        // sorts every def on the axis. DefDatabase does not change after load, so once per session
+        // is enough and correct.
+        private sealed class AddMenuDefs<T> where T : Def
+        {
+            internal readonly List<T> Defs;
+            private readonly HashSet<string> ambiguous;
+
+            internal AddMenuDefs(IEnumerable<T> source)
+            {
+                Defs = source.OrderBy(d => LabelOf(d)).ToList();
+                ambiguous = Defs.GroupBy(d => LabelOf(d))
+                                .Where(g => g.Count() > 1)
+                                .Select(g => g.Key)
+                                .ToHashSet();
+            }
+
+            // The label to show for a def, qualified by defName only when it would otherwise be
+            // ambiguous. Unqualified is the common case and stays clean.
+            internal string LabelFor(T d)
+            {
+                string label = LabelOf(d);
+                return ambiguous.Contains(label) ? $"{label} ({d.defName})" : label;
+            }
+
+            // The same label, resolved from the stored override key. Falls back to the raw key for
+            // an override whose def is no longer installed -- that row must still render and still
+            // be removable.
+            internal string LabelForKey(string defName)
+            {
+                T d = DefDatabase<T>.GetNamedSilentFail(defName);
+                return d == null ? defName : LabelFor(d);
+            }
+        }
+
+        private static AddMenuDefs<FactionDef> factionMenuDefs;
+        private static AddMenuDefs<XenotypeDef> xenotypeMenuDefs;
+        private static AddMenuDefs<ThingDef> raceMenuDefs;
+
+        private static AddMenuDefs<FactionDef> FactionMenuDefs =>
+            factionMenuDefs ?? (factionMenuDefs = new AddMenuDefs<FactionDef>(DefDatabase<FactionDef>.AllDefs));
+
+        private static AddMenuDefs<XenotypeDef> XenotypeMenuDefs =>
+            xenotypeMenuDefs ?? (xenotypeMenuDefs = new AddMenuDefs<XenotypeDef>(DefDatabase<XenotypeDef>.AllDefs));
+
+        // Races come from SelectableRaces()'s PawnKindDef traversal, not from a DefDatabase sweep,
+        // so this caches strictly more work than the other two: that traversal used to run once per
+        // frame the Overrides tab was open, over every PawnKindDef installed.
+        private static AddMenuDefs<ThingDef> RaceMenuDefs =>
+            raceMenuDefs ?? (raceMenuDefs = new AddMenuDefs<ThingDef>(SelectableRaces()));
 
         // Drops every override pointing at a deleted profile, from BOTH of the axis's dictionaries.
         // Each override axis is two parallel maps keyed the same way; removing a key from one and
