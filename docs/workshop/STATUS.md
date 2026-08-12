@@ -12,7 +12,7 @@ material, so they go last.
 |---|---|---|
 | 1 | Title card (Workshop thumbnail) | **Done** — `../../About/Preview.png` |
 | 2 | The payoff shot: two colonists, same kind, same profile, one lucky roll and one poor | **Not started** |
-| 3 | Profile Editor tab | **Done, but shows a test profile** — see below |
+| 3 | Profile Editor tab | **Done** — `tab-profile-editor.png`, showing `Distinct` |
 | 4 | Vanilla-vs-varied distribution graphic, plotted from a real 1000-pawn dump | **Not started** |
 | 5 | General tab | **Done** — `tab-general-distinct.png` |
 | 6 | Overrides tab | **Done** — `tab-overrides.png` |
@@ -30,45 +30,77 @@ the logo with it.
 ## Files here
 
 - `tab-overrides.png` — shipped faction defaults, ten rows with priorities. Strongest of the
-  three tab shots; use as-is.
+  three tab shots; use as-is. **Re-verified against the build that moved race overrides below
+  xenotype overrides: a fresh capture is byte-identical (SHA-256 `148B158B…`).** Both of those
+  sections sit below the fold, so the reorder cannot show in this crop. Not stale.
 - `tab-general-distinct.png` — General tab with the active profile set to `Distinct`, showing
   the preset's own description line. **Use this one.**
 - `tab-general.png` — superseded. Same tab with the active profile reading `Custom 1`, a
   leftover test config. Kept only for comparison; do not upload.
-- `tab-profile-editor.png` — correct and clean (curve, Typical Baseline, Best-of-25 line all
-  visible) but the selected profile is `Custom 1`, a nameless test profile, rather than a
-  preset a player would recognise.
+- `tab-profile-editor.png` — **now shows `Distinct`**, with the curve, the Typical line and the
+  Best-of-25 line all visible, the preset's own description under the header, and the quality
+  slider correctly read-only for a preset. Header and sliders agree, and the agreement is
+  checkable rather than eyeballed: the on-screen readouts (`Typical -9%`, `Best of 25 +10%`) match
+  `envelope_check.py`'s Distinct row (−8.7% at N=1, +9.5% at N=25), and the sliders show
+  Distinct's own values (quality 0.32, skill spread ±0.86, shift −3.3–6.5).
 
 All tab shots are 900x700, captured through the GABS bridge's own `take_screenshot` cropped to
 `window:1:RimWorld.Dialog_ModSettings`, so they carry no desktop bleed, tooltips or dev chrome.
 
 ## Unfinished, and why
 
-**The Profile Editor re-shoot against `Distinct` failed and the image was discarded.** Two
-separate problems, both worth knowing before retrying:
+### The FloatMenu limit is real, and here is the way around it
 
-1. Setting `editorProfileId` directly through `update_mod_settings` changes the header but does
-   **not** reload `editingValues`. The capture showed "Distinct" above `Custom 1`'s sliders and
-   curve — an image that would have misrepresented the mod on the Workshop. The profile picker
-   has to be driven through the real UI so the values actually load.
-2. Driving it through the UI then hit a hard stop: **Dying Light 2 held the Windows foreground**,
-   `SetForegroundWindow` returned `False`, and RimWorld neither renders nor processes queued
-   clicks while unfocused. Every capture after that point was a byte-identical stale frame — no
-   error, no warning. Diagnosed and stopped there rather than killing the other game.
+The profile picker **cannot** be driven by the bridge. `DebugActions.cs:62-65` already recorded
+why, verified against the Faction Add button on 2026-08-06: a synthetic click activates the
+button but the `FloatMenu` does not survive to the next frame, so its rows can never be read or
+clicked. Nothing about the foreground fixed this — with no other game running and frames
+confirmed live, the click still returns "UI state did not change" and no menu opens.
 
-**Item 4, the distribution graphic, is not started** — it needs a 1000-pawn
-`Roll pawns and dump distribution` run, which needs the same working game session.
+**What worked instead, and why it is not the same as the attempt that failed.** Setting
+`editorProfileId` alone changes the header and leaves `editingValues` holding the old profile —
+that is the mismatch that produced the discarded image. But `editingValues` is a *cache*: the
+`Editing` getter calls `RefreshEditor()` whenever it is null. So setting **both**
+`editorProfileId = preset_distinct` **and** `editingValues = null` (two `update_mod_settings`
+calls, `write: false`) drives the same code path `SetEditorProfile` uses, and the next frame
+loads Distinct's real values. Header and sliders agree because the mod itself resolved them.
 
-The mod's on-disk config was never modified: every settings change ran at `write: false`, and
-`reload_mod_settings` discarded them before exit. Verified afterwards —
-`activeProfileId` still `custom_639215913003568941`.
+### Item 4 is blocked on the same cache pattern, one layer down
+
+The 1000-pawn dump runs fine — path `Actions\Roll pawns and dump distribution` (backslash; the
+`Varied Pawns` category is metadata, not a path segment), then click the `1000 pawns` row in the
+`Dialog_DebugOptionListLister`, which *is* clickable. Two runs completed.
+
+**But both resolved to `Custom 1`, not to the preset the run was supposed to measure.** Setting
+`activeProfileId` does not re-point generation: `RefreshResolved()` caches the resolved profile
+into `Active`/`Hostile` at load, and a direct field write never re-runs it. Setting
+`enableOverrides = false` changes nothing, which is what proves it is the cache and not an
+override winning. The mod's own diagnostic caught this and said so
+(`^^ NOT the configured active profile`) — the instrument worked.
+
+Every remaining route needs a decision the controller has not made:
+- **write the config and restore from backup** — `write: true` then `reload_mod_settings` would
+  re-run `RefreshResolved`, but it writes the player's real config file;
+- **Import from Clipboard** — a plain button the bridge *can* click, and `CopyFrom` calls
+  `RefreshResolved`; needs a crafted settings payload on the clipboard;
+- **shoot it against `Custom 1` as it stands** — honest, but `Custom 1` is near-`Faithful`
+  (shift −3–3, spread 0.49, quality 0.50), so it is a weak advertisement for a variance mod.
+
+Useful discovery while measuring: the dump already prints a **12-bin per-pawn-mean-skill
+histogram**, so item 4 does not need new code to get a distribution shape — only a control run to
+put beside it.
+
+**The on-disk config was never modified, again.** Every change ran at `write: false`;
+`reload_mod_settings` restored in-memory state to disk before exit. Verified by hash, unchanged
+across the whole session: SHA-256 `DF224748…`, mtime `2026-08-11 06:41:42`, `activeProfileId`
+still `custom_639215913003568941`. A backup sits outside the repo in the session scratchpad.
 
 ## To finish
 
-Close any other fullscreen game first, then it is roughly five minutes of bridge work:
-the Profile Editor re-shoot against `Distinct` (via the real profile picker), plus the
-1000-pawn dump behind image 4. Images 2 and 4 are the two that show the mod's *effect*
-rather than its settings, and are worth more than any tab shot.
+Image 2 (the payoff shot) and image 4 (the distribution graphic) remain — the two that show the
+mod's *effect* rather than its settings, and worth more than any tab shot. Image 4 needs the
+profile-resolution decision above settled first; image 2 needs two colonists rolled from one
+profile and their character sheets shot side by side.
 
 ## Regenerating the generated art
 
