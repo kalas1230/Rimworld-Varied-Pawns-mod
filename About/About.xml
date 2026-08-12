@@ -22,7 +22,7 @@
        kept at docs/workshop-description.txt. If what the mod does changes, change both. -->
   <description>Two vanilla colonists of the same type are more alike than they should be. Varied Pawns widens that band and hands you the dial.
 
-Every pawn rolls a single hidden quality value at generation, and that one roll drives its skill levels, how many traits it gets, and its passion budget together — so a lucky pawn is good at things and driven about them, rather than three unrelated numbers. It changes how many traits a pawn gets, never which ones; trait selection stays entirely vanilla's.
+Every pawn rolls a single hidden quality value at generation, and that one roll drives its skill levels, how many traits it gets, and its passion budget together — so a lucky pawn is good at things and driven about them, rather than three unrelated numbers. It changes how many traits a pawn gets, not which ones are worth having: new traits come from vanilla's own picker, and a pawn over its target drops one at random. Nothing scores traits or plays favourites, and traits forced by a xenotype, gene, backstory or scenario are never removed.
 
 Eight presets, from Faithful (close to unmodded) through Desperate, Scavenger, Specialist, Elite and Sovereign, plus Distinct and Wildcard for spread rather than strength. Build your own in the Profile Editor, with a live distribution curve and a power readout so you can see what a slider actually does.
 

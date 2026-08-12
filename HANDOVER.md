@@ -1705,11 +1705,16 @@ rather than being deleted,** because commits and notes elsewhere refer to items 
 findings get the next free number wherever they belong topically — 17 sits with the blocking items,
 not at the end.
 
-Closed so far: 1, 3, 11, 15, 16, 17, 18 (done), and 2, 14 (decided, moved to *Settled and not to be
-relitigated*). **Item 9's code work is done and only its in-game pass is outstanding**; **item 13 is
-done bar one marked `TODO` line** that needs the Workshop URL. Still fully open, and all needing the
-game or a published item: 5, 6, 7, 8, 10, 12. Items 17 and 18 were both found by doing the items
-above them: 17 by item 1's audit, 18 by starting item 9.
+Closed so far: 1, 3, 4, 11, 15, 16, 17, 18 (done), and 2, 14 (decided, moved to *Settled and not to
+be relitigated*). **Item 9's code work is done and only its in-game pass is outstanding**; **item 13
+is done bar one marked `TODO` line** that needs the Workshop URL. Still fully open, and all needing
+the game or a published item: 5, 6, 7, 8, 10, 12.
+
+**Every item closed here that was not purely mechanical found a defect the existing gates could not
+see:** item 1's audit found staging shipping a build older than the code (→ 17), item 9 found the
+verification harness matching presets on a translatable label, and item 4 found a false claim in the
+listing. Items 17 and 18 exist because of items 1 and 9. Treat the remaining open items as likely to
+behave the same way.
 
 ### Blocking — do before the item goes public
 
@@ -1738,10 +1743,43 @@ above them: 17 by item 1's audit, 18 by starting item 9.
    against the 1388 installed workshop mods — 360 use it), and a closing line in `<description>`,
    because mod managers and modpack listings show the text and not the field. The description line
    also names GitHub Issues as the bug destination, which closes item 11.
-4. **Have an AI read the published artifact, not the repo.** Point it at the staged folder and the
-   listing text and ask what a player receives: does the description match what the code does, does
-   anything claim a feature that was cut, is anything shipped that should not be. This is a
-   different question from every review this project has run, all of which read diffs.
+4. ~~**Have an AI read the published artifact, not the repo.**~~ **DONE, and it found a false claim
+   in the listing — the exact category this item existed to catch.**
+
+   **The finding.** Both `About.xml` and `docs/workshop-description.txt` claimed, in bold, *"It
+   changes how many traits a pawn gets — never which ones. Trait selection stays entirely
+   vanilla's."* **The second half is false.** `TraitVarianceApplier.cs:106` removes traits with
+   `removable.RandomElement()` whenever the rolled target is below the pawn's current count, which
+   is the mod choosing which trait a pawn loses. The code's own comment at line 93 says so:
+   *"Uniform random choice: vanilla's picker has no concept of a 'better' trait."* Only the
+   ADDITION path delegates to vanilla (`GenerateTraitsFor`, line 76).
+
+   The claim's *intent* — that nothing is scored or favoured by quality — is true and worth
+   keeping; the absolute was the defect. Reworded in all three copies to say new traits come from
+   vanilla's picker, over-target pawns drop one at random, and forced traits are never removed.
+
+   **Why it survived everything else:** it is a claim about the code made in a text file. No build,
+   no envelope gate, no in-game action and no diff review can see it, because nothing compares
+   prose to behaviour. **This is the only review this project has run that reads the artifact
+   instead of the diff, and it found something on the first pass — re-run it before any future
+   listing change.**
+
+   Load-bearing claims that were checked and DO hold: add mid-save, remove mid-save (no
+   `GameComponent`/`WorldComponent`/`MapComponent`/`ThingComp`/`HediffDef` anywhere; the settings
+   are a config file, not save data), children off by default, eight presets all reachable, Biotech
+   optional, the `18` pip figure, 1.6-only consistency across `About.xml`/`LoadFolders.xml`/listing,
+   and every `{0}` placeholder count against its `.Translate(...)` call site.
+
+   **Three of the five findings did not survive cite-checking** — two named a file the reviewer was
+   never given, and one misread a `Count > 0` guard as missing. Cite-check every verdict; that rule
+   is in this document for a reason and it paid again here.
+
+   **Hazard found while fixing it: the listing text exists in THREE places** — `About.xml`
+   (short, in-game), `docs/workshop-description.txt` (the source of truth per the publish
+   sequence), and `Release/upload/description-paste.txt` (a gitignored paste-ready duplicate that
+   `build-release.ps1` does NOT regenerate, so it goes stale silently and is the copy most likely
+   to be pasted at upload time). All three were corrected. **Change a claim in one, change it in
+   all three.**
 
 17. ~~**Close the stale-staging hole.**~~ **DONE — `build-release.ps1 -Check` now exists.**
 

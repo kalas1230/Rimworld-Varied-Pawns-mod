@@ -25,7 +25,7 @@ Every pawn rolls a single hidden [b]quality[/b] value when generated. That one r
 
 Because it is [i]one[/i] roll and not three, a pawn holds together: a lucky roll is good at things [i]and[/i] driven about them. An unlucky one is neither. You get colonists worth remembering instead of eight variations on the same person.
 
-[b]It changes how many traits a pawn gets — never which ones.[/b] Trait selection stays entirely vanilla's, including every mod-added trait. Nothing here scores traits or plays favourites.
+[b]It changes how many traits a pawn gets, not which ones are worth having.[/b] New traits come from vanilla's own picker, including every mod-added trait. When a pawn is over its target the mod drops one at random from the traits it is allowed to touch — traits forced by a xenotype, gene, backstory or scenario are never removed. Nothing here scores traits or plays favourites.
 
 [h2]Out of the box[/h2]
 
