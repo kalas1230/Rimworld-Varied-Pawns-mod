@@ -24,7 +24,7 @@
 
 - [ ] **Step 1: Simplify FirstValidDegree in TraitVarianceApplier.cs**
 
-Update [`FirstValidDegree`](file:///C:/Users/gokal/Desktop/Rimworld-mod/Rimworld-Pawn-variance-mod/Source/TraitVarianceApplier.cs#L204-L208) to check `def.degreeDatas` directly without referencing `TraitDesirabilityCache`:
+Update [`FirstValidDegree`](../../../Source/TraitVarianceApplier.cs#L204-L208) to check `def.degreeDatas` directly without referencing `TraitDesirabilityCache`:
 
 ```csharp
 private static int FirstValidDegree(TraitDef def)
@@ -35,7 +35,7 @@ private static int FirstValidDegree(TraitDef def)
 
 - [ ] **Step 2: Remove unused constants in Constants.cs**
 
-Remove unused trait desirability constants in [`Constants.cs`](file:///C:/Users/gokal/Desktop/Rimworld-mod/Rimworld-Pawn-variance-mod/Source/Constants.cs#L23-L29):
+Remove unused trait desirability constants in [`Constants.cs`](../../../Source/Constants.cs#L23-L29):
 - `SkillOffsetReferenceMagnitude`
 - `StatReferenceMagnitude`
 - `WorkTagDisablePenalty`
@@ -60,15 +60,15 @@ Expected: Build succeeds with 0 Errors.
 
 - [ ] **Step 1: Clean up VarianceProfileId enum & header comments**
 
-Remove `Custom2` and `Custom3` dead enum values and obsolete backwards-compatibility comments in [`VarianceProfileId`](file:///C:/Users/gokal/Desktop/Rimworld-mod/Rimworld-Pawn-variance-mod/Source/VarianceProfile.cs#L15).
+Remove `Custom2` and `Custom3` dead enum values and obsolete backwards-compatibility comments in [`VarianceProfileId`](../../../Source/VarianceProfile.cs#L15).
 
 - [ ] **Step 2: Clean up ExposeData comments**
 
-Remove obsolete comments regarding `custom2_`/`custom3_` prefix hacks in [`VarianceProfileValues.ExposeData`](file:///C:/Users/gokal/Desktop/Rimworld-mod/Rimworld-Pawn-variance-mod/Source/VarianceProfile.cs#L117).
+Remove obsolete comments regarding `custom2_`/`custom3_` prefix hacks in [`VarianceProfileValues.ExposeData`](../../../Source/VarianceProfile.cs#L117).
 
 - [ ] **Step 3: Remove dead custom slot helper code**
 
-Remove unused `CustomSlots` array, `DefaultCustomNames`, and `CustomSlotIndex()` method in [`VarianceProfile.cs`](file:///C:/Users/gokal/Desktop/Rimworld-mod/Rimworld-Pawn-variance-mod/Source/VarianceProfile.cs#L416-L434).
+Remove unused `CustomSlots` array, `DefaultCustomNames`, and `CustomSlotIndex()` method in [`VarianceProfile.cs`](../../../Source/VarianceProfile.cs#L416-L434).
 
 - [ ] **Step 4: Build and Deploy**
 

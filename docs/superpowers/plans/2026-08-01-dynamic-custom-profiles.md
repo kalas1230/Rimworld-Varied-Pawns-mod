@@ -4,7 +4,7 @@
 
 **Goal:** Remove the 3-custom-profile limit and allow users to create, rename, duplicate, and delete an unlimited number of custom profiles.
 
-**Architecture:** Create `CustomProfile` class in [`Source/VarianceProfile.cs`](file:///C:/Users/gokal/Desktop/Rimworld-mod/Rimworld-Pawn-variance-mod/Source/VarianceProfile.cs). Update [`PawnVarianceSettings.cs`](file:///C:/Users/gokal/Desktop/Rimworld-mod/Rimworld-Pawn-variance-mod/Source/PawnVarianceSettings.cs) to use `string profileId` identifiers for Active, Hostile, and Overrides, storing custom profiles in a dynamic `List<CustomProfile>`. Update UI controls to support creating, renaming, duplicating, and deleting custom profiles. Include backward compatibility migration for legacy save files.
+**Architecture:** Create `CustomProfile` class in [`Source/VarianceProfile.cs`](../../../Source/VarianceProfile.cs). Update [`PawnVarianceSettings.cs`](../../../Source/PawnVarianceSettings.cs) to use `string profileId` identifiers for Active, Hostile, and Overrides, storing custom profiles in a dynamic `List<CustomProfile>`. Update UI controls to support creating, renaming, duplicating, and deleting custom profiles. Include backward compatibility migration for legacy save files.
 
 **Tech Stack:** C# (.NET Framework 4.7.2 / RimWorld 1.5 API), Verse/RimWorld UI (`FloatMenu`, `Listing_Standard`).
 
@@ -18,7 +18,7 @@
 ### Task 1: Create `CustomProfile` Class & Update `VarianceProfile.cs`
 
 **Files:**
-- Modify: [`Source/VarianceProfile.cs`](file:///C:/Users/gokal/Desktop/Rimworld-mod/Rimworld-Pawn-variance-mod/Source/VarianceProfile.cs)
+- Modify: [`Source/VarianceProfile.cs`](../../../Source/VarianceProfile.cs)
 
 **Interfaces:**
 - Produces:
@@ -80,7 +80,7 @@ Expected: `Build succeeded. 0 Warning(s) 0 Error(s)`
 ### Task 2: Refactor `PawnVarianceSettings.cs` Storage & Resolution
 
 **Files:**
-- Modify: [`Source/PawnVarianceSettings.cs`](file:///C:/Users/gokal/Desktop/Rimworld-mod/Rimworld-Pawn-variance-mod/Source/PawnVarianceSettings.cs)
+- Modify: [`Source/PawnVarianceSettings.cs`](../../../Source/PawnVarianceSettings.cs)
 
 **Interfaces:**
 - Consumes: `CustomProfile`, preset string IDs
@@ -157,7 +157,7 @@ Expected: `Build succeeded. 0 Warning(s) 0 Error(s)`
 ### Task 3: Update Profile Selection & Management UI
 
 **Files:**
-- Modify: [`Source/PawnVarianceSettings.cs`](file:///C:/Users/gokal/Desktop/Rimworld-mod/Rimworld-Pawn-variance-mod/Source/PawnVarianceSettings.cs)
+- Modify: [`Source/PawnVarianceSettings.cs`](../../../Source/PawnVarianceSettings.cs)
 
 **Interfaces:**
 - Produces:

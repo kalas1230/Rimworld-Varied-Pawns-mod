@@ -15,7 +15,7 @@ This feature adds a tabbed settings interface to Varied Pawns and introduces **P
 ## 2. User Interface Design
 
 ### 2.1 Tabbed Navigation Bar
-The settings window (`DoWindowContents` in [`PawnVarianceSettings.cs`](file:///C:/Users/gokal/Desktop/Rimworld-mod/Rimworld-Pawn-variance-mod/Source/PawnVarianceSettings.cs)) will render top-level tabs using RimWorld's native `TabRecord` and `TabDrawer.DrawTabs`:
+The settings window (`DoWindowContents` in [`PawnVarianceSettings.cs`](../../../Source/PawnVarianceSettings.cs)) will render top-level tabs using RimWorld's native `TabRecord` and `TabDrawer.DrawTabs`:
 
 1. **Tab 1: `General & Profiles`**
    - Active Profile selector
@@ -52,7 +52,7 @@ Each configured override rule is displayed as a row containing:
 
 ## 3. Resolution Priority in `ValuesFor(Pawn pawn)`
 
-When generating or resolving a pawn's profile, [`PawnVarianceSettings.ValuesFor(pawn)`](file:///C:/Users/gokal/Desktop/Rimworld-mod/Rimworld-Pawn-variance-mod/Source/PawnVarianceSettings.cs#L68-L74) evaluates rules in a strict hierarchy:
+When generating or resolving a pawn's profile, [`PawnVarianceSettings.ValuesFor(pawn)`](../../../Source/PawnVarianceSettings.cs#L68-L74) evaluates rules in a strict hierarchy:
 
 $$\text{Xenotype Override} \longrightarrow \text{Faction Override} \longrightarrow \text{Hostile Profile} \longrightarrow \text{Default Active Profile}$$
 

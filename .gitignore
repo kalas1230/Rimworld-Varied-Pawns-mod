@@ -23,3 +23,11 @@ temp/
 # Upload staging: regenerated wholesale by tools\build-release.ps1.
 # Never hand-edit anything under here -- it is destroyed on the next run.
 Release/
+
+# Scratch, dumps and test fixtures. This rule lives here, in the tracked file, on purpose:
+# it used to live only in .git/info/exclude, which is local to one working copy and is not
+# inherited by any clone. The contents are exactly the things that must never ship
+# (TestOnly_PlayerColonyXenotypes.xml among them), so the protection has to travel with
+# the repo. tools\build-release.ps1's forbidden-content check is the second line of defence.
+zzz-Do-Not-Commit/
+__pycache__/

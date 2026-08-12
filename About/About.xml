@@ -3,6 +3,11 @@
   <packageId>kalas.pawnvariance</packageId>
   <name>Varied Pawns</name>
   <author>kalas</author>
+  <!-- RimWorld renders this as a clickable link in the mod info panel. It is the only path back
+       to source and issues for a player who installed from the zip or from a modpack, where the
+       Workshop description is never seen. The same URL is repeated in <description> below,
+       because mod managers and modpack listings show the text and not this field. -->
+  <url>https://github.com/kalas1230/Rimworld-Pawn-variance-mod</url>
   <!-- RimWorld itself ignores this; mod managers (RimPy and friends) display it, and
        tools\build-release.ps1 reads it to name the release zip. Without it the zip lands
        as VariedPawns-dev.zip. Bump it on every Workshop update. -->
@@ -23,7 +28,9 @@ Eight presets, from Faithful (close to unmodded) through Desperate, Scavenger, S
 
 Assign different profiles per faction, per race and per xenotype, with priority levels to settle pawns that match more than one rule. Ships with sensible defaults, so raiders, tribes and imperial nobles feel different from the start.
 
-Children are left alone unless you turn them on. Safe to add mid-save: it affects newly generated pawns, so existing colonists are unchanged. Safe to remove too — the mod writes nothing into your save, so taking it out leaves no orphaned data and no load errors. Requires Harmony. Biotech optional.</description>
+Children are left alone unless you turn them on. Safe to add mid-save: it affects newly generated pawns, so existing colonists are unchanged. Safe to remove too — the mod writes nothing into your save, so taking it out leaves no orphaned data and no load errors. Requires Harmony. Biotech optional.
+
+Source, and where bug reports go: https://github.com/kalas1230/Rimworld-Pawn-variance-mod — please open an issue there with your RimWorld version, your mod list, and what you expected versus what happened.</description>
   <modDependencies>
     <li>
       <packageId>brrainz.harmony</packageId>

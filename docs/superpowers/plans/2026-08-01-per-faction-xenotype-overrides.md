@@ -4,7 +4,7 @@
 
 **Goal:** Add a tabbed settings UI to Varied Pawns and implement per-faction and per-xenotype profile overrides with a toggle checkbox and priority resolution cascade.
 
-**Architecture:** Update [`PawnVarianceSettings.cs`](file:///C:/Users/gokal/Desktop/Rimworld-mod/Rimworld-Pawn-variance-mod/Source/PawnVarianceSettings.cs) to store and serialize override mappings (`enableOverrides`, `factionOverrides`, `xenotypeOverrides`). Refactor `DoWindowContents` to render top-level tabs (`TabDrawer.DrawTabs`) separating General/Profile controls from Faction & Xenotype Overrides. Update `ValuesFor(pawn)` to enforce the resolution cascade: Xenotype Override $\rightarrow$ Faction Override $\rightarrow$ Hostile Profile $\rightarrow$ Default Active Profile.
+**Architecture:** Update [`PawnVarianceSettings.cs`](../../../Source/PawnVarianceSettings.cs) to store and serialize override mappings (`enableOverrides`, `factionOverrides`, `xenotypeOverrides`). Refactor `DoWindowContents` to render top-level tabs (`TabDrawer.DrawTabs`) separating General/Profile controls from Faction & Xenotype Overrides. Update `ValuesFor(pawn)` to enforce the resolution cascade: Xenotype Override $\rightarrow$ Faction Override $\rightarrow$ Hostile Profile $\rightarrow$ Default Active Profile.
 
 **Tech Stack:** C# (.NET Framework 4.7.2 / RimWorld 1.5 API), Verse/RimWorld UI (`TabRecord`, `TabDrawer`, `Listing_Standard`, `FloatMenu`).
 
@@ -19,7 +19,7 @@
 ### Task 1: Add Serialization & Storage Fields in `PawnVarianceSettings.cs`
 
 **Files:**
-- Modify: [`Source/PawnVarianceSettings.cs`](file:///C:/Users/gokal/Desktop/Rimworld-mod/Rimworld-Pawn-variance-mod/Source/PawnVarianceSettings.cs)
+- Modify: [`Source/PawnVarianceSettings.cs`](../../../Source/PawnVarianceSettings.cs)
 
 **Interfaces:**
 - Produces:
@@ -96,7 +96,7 @@ Expected: `Build succeeded. 0 Warning(s) 0 Error(s)`
 ### Task 2: Implement Resolution Priority Cascade in `ValuesFor(pawn)`
 
 **Files:**
-- Modify: [`Source/PawnVarianceSettings.cs:68-74`](file:///C:/Users/gokal/Desktop/Rimworld-mod/Rimworld-Pawn-variance-mod/Source/PawnVarianceSettings.cs#L68-L74)
+- Modify: [`Source/PawnVarianceSettings.cs:68-74`](../../../Source/PawnVarianceSettings.cs#L68-L74)
 
 **Interfaces:**
 - Consumes: `enableOverrides`, `factionOverrides`, `xenotypeOverrides`
@@ -104,7 +104,7 @@ Expected: `Build succeeded. 0 Warning(s) 0 Error(s)`
 
 - [ ] **Step 1: Update `ValuesFor(Pawn pawn)` implementation**
 
-Replace `ValuesFor` in [`Source/PawnVarianceSettings.cs`](file:///C:/Users/gokal/Desktop/Rimworld-mod/Rimworld-Pawn-variance-mod/Source/PawnVarianceSettings.cs#L68-L74) with:
+Replace `ValuesFor` in [`Source/PawnVarianceSettings.cs`](../../../Source/PawnVarianceSettings.cs#L68-L74) with:
 
 ```csharp
 public VarianceProfileValues ValuesFor(Pawn pawn)
@@ -152,7 +152,7 @@ Expected: `Build succeeded. 0 Warning(s) 0 Error(s)`
 ### Task 3: Implement Tabbed Interface in `PawnVarianceSettings.cs`
 
 **Files:**
-- Modify: [`Source/PawnVarianceSettings.cs:157-181`](file:///C:/Users/gokal/Desktop/Rimworld-mod/Rimworld-Pawn-variance-mod/Source/PawnVarianceSettings.cs#L157-L181)
+- Modify: [`Source/PawnVarianceSettings.cs:157-181`](../../../Source/PawnVarianceSettings.cs#L157-L181)
 
 **Interfaces:**
 - Consumes: RimWorld `TabRecord`, `TabDrawer`
@@ -169,7 +169,7 @@ private SettingsTab currentTab = SettingsTab.General;
 
 - [ ] **Step 2: Update `DoWindowContents` to render tabs**
 
-Refactor `DoWindowContents` in [`Source/PawnVarianceSettings.cs`](file:///C:/Users/gokal/Desktop/Rimworld-mod/Rimworld-Pawn-variance-mod/Source/PawnVarianceSettings.cs#L157-L181):
+Refactor `DoWindowContents` in [`Source/PawnVarianceSettings.cs`](../../../Source/PawnVarianceSettings.cs#L157-L181):
 
 ```csharp
 public void DoWindowContents(Rect inRect)
@@ -210,7 +210,7 @@ Expected: `Build succeeded. 0 Warning(s) 0 Error(s)`
 ### Task 4: Implement `DrawOverridesTab` UI Controls
 
 **Files:**
-- Modify: [`Source/PawnVarianceSettings.cs`](file:///C:/Users/gokal/Desktop/Rimworld-mod/Rimworld-Pawn-variance-mod/Source/PawnVarianceSettings.cs)
+- Modify: [`Source/PawnVarianceSettings.cs`](../../../Source/PawnVarianceSettings.cs)
 
 **Interfaces:**
 - Consumes: `enableOverrides`, `factionOverrides`, `xenotypeOverrides`, RimWorld `FloatMenu`, `FactionDef`, `XenotypeDef`
