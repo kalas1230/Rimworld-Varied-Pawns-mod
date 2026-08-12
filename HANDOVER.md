@@ -1663,6 +1663,80 @@ the GitHub Release zip. What it cannot do is the Steam side. That is this sectio
 **Bump `<modVersion>` in `About.xml` before every re-upload.** RimWorld ignores it; mod managers
 display it and `build-release.ps1` names the zip from it.
 
+## Pre-publish checks — NONE OF THESE HAVE BEEN RUN
+
+Open work, listed so it is decided deliberately rather than discovered by a player. Nothing here is
+implemented or checked; treat every line as a question still open. The envelope gate and the
+in-game `Verify Best-of-N` are *not* on this list because they are already green against the
+staged build — these are the things those gates structurally cannot see.
+
+### Blocking — do before the item goes public
+
+1. **Read what is actually in the release folder, file by file.** `build-release.ps1` works from an
+   allowlist and asserts no dev-only content survived, but both halves are code this project wrote,
+   and neither has ever been checked against a human reading the output. `Get-ChildItem -Recurse`
+   over `Release\Varied Pawns\` and account for **every** file. The current staging is 6 files:
+   `About\` (4), `Assemblies\PawnVarianceMod.dll`, `LICENSE`. Anything else appearing there is the
+   allowlist leaking.
+2. **Decide whether the debug tools ship.** They are in the DLL today. `Prefs.DevMode` hides them
+   from normal players, so the exposure is small, but this is a decision that has never actually
+   been made — it is just the status quo. The argument for keeping them: they are the entire
+   verification harness, and stripping them means a *published* build can no longer be verified,
+   only a dev build that differs from it. The argument for cutting them: `DebugActions.cs` is the
+   largest file in the mod and none of it serves a player. **If they stay, say so in this document
+   and stop treating it as an open question. If they go, they must go behind a compile flag** —
+   a hand-deleted file means the shipped DLL and the verified DLL are different artifacts, which
+   is the one outcome worse than shipping them.
+3. **Put the GitHub URL in `About.xml`'s `<description>`.** The Workshop description carries it;
+   the in-game mod-list text does not, so a player who installs from the zip or from a modpack has
+   no path back to source, issues, or the author. `https://github.com/kalas1230/Rimworld-Pawn-variance-mod`.
+4. **Have an AI read the published artifact, not the repo.** Point it at the staged folder and the
+   listing text and ask what a player receives: does the description match what the code does, does
+   anything claim a feature that was cut, is anything shipped that should not be. This is a
+   different question from every review this project has run, all of which read diffs.
+
+### Compatibility — the modpack pass
+
+5. **Run the mod inside the Progression Modpack** (the large collection installed on this machine —
+   1376 workshop items) and look for load errors, def conflicts and Harmony collisions with other
+   pawn-generation mods. **The mod has only ever been run against a modest active list.** The
+   generation postfix is the collision surface: any other mod patching `PawnGenerator.GeneratePawn`
+   or `GenerateSkills` can silently win, and the symptom is pawns that look vanilla rather than an
+   error. `Roll pawns and dump distribution` is the instrument — if the shipped presets' measured
+   spread collapses toward `Faithful` under the modpack, something upstream is overwriting this
+   mod's work.
+6. **Click the Add Faction Override button under that modpack and watch what the menu does.** The
+   menu was sorted and de-duplicated on 2026-08-12 *without ever being opened in game* — a
+   `FloatMenu` does not survive a synthetic click, so the bridge cannot verify it and the change
+   rests on the tab drawing without exceptions. Open it by hand and check three things: that it is
+   alphabetical, that colliding labels carry their `defName`, and that it is usable at all at
+   modpack scale. Measured on this machine's library there are ~499 concrete `FactionDef`s on disk
+   (534 tags, 35 abstract). `Verse.FloatMenu` columns and scrolls past `MaxScreenHeightPercent`
+   (0.9), so it should not clip — **that is a reading of the shipped assembly's metadata, not
+   something anyone has watched happen.** If it is unusable, the fix is a searchable `Window`,
+   which would also be bridge-drivable, unlike what is there now.
+
+### Worth checking, lower stakes
+
+7. **Install it the way a player does, from the zip, with nothing else but Harmony.** Every run this
+   project has done used a dev deploy into an existing modded install with a settings file already
+   present. The first-run path — no config file, `hasInitializedDefaultOverrides` false, defaults
+   being written for the first time — has never been exercised from a clean state.
+8. **Verify the two removal claims, because the listing makes them in bold.** "Safe to add mid-save"
+   and "removing it mid-save is clean, the mod writes nothing into your save". The second is the
+   stronger claim and the easier one to break later: add to a save, remove, reload, and confirm no
+   orphaned-data errors. The architecture says this holds (see "the mod writes nothing to the
+   save"); nobody has done it end to end on a shipping build.
+9. **Decide about translations.** There is no `Languages/` folder and every string is hardcoded
+   English. That is a legitimate choice for a first release — RimWorld renders it fine — but it
+   means no translator can contribute without a refactor, and adding keys later changes every UI
+   string at once. Decide now whether 1.0 is English-only on purpose.
+10. **Look at the item page as a stranger.** Preview image actually rendering (Steam caches
+    aggressively), description BBCode not broken mid-tag, images in the intended order, tags set.
+11. **Plan where bug reports land.** The listing asks for RimWorld version, mod list and expected
+    vs actual. GitHub Issues is the obvious destination and is not currently linked from anywhere a
+    player sees — which item 3 also fixes.
+
 ---
 
 # 🧪 VERIFICATION HARNESS
