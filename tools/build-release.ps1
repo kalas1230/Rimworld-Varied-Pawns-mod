@@ -26,14 +26,37 @@
     you know why a check is failing -- e.g. deliberately staging a build without
     a preview image to eyeball the layout.
 
+.PARAMETER Check
+    Validate the EXISTING staging folder against the current repo without
+    rebuilding or restaging anything, then exit. Answers the one question this
+    script could not previously answer: "is what is sitting in Release\ actually
+    what the repo says today?"
+
+    Why this exists (HANDOVER pre-publish item 17). The staleness check below
+    compares the repo DLL against Source\, and it only runs WHEN YOU RESTAGE. It
+    makes staging correct at the moment it is created and says nothing afterwards.
+    Staging is a build output with an indefinite shelf life sitting in the exact
+    folder the Steam uploader is pointed at, and Release\ is gitignored, so nothing
+    in git tracks it either. A real instance: the staged DLL was 142,848 bytes from
+    09:29 while the repo's was 150,016 from 10:01, and separately an About.xml edit
+    left the staged copy behind. Both were invisible.
+
+    Note this checks EVERY shipped input, not just the DLL -- About\, Languages\
+    and LICENSE go stale exactly the same way, and the original check only ever
+    looked at Source\.
+
 .EXAMPLE
     .\tools\build-release.ps1 -Build -Zip
+
+.EXAMPLE
+    .\tools\build-release.ps1 -Check
 #>
 [CmdletBinding()]
 param(
     [switch]$Build,
     [switch]$Zip,
-    [switch]$Force
+    [switch]$Force,
+    [switch]$Check
 )
 
 $ErrorActionPreference = 'Stop'
@@ -57,10 +80,127 @@ $ShipFiles = @('LICENSE')
 # File extensions stripped from the copy wherever they appear.
 $StripExt  = @('.pdb', '.mdb', '.log', '.user', '.orig', '.rej')
 
+# Provenance for the staged folder. Deliberately written to Release\ and NOT into
+# Release\Varied Pawns\ -- anything inside the staging folder is uploaded to the
+# Workshop, and a build stamp is not player content. Keeping it outside is what
+# makes it impossible to ship by accident; do not "tidy" it into the mod folder.
+$StampPath = Join-Path $ReleaseDir 'staging.stamp.json'
+
 $problems = New-Object System.Collections.Generic.List[string]
 function Fail($msg)  { $script:problems.Add($msg) }
 function Warn($msg)  { Write-Host "  WARN  $msg" -ForegroundColor Yellow }
 function Ok($msg)    { Write-Host "  ok    $msg" -ForegroundColor DarkGray }
+
+# The single definition of what ships, as relativePath -> repo source path. Both
+# the staging pass and -Check read it, so the two cannot disagree about the file
+# set -- a check that derived its own list would eventually drift from the copier
+# and start passing things the copier never produced.
+function Get-ExpectedShipMap {
+    $map = [ordered]@{}
+    foreach ($d in $ShipDirs) {
+        $src = Join-Path $RepoRoot $d
+        if (-not (Test-Path $src)) { continue }
+        foreach ($f in (Get-ChildItem -Recurse -File -Force $src)) {
+            if ($StripExt -contains $f.Extension.ToLower()) { continue }
+            $map[$f.FullName.Substring($RepoRoot.Length + 1)] = $f.FullName
+        }
+    }
+    # Assemblies is not in $ShipDirs: only the mod's own DLL ships, never the
+    # Harmony or RimWorld references sitting beside it.
+    $dllSrc = Join-Path $RepoRoot "Assemblies\$AssemblyName.dll"
+    if (Test-Path $dllSrc) { $map["Assemblies\$AssemblyName.dll"] = $dllSrc }
+    foreach ($f in $ShipFiles) {
+        $src = Join-Path $RepoRoot $f
+        if (Test-Path $src) { $map[$f] = $src }
+    }
+    return $map
+}
+
+function Get-Sha256($path) { return (Get-FileHash -Path $path -Algorithm SHA256).Hash }
+
+function Get-NewestSourceFile {
+    return Get-ChildItem -Path (Join-Path $RepoRoot 'Source') -Recurse -Filter *.cs -File |
+           Where-Object { $_.FullName -notmatch '\\(obj|bin)\\' } |
+           Sort-Object LastWriteTime -Descending |
+           Select-Object -First 1
+}
+
+# --- Check-only mode -----------------------------------------------------
+# Runs before everything else and exits: -Check must never rebuild, restage or
+# mutate anything. Its whole value is reporting on the artifact as it stands.
+if ($Check) {
+    Write-Host "Checking staged '$ModName' against $RepoRoot" -ForegroundColor Cyan
+
+    if (-not (Test-Path $StageDir)) {
+        Write-Host "`nNothing staged at $StageDir." -ForegroundColor Red
+        Write-Host "Run .\tools\build-release.ps1 -Build -Zip first.`n" -ForegroundColor Red
+        exit 1
+    }
+
+    if (Test-Path $StampPath) {
+        try {
+            $stamp = Get-Content $StampPath -Raw | ConvertFrom-Json
+            Write-Host "`nStaged $($stamp.stagedUtc) from commit $($stamp.commit)$(if ($stamp.dirty) { ' (tree was dirty)' })" -ForegroundColor DarkGray
+            Write-Host "Mod version $($stamp.modVersion)" -ForegroundColor DarkGray
+        } catch {
+            Warn "staging.stamp.json is unreadable: $($_.Exception.Message)"
+        }
+    } else {
+        Warn "no staging.stamp.json -- this folder predates stamping, or was not produced by this script"
+    }
+
+    $expected = Get-ExpectedShipMap
+    $stagedFiles = @{}
+    foreach ($f in (Get-ChildItem -Recurse -File -Force $StageDir)) {
+        $stagedFiles[$f.FullName.Substring($StageDir.Length + 1)] = $f.FullName
+    }
+
+    $stale   = New-Object System.Collections.Generic.List[string]
+    $absent  = New-Object System.Collections.Generic.List[string]
+    $extra   = New-Object System.Collections.Generic.List[string]
+
+    foreach ($rel in $expected.Keys) {
+        if (-not $stagedFiles.ContainsKey($rel)) { $absent.Add($rel); continue }
+        if ((Get-Sha256 $expected[$rel]) -ne (Get-Sha256 $stagedFiles[$rel])) { $stale.Add($rel) }
+    }
+    foreach ($rel in $stagedFiles.Keys) {
+        if (-not $expected.Contains($rel)) { $extra.Add($rel) }
+    }
+
+    Write-Host "`n$($stagedFiles.Count) staged file(s), $($expected.Count) expected" -ForegroundColor Cyan
+
+    if ($stale.Count -gt 0) {
+        Write-Host "`nSTALE -- staged copy differs from the repo. This is the item 17 failure:" -ForegroundColor Red
+        foreach ($r in $stale) { Write-Host "  $r" -ForegroundColor Red }
+    }
+    if ($absent.Count -gt 0) {
+        Write-Host "`nMISSING -- in the repo, absent from staging:" -ForegroundColor Red
+        foreach ($r in $absent) { Write-Host "  $r" -ForegroundColor Red }
+    }
+    if ($extra.Count -gt 0) {
+        Write-Host "`nUNEXPECTED -- staged but not produced by the allowlist. Do not upload:" -ForegroundColor Red
+        foreach ($r in $extra) { Write-Host "  $r" -ForegroundColor Red }
+    }
+
+    # Independent of the hash comparison: even a perfectly-synced staging is wrong
+    # if the repo's own DLL was built before the last source edit.
+    $dllPath = Join-Path $RepoRoot "Assemblies\$AssemblyName.dll"
+    $newestSrc = Get-NewestSourceFile
+    $dllStale = $false
+    if ((Test-Path $dllPath) -and $newestSrc -and $newestSrc.LastWriteTime -gt (Get-Item $dllPath).LastWriteTime) {
+        $dllStale = $true
+        Write-Host "`nSTALE BUILD -- the repo's own DLL is older than $($newestSrc.Name)." -ForegroundColor Red
+        Write-Host "  Staging may match the repo and still ship code that matches no source." -ForegroundColor Red
+    }
+
+    if ($stale.Count + $absent.Count + $extra.Count -gt 0 -or $dllStale) {
+        Write-Host "`nDo NOT upload this folder. Re-run: .\tools\build-release.ps1 -Build -Zip`n" -ForegroundColor Red
+        exit 1
+    }
+
+    Write-Host "`nOK -- every staged file matches the repo, and the DLL is newer than the newest source.`n" -ForegroundColor Green
+    exit 0
+}
 
 Write-Host "Staging '$ModName' from $RepoRoot" -ForegroundColor Cyan
 
@@ -85,10 +225,7 @@ if (-not (Test-Path $dll)) {
     # Stale-build catch. Assemblies\ is gitignored and survives branch switches,
     # so a DLL older than the newest source file is the classic way to upload
     # code that matches nothing you tested.
-    $newestSrc = Get-ChildItem -Path (Join-Path $RepoRoot 'Source') -Recurse -Filter *.cs -File |
-                 Where-Object { $_.FullName -notmatch '\\(obj|bin)\\' } |
-                 Sort-Object LastWriteTime -Descending |
-                 Select-Object -First 1
+    $newestSrc = Get-NewestSourceFile
     if ($newestSrc -and $newestSrc.LastWriteTime -gt (Get-Item $dll).LastWriteTime) {
         Fail ("Stale build: $($newestSrc.Name) (modified $($newestSrc.LastWriteTime.ToString('yyyy-MM-dd HH:mm:ss'))) " +
               "is newer than the DLL ($((Get-Item $dll).LastWriteTime.ToString('yyyy-MM-dd HH:mm:ss'))). Re-run with -Build.")
@@ -194,6 +331,41 @@ if ($forbidden) {
 
 $files = @(Get-ChildItem -Recurse -File -Force $StageDir)
 $bytes = ($files | Measure-Object -Property Length -Sum).Sum
+
+# --- Stamp ---------------------------------------------------------------
+# Provenance for what was just staged, so a later -Check can say which commit
+# this folder came from. The hash comparison in -Check does not depend on this
+# file -- it re-derives everything from the repo -- so a missing or corrupt
+# stamp degrades to a warning rather than blocking an upload.
+$stampCommit = 'unknown'
+$stampDirty  = $true
+try {
+    $c = & git -C $RepoRoot rev-parse --short HEAD 2>$null
+    if ($LASTEXITCODE -eq 0 -and $c) { $stampCommit = $c.Trim() }
+    $d = & git -C $RepoRoot status --porcelain 2>$null
+    if ($LASTEXITCODE -eq 0) { $stampDirty = [bool]$d }
+} catch { }
+
+$stampVersion = 'dev'
+if (Test-Path $aboutXml) {
+    try {
+        $sv = ([xml](Get-Content $aboutXml)).ModMetaData.modVersion
+        if ($sv) { $stampVersion = $sv }
+    } catch { }
+}
+
+[ordered]@{
+    stagedUtc  = (Get-Date).ToUniversalTime().ToString('o')
+    commit     = $stampCommit
+    dirty      = $stampDirty
+    modVersion = $stampVersion
+    fileCount  = $files.Count
+    dllSha256  = $(if (Test-Path $dll) { Get-Sha256 $dll } else { $null })
+} | ConvertTo-Json | Set-Content -Path $StampPath -Encoding utf8
+
+if ($stampDirty) {
+    Warn "stamped as dirty -- this staging matches no commit anyone can check out"
+}
 
 # --- Zip -----------------------------------------------------------------
 $zipPath = $null
