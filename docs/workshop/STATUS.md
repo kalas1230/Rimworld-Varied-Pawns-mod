@@ -11,7 +11,7 @@ material, so they go last.
 | # | Image | State |
 |---|---|---|
 | 1 | Title card (Workshop thumbnail) | **Done** — `../../About/Preview.png` |
-| 2 | The payoff shot: two colonists, same kind, same profile, one lucky roll and one poor | **Not started** |
+| 2 | The payoff shot: two colonists, same kind, same profile, one lucky roll and one poor | **Method solved, wrong profile** — see below |
 | 3 | Profile Editor tab | **Done** — `tab-profile-editor.png`, showing `Distinct` |
 | 4 | Distribution graphic, plotted from real 1000-pawn dumps | **Done** — `distribution.png` |
 | 5 | General tab | **Done** — `tab-general-distinct.png` |
@@ -122,16 +122,43 @@ written twice, with the controller's approval, and restored from a backup afterw
 by hash after restoring: SHA-256 `DF224748…`, `activeProfileId` back to
 `custom_639215913003568941`. The backup is outside the repo, in the session scratchpad.
 
+## Image 2 — the capture method works; the pawns are from the wrong profile
+
+**The method is solved and needs no clicking of anything the bridge cannot drive.** Select a
+colonist with `select_pawn` (`pawnName`, not `pawnId` — the id form is rejected), read
+`list_inspect_tabs`, open the `Bio` tab by its full `inspectTabId` (`ITab_Pawn_Character`; the
+`inspectTab` parameter name does not exist), then `take_screenshot` clipped to the character
+card's own `Verse.ImmediateWindow`. That yields a clean 514x489 card with the name, backstories,
+traits, and every skill with its passion flames — no desktop bleed, no dev chrome. Close the Esc
+menu with `close_main_tab` first or it sits in the shot.
+
+Two captured candidates are kept here:
+
+- `payoff-candidate-lucky.png` — Barry Gibbs. Seven skills at 8 or above, topping out at 13/13
+  with two Major passions.
+- `payoff-candidate-poor.png` — Henry Jarvis. One skill above 6, three at zero.
+
+**Do not ship them as image 2.** The contrast is real and striking, but these pawns were rolled
+under the active profile at the time, which is `Custom 1` — the Faithful-equivalent described in
+`distribution-data.md`. **`Faithful` is the preset designed to mimic vanilla**, so a lucky/poor
+pair drawn from it is very close to the spread *vanilla already produces*. Shipping it as the
+mod's payoff shot would credit the mod for something it barely changed. The pair has to come
+from `Distinct`.
+
+**What that needs.** The pawns already on the map cannot be re-rolled — changing the profile does
+not retroactively touch them — so it is: point `activeProfileId` at `preset_distinct` (the
+write-then-restore dance recorded above), start a fresh quick-test colony so its colonists roll
+under it, capture two of them by the method above, then restore the config. The write was
+refused by the permission classifier when attempted, so it needs the controller's go-ahead.
+
 ## To finish
 
-**Only image 2 is left** — two colonists rolled from one profile, their character sheets shot
-side by side, one lucky roll and one poor. It is the last of the two images that show the mod's
-*effect* rather than its settings.
+Image 2, per the section above — one approved config write away from being mechanical.
 
 Optional, if a literal-vanilla control is wanted for image 4: a run with all three axes disabled
-on a throwaway profile, which needs a write the classifier refused this session because it
-mutates `Custom 1`'s contents. The graphic is honest without it — it says "closest to unmodded",
-not "vanilla".
+on a throwaway profile, which needs a write the classifier also refused, because it mutates
+`Custom 1`'s contents. The graphic is honest without it — it says "closest to unmodded", not
+"vanilla".
 
 ## Regenerating the generated art
 
