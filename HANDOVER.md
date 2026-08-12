@@ -1,6 +1,7 @@
 # Handover — Varied Pawns Mod
 
-Repo: `C:\Users\gokal\Desktop\Rimworld-mod\Rimworld-Pawn-variance-mod` · Branch `main`.
+Repo: <https://github.com/kalas1230/Rimworld-Pawn-variance-mod> · Branch `main`. Paths in this
+document are relative to the repo root; the RimWorld install is written as `…\RimWorld\`.
 
 **What this document is.** The durable reference for the mod: the scoring model and where its
 numbers come from, the invariants that are easy to break by accident, the decisions that have
@@ -1088,6 +1089,32 @@ budget roll.)
 | Exposing the exchange rate `R` as a player setting | **Rejected.** A control that changes nothing (the score is display-only) while visibly breaking the ±35% envelope the mod advertises. |
 | Making the Best-of-N integration midpoint-correct | **Rejected — carried permanently.** Both implementations share the slip so it cancels in every displayed figure, `N=1` is exact, and fixing it repastes every table for a difference no player can see. Argument in full under "Why the integration slip is carried". |
 | **Collapsing `envelope_check.py` and the C# into one shared implementation** | **Rejected 2026-08-08 — the redundancy is load-bearing.** Plan written, costed and then shelved. See below. |
+| **Whether the debug tools ship in the released DLL** | **They ship. Decided, not drifted into.** `DebugActions.cs` stays compiled into the release build, gated by `Prefs.DevMode` as it is today. Reasoning below. |
+| **How much of this repo is public** | **All of it, as it stands.** `HANDOVER.md`, `TRAIT-DESIRABILITY-RESEARCH.md` and everything under `docs/` stay tracked and public. The internal record — including the full account of every defect this project shipped — is published deliberately. |
+| **Translations for 1.0** | **Keys, not hardcoded English.** UI strings are extracted to a `Languages/English/Keyed/` file so a translator can contribute without a refactor. Not "English-only on purpose". |
+
+### Why the debug tools ship
+
+The exposure argument is not the interesting one — `Prefs.DevMode` already hides them from any
+normal player, and DLL size is irrelevant. The reason they stay is that **this project's entire
+defect history is bugs that only running the real assembly could see.** Four times: both Best-of-N
+integrator bugs, the `Wildcard` band retune, and the sig-gated passion floor. Clean builds, a
+passing `envelope_check.py` and multiple agent reviews were green for every one of them.
+
+The debug tools *are* the instrument that caught them. If they compiled out of the release build,
+the artifact a player runs would be one nobody can ever measure, and the artifact this project
+verifies would be a different binary. That gap is the exact shape of every defect listed above,
+which makes stripping them the one change most likely to reintroduce the failure mode.
+
+The concrete payoff is the modpack case. When another mod's postfix wins on
+`PawnGenerator.GeneratePawn`, the symptom is not an error — it is pawns that quietly look vanilla.
+The only way to diagnose that from a bug report is `Roll pawns and dump distribution` running
+inside the reporter's own load order. Ship the tools and the published build is self-diagnosing;
+cut them and that report cannot be answered at all.
+
+**If they are ever cut, they must go behind a compile flag, never by deleting the file** — a
+hand-deleted file means the shipped DLL and the verified DLL are different artifacts, which is
+worse than any reason for cutting them.
 
 ### Why the C#/Python duplication STAYS — do not "fix" it
 
@@ -1631,6 +1658,10 @@ the GitHub Release zip. What it cannot do is the Steam side. That is this sectio
 
 ## The sequence
 
+0. **Re-stage, or at minimum run `.\tools\build-release.ps1 -Check`, and do not proceed until it
+   passes.** Staging has an indefinite shelf life and no freshness guarantee of its own; this is
+   the only thing standing between you and uploading a build older than the repo. See item 17 for
+   what that failure looked like when it actually happened.
 1. Copy the staged folder into `…\RimWorld\Mods\` so the game can see it, then launch RimWorld and
    open **Mods**.
 2. Select *Varied Pawns* → **Upload to Steam Workshop**. RimWorld fills the item from `About.xml`:
@@ -1663,37 +1694,87 @@ the GitHub Release zip. What it cannot do is the Steam side. That is this sectio
 **Bump `<modVersion>` in `About.xml` before every re-upload.** RimWorld ignores it; mod managers
 display it and `build-release.ps1` names the zip from it.
 
-## Pre-publish checks — NONE OF THESE HAVE BEEN RUN
+## Pre-publish checks
 
-Open work, listed so it is decided deliberately rather than discovered by a player. Nothing here is
-implemented or checked; treat every line as a question still open. The envelope gate and the
-in-game `Verify Best-of-N` are *not* on this list because they are already green against the
-staged build — these are the things those gates structurally cannot see.
+Open work, listed so it is decided deliberately rather than discovered by a player. The envelope
+gate and the in-game `Verify Best-of-N` are *not* on this list because they are already green
+against the staged build — these are the things those gates structurally cannot see.
+
+**Numbering is stable and append-only: struck-through items keep their number and their outcome
+rather than being deleted,** because commits and notes elsewhere refer to items by number. New
+findings get the next free number wherever they belong topically — 17 sits with the blocking items,
+not at the end.
+
+Closed so far: 1, 3, 11, 15, 16, 17, 18 (done), and 2, 14 (decided, moved to *Settled and not to be
+relitigated*). **Item 9's code work is done and only its in-game pass is outstanding.** Still open
+and needing the game or a published item: 5, 6, 7, 8, 10, 12, 13. Items 17 and 18 were both found
+by doing the items above them: 17 by item 1's audit, 18 by starting item 9.
 
 ### Blocking — do before the item goes public
 
-1. **Read what is actually in the release folder, file by file.** `build-release.ps1` works from an
-   allowlist and asserts no dev-only content survived, but both halves are code this project wrote,
-   and neither has ever been checked against a human reading the output. `Get-ChildItem -Recurse`
-   over `Release\Varied Pawns\` and account for **every** file. The current staging is 6 files:
-   `About\` (4), `Assemblies\PawnVarianceMod.dll`, `LICENSE`. Anything else appearing there is the
-   allowlist leaking.
-2. **Decide whether the debug tools ship.** They are in the DLL today. `Prefs.DevMode` hides them
-   from normal players, so the exposure is small, but this is a decision that has never actually
-   been made — it is just the status quo. The argument for keeping them: they are the entire
-   verification harness, and stripping them means a *published* build can no longer be verified,
-   only a dev build that differs from it. The argument for cutting them: `DebugActions.cs` is the
-   largest file in the mod and none of it serves a player. **If they stay, say so in this document
-   and stop treating it as an open question. If they go, they must go behind a compile flag** —
-   a hand-deleted file means the shipped DLL and the verified DLL are different artifacts, which
-   is the one outcome worse than shipping them.
-3. **Put the GitHub URL in `About.xml`'s `<description>`.** The Workshop description carries it;
-   the in-game mod-list text does not, so a player who installs from the zip or from a modpack has
-   no path back to source, issues, or the author. `https://github.com/kalas1230/Rimworld-Pawn-variance-mod`.
+1. **Read what is actually in the release folder, file by file.** Done once, and it must be redone
+   against whatever is staged at upload time — the audit is of an artifact, not of the script.
+   Every file was accounted for and all are legitimate: `LICENSE` (MIT, identical to repo),
+   `About\LoadFolders.xml` (1.6 only, agreeing with `supportedVersions`), `About\ModIcon.png`
+   (256×256), `About\Preview.png` (1024×576, 105 KB — Steam's cap is 1 MB), `About\About.xml`, and
+   one DLL. **`Assemblies\` contains exactly one DLL — Harmony is referenced but not bundled**,
+   which is the check that matters there, because bundling it breaks other mods. The count is now
+   **7**, not the 6 recorded when this was first audited: `Languages\English\Keyed\VariedPawns.xml`
+   joined the ship list with item 9.
+
+   **What the audit actually caught, and the reason to keep doing it: staged content goes stale
+   silently.** The staged DLL was 142,848 bytes built at 09:29 while the repo's was 150,016 built
+   at 10:01, after the last `Source\` edit — so the staging, and `Release\VariedPawns-1.0.0.zip`
+   beside it, were a build older than the code. `build-release.ps1`'s stale-build check compares
+   the *repo* DLL against `Source\` and only runs when you re-stage; **nothing invalidates staging
+   that already exists.** Treat the staging folder as a build output with no freshness guarantee:
+   re-run the script immediately before uploading, never upload what happens to be sitting there.
+2. ~~**Decide whether the debug tools ship.**~~ **SETTLED — they ship.** Moved to "Settled and not
+   to be relitigated"; the reasoning is under *Why the debug tools ship*. Do not reopen this as an
+   open question.
+3. ~~**Put the GitHub URL in `About.xml`.**~~ **DONE.** It is now in two places: a `<url>` element,
+   which RimWorld renders as a clickable link in the mod info panel (verified as a real field
+   against the 1388 installed workshop mods — 360 use it), and a closing line in `<description>`,
+   because mod managers and modpack listings show the text and not the field. The description line
+   also names GitHub Issues as the bug destination, which closes item 11.
 4. **Have an AI read the published artifact, not the repo.** Point it at the staged folder and the
    listing text and ask what a player receives: does the description match what the code does, does
    anything claim a feature that was cut, is anything shipped that should not be. This is a
    different question from every review this project has run, all of which read diffs.
+
+17. ~~**Close the stale-staging hole.**~~ **DONE — `build-release.ps1 -Check` now exists.**
+
+    **The hole.** `Release\Varied Pawns\` could ship code older than the repo with nothing to
+    catch it. Found by item 1's audit: the staged DLL was 142,848 bytes built at 09:29 while the
+    repo's was 150,016 built at 10:01, after the last `Source\` edit — so the staging folder, and
+    `Release\VariedPawns-1.0.0.zip` beside it, were a build older than the code. `Release\` is
+    gitignored, so nothing in git tracked it either. The old stale-build check compared the
+    **repo** DLL against `Source\*.cs` and ran **only when you re-staged**: it made staging correct
+    at the moment of creation and said nothing afterwards, while staging sat indefinitely in the
+    exact folder the Steam uploader is pointed at.
+
+    **The fix.** `-Check` validates the existing staging against the current repo without
+    rebuilding or restaging anything, and reports STALE / MISSING / UNEXPECTED per file plus the
+    repo's own DLL-vs-source staleness. It compares **every shipped input by SHA-256**, not just
+    the DLL — and that breadth is the load-bearing part, because the old check could only ever see
+    `Source\`. On its first run against the then-current staging it correctly caught three things:
+    a stale `About.xml`, a stale DLL, and a **completely missing `Languages\` folder** — a shipped
+    input that did not exist when the DLL-only check was written, and which no amount of
+    DLL-watching would ever have found.
+
+    Both the stager and `-Check` read one `Get-ExpectedShipMap`, so the file set cannot drift
+    between what is copied and what is verified.
+
+    **`Release\staging.stamp.json`** records commit, dirty flag, mod version, file count and DLL
+    hash. It lives in `Release\`, deliberately **outside** `Release\Varied Pawns\`, because
+    everything inside the staging folder gets uploaded and a build stamp is not player content.
+    **Do not tidy it into the mod folder.** The hash comparison does not depend on it — `-Check`
+    re-derives everything from the repo — so a missing stamp is a warning, not a blocker.
+
+    **The process rule still stands, and is now enforceable: run `-Check` immediately before every
+    upload, or just re-stage.** Never upload what happens to be sitting there. The failure is
+    silent and expensive — a Workshop item running code that matches no commit and no gate result
+    is unfalsifiable from a bug report.
 
 ### Compatibility — the modpack pass
 
@@ -1727,15 +1808,58 @@ staged build — these are the things those gates structurally cannot see.
    stronger claim and the easier one to break later: add to a save, remove, reload, and confirm no
    orphaned-data errors. The architecture says this holds (see "the mod writes nothing to the
    save"); nobody has done it end to end on a shipping build.
-9. **Decide about translations.** There is no `Languages/` folder and every string is hardcoded
-   English. That is a legitimate choice for a first release — RimWorld renders it fine — but it
-   means no translator can contribute without a refactor, and adding keys later changes every UI
-   string at once. Decide now whether 1.0 is English-only on purpose.
+9. **Translations — DECIDED, extraction PART DONE.** The decision is *keys, not hardcoded
+   English*: 1.0 ships with UI strings in `Languages/English/Keyed/VariedPawns.xml`, so a
+   translator can contribute without a refactor. Doing it before release rather than after is the
+   whole point — adding keys rewrites every UI string at once.
+
+   **The code work is DONE.** 138 keys across `VarianceProfile.cs`, `ProfileEditorTab.cs` and
+   `PawnVarianceSettings.cs`; builds clean with zero warnings and the checker green.
+   `GrowUpVariance.cs` and `GrowthUpPatch.cs` were checked and contain no player-facing text at
+   all, only `TraitTrace` diagnostics; `Dialog_RenameProfile.cs` has no literals.
+   **What remains is the in-game pass, and only that.**
+
+   **Scope rules, so the second half matches the first:** `DebugActions.cs` is excluded (DevMode
+   only, and it is the harness, not player content). `Scribe` node names and defNames are never
+   touched — renaming those orphans saved configs. `SettingsCategory()` stays untranslated because
+   it is the mod's name and must agree with `About.xml`'s `<name>`.
+
+   **Three traps this work has already hit, all of which recur in the second half:**
+   - **Never call `.Translate()` in a static field initializer.** Every preset is a
+     `static readonly` field, which initialises at type-init, potentially before
+     `LanguageDatabase` loads — that bakes the raw key text in permanently. Presets now expose
+     `label`/`description` as properties that translate on *access*.
+   - **A display label is not an identity.** `DebugActions` looked presets up with
+     `x.label == "Faithful"`, and `EnvelopeFigures.Profiles` is a generated table keyed by the
+     same English names. Translating `label` would have stopped the entire verification harness
+     from finding any preset — no exception, clean build, the gate simply never fires. Identity
+     now lives in the never-translated `devName`; `label` is presentation only. **If you add a
+     preset lookup, match on `devName` or `stringId`, never on `label`.**
+   - **A double hyphen is illegal inside an XML comment,** and this repo's C# uses `--` as a dash
+     constantly. One copied into `VariedPawns.xml` makes the whole file unparseable, which means
+     every key in it silently goes missing at once. This was hit on the first run.
+   - **Player-visible text does not have to be a string literal.** The `OverridePriority` button
+     and its menu rendered `Highest`/`High`/`Normal`/`Low` through plain `.ToString()` on the
+     enum — real UI text with no literal anywhere to grep for, and it was nearly missed for
+     exactly that reason. It now goes through `OverridePriority.TranslatedLabel()`, with
+     `VerifyPriorityKeys()` asserting a key exists for every member. **If any other enum is ever
+     drawn with `.ToString()`, it has the same defect.**
+
+   **The gate:** `tools\check-translation-keys.ps1` cross-checks keys used in code against keys
+   defined in XML, both directions, plus empties and duplicates. It exists because a missing key
+   does not throw and does not fail the build — RimWorld just renders the raw key text where the
+   label should be, invisible until someone opens that specific tab. Run it after touching either
+   side. It cannot see keys built by concatenation, so the derived `VP_Preset_*` keys are asserted
+   at startup by `VarianceProfiles.VerifyPresetKeys()` instead.
+
+   **Still needs an in-game pass** when the extraction is finished: open every tab and confirm no
+   raw `VP_` string renders. Neither the build nor the checker can see that.
 10. **Look at the item page as a stranger.** Preview image actually rendering (Steam caches
     aggressively), description BBCode not broken mid-tag, images in the intended order, tags set.
-11. **Plan where bug reports land.** The listing asks for RimWorld version, mod list and expected
-    vs actual. GitHub Issues is the obvious destination and is not currently linked from anywhere a
-    player sees — which item 3 also fixes.
+11. ~~**Plan where bug reports land.**~~ **DONE via item 3.** GitHub Issues is the destination, and
+    it is now reachable from the in-game mod list — both as the clickable `<url>` and as a closing
+    line of `<description>` that asks for RimWorld version, mod list, and expected vs actual. The
+    Workshop description already carried the same ask.
 12. **Measure what the mod costs at generation time under a heavy load order.** The postfix runs on
     every generated pawn, and nothing here has ever been timed against anything but a small active
     list. A raid of 40 pawns and a settlement-map load are the cases that would show it. Expected to
@@ -1750,29 +1874,58 @@ staged build — these are the things those gates structurally cannot see.
     player-facing header above the developer material or move the developer material into `docs/`.
     **The Workshop link cannot be added until the item exists**, so this lands after the first
     upload, not before it.
-14. **Audit `.gitignore` and decide, deliberately, how much of this repo should be public.** It is a
-    public repo and the Workshop description points at it, so everything tracked is part of what
-    gets published — a decision that has never actually been taken. Today: 52 files under `docs/`
-    (both audit registers, the superpowers plans and specs, the workshop art sources and the raw
-    pawn captures), `HANDOVER.md`, and `TRAIT-DESIRABILITY-RESEARCH.md`. Ignored: `Assemblies/`,
-    `Release/`, `temp/`, `*.log`, IDE files, and `zzz-Do-Not-Commit/` via `.git/info/exclude`.
-    The thing to decide rather than drift into: **the internal record is a genuine asset and also a
-    full account of every mistake this project made.** Publishing it is defensible and unusual;
-    nobody has weighed it. Items 15 and 16 are the two concrete consequences of that drift and can
-    be settled independently of the larger question.
-15. **Relativise the absolute paths in tracked files.** Five carry this machine's own paths:
-    `HANDOVER.md` and four `docs/superpowers/` plans and specs, all naming `C:\Users\gokal\…`.
-    Technically harmless — nothing depends on them resolving — but it is a real user name on a
-    public repo, and every one of them reads just as well as a repo-relative path or `…\RimWorld\`.
-    `HANDOVER.md` line 3 is the one a visitor hits first.
-16. **Move the `zzz-Do-Not-Commit/` rule from `.git/info/exclude` into `.gitignore`.**
-    `.git/info/exclude` is **local to this working copy** — it is not part of the repository and no
-    clone inherits it. So the convention that scratch files, dumps and test fixtures never get
-    committed is protected on exactly one machine: this one. A fresh clone, on a new machine or by
-    anyone else, has that protection silently absent, and the folder's contents are exactly the
-    things that must never ship (`TestOnly_PlayerColonyXenotypes.xml` among them). If the
-    convention matters — and `build-release.ps1`'s forbidden-content check says it does — the rule
-    belongs in the tracked file.
+14. ~~**Decide how much of this repo should be public.**~~ **SETTLED — all of it, as it stands.**
+    `HANDOVER.md`, `TRAIT-DESIRABILITY-RESEARCH.md` and all 52 files under `docs/` stay tracked and
+    public. The thing being chosen deliberately rather than drifted into: **the internal record is
+    a genuine asset and also a full account of every mistake this project made, and it is published
+    on purpose.** Recorded in "Settled and not to be relitigated". Ignored, and staying ignored:
+    `Assemblies/`, `Release/`, `temp/`, `*.log`, IDE files, `zzz-Do-Not-Commit/`, `__pycache__/`.
+15. ~~**Relativise the absolute paths in tracked files.**~~ **DONE.** `HANDOVER.md` line 3 now names
+    the repo URL and states that paths here are repo-relative; the four `docs/superpowers/` plans
+    and specs had 18 `file:///C:/Users/gokal/…` links rewritten to `../../../Source/…`, which has
+    the side benefit that they now actually resolve as links on GitHub, which the `file:///` form
+    never did. `git grep -i gokal` over tracked files returns nothing.
+16. ~~**Move the `zzz-Do-Not-Commit/` rule into `.gitignore`.**~~ **DONE.** It and `__pycache__/`
+    are now in the tracked `.gitignore` with a comment saying why they live there, and
+    `.git/info/exclude` has been reduced to a note pointing at it. The rule was previously local to
+    this one working copy, so a fresh clone had no protection over exactly the files that must
+    never ship (`TestOnly_PlayerColonyXenotypes.xml` among them). Verified with
+    `git check-ignore -v`, which now reports `.gitignore` as the source.
+
+18. **DONE, as part of item 9 — the strings were edited on the way into `Languages\`, not copied.**
+    The rules below were applied to all 138 keys; what follows stands as the standard for any new
+    string. Three changes worth knowing about, because they are content and not length:
+    - **The tooltips referred to controls that do not exist.** They said "Skill noise" and
+      "Passion noise" throughout, while the sliders on screen are labelled "Skill spread" and
+      "Passion spread". Unified on *spread*, matching what the player actually sees.
+    - **The confirmation dialogs were roughly halved.** "Are you sure you want to delete all
+      faction overrides? This will clear all custom faction profile assignments." became "Delete
+      all faction overrides? Every custom faction assignment will be cleared."
+    - **"Reset this profile to Faithful?" now substitutes the preset name** from
+      `VarianceProfiles.VanillaLike` rather than hardcoding it, so the sentence cannot drift from
+      the profile the code actually resets to, and a translator gets the localised name free.
+
+    The original item, kept because the rules are the reusable part:
+
+    **Edit the UI strings for length while they move into `Languages\`.** The extraction in item 9
+    rewrites every player-visible string in the mod exactly once, and that is the moment to fix
+    the text itself rather than transcribing it. **Do not copy strings across verbatim.** Much of
+    the current text was written as explanation-in-place — it argues the scoring model at the
+    player inside a checkbox tooltip — and RimWorld's settings widgets are narrow, so long labels
+    wrap badly or clip. Rules being applied:
+
+    - A label names the thing. The tooltip explains it. Anything in a label past about five words
+      is usually a sentence that belongs in the tooltip.
+    - Cut text that describes the mod's internals rather than the player's choice. "Best-of-N",
+      "envelope", "composite" and similar are this document's vocabulary, not a player's.
+    - Say what the setting does to pawns, not what the code does.
+    - Keep every warning that is load-bearing — the precedence rules and the "overrides beat this"
+      caption exist because their absence caused real confusion (see item 9's own notes and the
+      General-tab caption added 2026-08-06). **Shorten those; do not drop them.**
+
+    Translation cost is a real reason to do this now: every word kept here is a word every future
+    translator pays for, forever. Where a rewrite changes meaning rather than length, it is a
+    content decision — note it rather than slipping it in with the mechanical edit.
 
 ### `About\PublishedFileId.txt` — the trap that splits a mod in two
 
