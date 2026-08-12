@@ -1741,6 +1741,30 @@ staged build — these are the things those gates structurally cannot see.
     list. A raid of 40 pawns and a settlement-map load are the cases that would show it. Expected to
     be nothing — the work is arithmetic on one pawn — but "expected to be nothing" is how every
     other defect in this document started.
+13. **Rewrite `README.md` for the person the Workshop link sends there.** It is the repo's front
+    page and it is written for developers and agents — build loop, mirrored implementations,
+    invariants. That is deliberate (`build-release.ps1` explains why it is not shipped to players),
+    but it was written when nobody outside this machine would ever read it. A visitor arriving from
+    a published mod wants, in the first screen: what the mod does, one image, how to install
+    without Steam, the licence, and a link back to the Workshop item. Either put a short
+    player-facing header above the developer material or move the developer material into `docs/`.
+    **The Workshop link cannot be added until the item exists**, so this lands after the first
+    upload, not before it.
+14. **Audit `.gitignore` and decide, deliberately, how much of this repo should be public.** It is a
+    public repo and the Workshop description points at it, so everything tracked is part of what
+    gets published — a decision that has never actually been taken. Today: 52 files under `docs/`
+    (both audit registers, the superpowers plans and specs, the workshop art sources and the raw
+    pawn captures), `HANDOVER.md`, and `TRAIT-DESIRABILITY-RESEARCH.md`. Ignored: `Assemblies/`,
+    `Release/`, `temp/`, `*.log`, IDE files, and `zzz-Do-Not-Commit/` via `.git/info/exclude`.
+    Two specific things to decide rather than drift into:
+    - **The internal record is a genuine asset and also a full account of every mistake this
+      project made.** Publishing it is defensible and unusual; nobody has weighed it.
+    - **Five tracked files contain this machine's absolute paths** (`HANDOVER.md` and four
+      `docs/superpowers/` plans and specs, all naming `C:\Users\gokal\…`). Harmless, but it is a
+      real name on a public repo and it is trivial to relativise.
+    Also worth settling: `.git/info/exclude` is **local only**, so a clone does not inherit the
+    `zzz-Do-Not-Commit/` rule — a contributor, or a future clone of this repo, would not have that
+    protection. If that folder's convention matters, the rule belongs in `.gitignore`.
 
 ### `About\PublishedFileId.txt` — the trap that splits a mod in two
 
