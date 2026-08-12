@@ -1736,6 +1736,40 @@ staged build — these are the things those gates structurally cannot see.
 11. **Plan where bug reports land.** The listing asks for RimWorld version, mod list and expected
     vs actual. GitHub Issues is the obvious destination and is not currently linked from anywhere a
     player sees — which item 3 also fixes.
+12. **Measure what the mod costs at generation time under a heavy load order.** The postfix runs on
+    every generated pawn, and nothing here has ever been timed against anything but a small active
+    list. A raid of 40 pawns and a settlement-map load are the cases that would show it. Expected to
+    be nothing — the work is arithmetic on one pawn — but "expected to be nothing" is how every
+    other defect in this document started.
+
+### `About\PublishedFileId.txt` — the trap that splits a mod in two
+
+**Steam identity does not live in `About.xml`.** RimWorld records the Workshop item id in
+`About\PublishedFileId.txt` inside the folder it uploaded, and every subscribed mod on this machine
+carries one (verified across the installed workshop content). That file is what makes the *second*
+upload an **update** instead of a **new item**.
+
+Two ways this project loses it, both live right now:
+
+- **`build-release.ps1` wipes and rebuilds `Release\Varied Pawns\` on every run**, and rebuilds it
+  from the repo's `About\`, which has no `PublishedFileId.txt`. Publish, re-stage, publish again,
+  and the second upload creates a second Workshop item.
+- **Uploading from `Mods\PawnVarianceMod\`** writes the file *there*, outside the repo entirely,
+  where the next deploy or a reinstall drops it.
+
+So after the first successful upload: **copy `PublishedFileId.txt` into the repo's `About\` and
+commit it.** It then flows into every future staging automatically, and the allowlist already ships
+all of `About\`. A duplicate Workshop item cannot be merged with the original — subscribers,
+ratings and comments stay on whichever one they found.
+
+### Tie the upload to a commit
+
+`build-release.ps1` warns when the tree is dirty, because an upload that matches no commit cannot
+be checked out later. Go further and **tag the commit you build 1.0.0 from** (`git tag v1.0.0`), so
+a bug report naming a version maps to source. Nothing enforces this; the tag is the only link
+between "what a player is running" and "what the repo says", and `Assemblies\` is gitignored, so
+the built DLL is not recoverable from the repo alone — keep `Release\VariedPawns-1.0.0.zip`
+somewhere durable, or attach it to a GitHub Release, which does both.
 
 ---
 
