@@ -1609,11 +1609,59 @@ the exact branch that used to call `Register`. The derived predicate answered co
 ```powershell
 tasklist /FI "IMAGENAME eq RimWorldWin64.exe"   # must show no running instance
 dotnet build Source/PawnVarianceMod.csproj
-Copy-Item Assemblies/PawnVarianceMod.dll, Assemblies/PawnVarianceMod.pdb "C:/Program Files (x86)/Steam/steamapps/common/RimWorld/Mods/PawnVarianceMod/Assemblies/" -Force
+$dep = "C:/Program Files (x86)/Steam/steamapps/common/RimWorld/Mods/PawnVarianceMod"
+Copy-Item Assemblies/PawnVarianceMod.dll, Assemblies/PawnVarianceMod.pdb "$dep/Assemblies/" -Force
+Copy-Item About/About.xml, About/LoadFolders.xml, About/Preview.png, About/ModIcon.png "$dep/About/" -Force
 ```
 
 - **Guard**: check for a running RimWorld before copying, or the DLL copy fails on a file lock.
 - **Verification**: `dotnet build` must return `0 Error(s), 0 Warning(s)`.
+- **Copy `About/` too.** This block copied only `Assemblies/` for a long time, so the deployed mod
+  carried a stale `About.xml` and neither image, and the logo and title card never appeared in game
+  no matter how often they were regenerated. `tools/build-release.ps1` always packaged `About/`
+  correctly, so only the dev deploy was ever affected. **`About/` changes need a full game
+  restart** — there is no reload path for mod metadata.
+
+---
+
+# 📦 PUBLISHING TO THE WORKSHOP
+
+`tools/build-release.ps1 -Build -Zip` produces the uploadable folder (`Release\Varied Pawns\`) and
+the GitHub Release zip. What it cannot do is the Steam side. That is this section.
+
+## The sequence
+
+1. Copy the staged folder into `…\RimWorld\Mods\` so the game can see it, then launch RimWorld and
+   open **Mods**.
+2. Select *Varied Pawns* → **Upload to Steam Workshop**. RimWorld fills the item from `About.xml`:
+   the name, the `<description>`, and `Preview.png` as the thumbnail. Nothing else is uploaded for
+   you.
+3. **Steam keeps a brand-new item hidden until the Workshop Legal Agreement is accepted on the
+   item's own page. Do that first** — otherwise the item exists, looks published from the game's
+   side, and nobody can see it.
+4. Replace the auto-filled description with `docs/workshop-description.txt` (Steam BBCode, paste
+   below its `====` divider). **The two descriptions are meant to differ**: `About.xml`'s is the
+   short in-game mod-list text, this one is the full listing. If what the mod does changes, change
+   both.
+5. Add the remaining listing images in the order fixed in `docs/workshop/STATUS.md`.
+6. Set visibility to Public.
+
+## Two things that are easy to get wrong
+
+- **The payoff shot's caption must not describe it as what a preset gives you.** Those three
+  colonists were rolled on the custom `Showcase` profile, not on a shipped preset; the image's own
+  footer says so, and a caption that contradicts it misrepresents what picking `Distinct` from the
+  dropdown actually gets a player. `docs/workshop/STATUS.md` carries the profile's values and the
+  full constraint.
+- **After publishing, remove the local `Mods\PawnVarianceMod\` copy** (or give the dev copy a
+  different `packageId`). Subscribing to your own Workshop item while the local folder is still
+  there means two installs of `kalas.pawnvariance` — a duplicate-`packageId` error for you, and the
+  same error for any player who ends up with both. The wall of duplicate-`packageId` noise this
+  project has already seen from `CETeam.CombatExtended` and `NozoMe.MapModeFramework` is exactly
+  this, in someone else's mod.
+
+**Bump `<modVersion>` in `About.xml` before every re-upload.** RimWorld ignores it; mod managers
+display it and `build-release.ps1` names the zip from it.
 
 ---
 
