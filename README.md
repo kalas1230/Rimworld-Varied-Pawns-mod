@@ -54,11 +54,19 @@ uploaded from here** — see *Releasing*.
 ```powershell
 tasklist /FI "IMAGENAME eq RimWorldWin64.exe"   # must show no running instance
 dotnet build Source/PawnVarianceMod.csproj
-Copy-Item Assemblies/PawnVarianceMod.dll, Assemblies/PawnVarianceMod.pdb `
-  "C:/Program Files (x86)/Steam/steamapps/common/RimWorld/Mods/PawnVarianceMod/Assemblies/" -Force
+$dep = "C:/Program Files (x86)/Steam/steamapps/common/RimWorld/Mods/PawnVarianceMod"
+Copy-Item Assemblies/PawnVarianceMod.dll, Assemblies/PawnVarianceMod.pdb "$dep/Assemblies/" -Force
+Copy-Item About/About.xml, About/LoadFolders.xml, About/Preview.png, About/ModIcon.png `
+  "$dep/About/" -Force
 ```
 
+- **Copy `About/` too, not just `Assemblies/`.** This step was missing for a long time, and the
+  consequence was invisible: the deployed mod had a stale `About.xml` and neither image, so the
+  logo and the title card never appeared in game no matter how many times they were regenerated.
+  `tools/build-release.ps1` always packaged `About/` correctly, so **only the dev deploy was
+  affected** — the release zip was never wrong.
 - Check for a running RimWorld before copying, or the DLL copy fails on a file lock.
+- `About/` changes need a **full game restart** to show; there is no reload for mod metadata.
 - `dotnet build` must return `0 Error(s), 0 Warning(s)`.
 - Reference paths are overridable: `-p:RimWorldDir=…` and `-p:HarmonyModDir=…`.
 - Debug and Release both write to `Assemblies\`. A DLL is a DLL; know which one is sitting there.
