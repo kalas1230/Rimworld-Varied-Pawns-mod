@@ -1706,9 +1706,10 @@ findings get the next free number wherever they belong topically — 17 sits wit
 not at the end.
 
 Closed so far: 1, 3, 11, 15, 16, 17, 18 (done), and 2, 14 (decided, moved to *Settled and not to be
-relitigated*). **Item 9's code work is done and only its in-game pass is outstanding.** Still open
-and needing the game or a published item: 5, 6, 7, 8, 10, 12, 13. Items 17 and 18 were both found
-by doing the items above them: 17 by item 1's audit, 18 by starting item 9.
+relitigated*). **Item 9's code work is done and only its in-game pass is outstanding**; **item 13 is
+done bar one marked `TODO` line** that needs the Workshop URL. Still fully open, and all needing the
+game or a published item: 5, 6, 7, 8, 10, 12. Items 17 and 18 were both found by doing the items
+above them: 17 by item 1's audit, 18 by starting item 9.
 
 ### Blocking — do before the item goes public
 
@@ -1865,15 +1866,22 @@ by doing the items above them: 17 by item 1's audit, 18 by starting item 9.
     list. A raid of 40 pawns and a settlement-map load are the cases that would show it. Expected to
     be nothing — the work is arithmetic on one pawn — but "expected to be nothing" is how every
     other defect in this document started.
-13. **Rewrite `README.md` for the person the Workshop link sends there.** It is the repo's front
-    page and it is written for developers and agents — build loop, mirrored implementations,
-    invariants. That is deliberate (`build-release.ps1` explains why it is not shipped to players),
-    but it was written when nobody outside this machine would ever read it. A visitor arriving from
-    a published mod wants, in the first screen: what the mod does, one image, how to install
-    without Steam, the licence, and a link back to the Workshop item. Either put a short
-    player-facing header above the developer material or move the developer material into `docs/`.
-    **The Workshop link cannot be added until the item exists**, so this lands after the first
-    upload, not before it.
+13. **Rewrite `README.md` for the person the Workshop link sends there — DONE except for one line.**
+    The restructure did not actually need the Workshop item to exist; only the link does. Resolved
+    the way the item suggested: a player-facing header above the developer material rather than
+    moving the developer material into `docs/`. The first screen now carries what the mod does,
+    `About/Preview.png`, how to install without Steam, requirements, where bugs go, and the licence.
+    Everything below `# Developer documentation` is unchanged in purpose.
+
+    **The one outstanding line is a marked `TODO` in the *Installing* section: paste the Workshop
+    URL there after the first upload.** That is all that is left of this item.
+
+    Three things in the developer half were **wrong** by the time this was done, all invalidated by
+    the work above it, and all now corrected: the scratch-file convention still described
+    `.git/info/exclude` (item 16 moved it), the shipped file list still said `About/`, one DLL and
+    `LICENSE` (item 9 added `Languages/`, making it 7 files), and the release section predated
+    `-Check` (item 17). **Worth noting as a pattern: `README.md` describes the repo's mechanics, so
+    changing the mechanics silently ages it, and nothing checks that.**
 14. ~~**Decide how much of this repo should be public.**~~ **SETTLED — all of it, as it stands.**
     `HANDOVER.md`, `TRAIT-DESIRABILITY-RESEARCH.md` and all 52 files under `docs/` stay tracked and
     public. The thing being chosen deliberately rather than drifted into: **the internal record is
