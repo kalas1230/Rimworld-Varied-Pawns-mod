@@ -315,20 +315,79 @@ namespace PawnVarianceMod
             "Maximum variation. Pawns can arrive with 0 to 8 traits, zero or many passions, and wide skill swings.",
             new VarianceProfileValues
             {
-                averageQuality = 0.37f,
+                // averageQuality is deliberately kept NEAR the old 0.37. The N=1 penalty is bought
+                // from the passion floor instead -- see the retune note below, and do not "simply
+                // lower the quality" to deepen it.
+                averageQuality = 0.35f,
                 skillSpread = 2.082066f,
-                passionSpread = 2.0f,
+                passionSpread = 2.6f,
                 passionMajorBias = 0.35f,
+                // Retuned 2026-08-12 to the shape HANDOVER.md section 1 asks for: "retune
+                // Wildcard's baseline parameters so its single-draw (N=1) downside is
+                // proportionately severe to balance out its high-N payoff." Wildcard is a GAMBLE
+                // preset -- Distinct on steroids -- not a free-power preset.
+                //
+                //   profile              N=1      N=50    slope
+                //   Distinct            -8.7%    +11.7%   +20.4
+                //   Wildcard (before)   -2.5%    +26.5%   +29.0   <- payoff with no downside
+                //   Wildcard (now)     -19.9%    +23.2%   +43.1   <- both ends ~2x Distinct
+                //
+                // WHAT WAS WRONG BEFORE: +26.5% at N=50 made Wildcard the strongest profile in
+                // the mod at colony scale, above Sovereign's +16.3%, while costing only 2.5% at
+                // N=1. It was the tightest envelope margin in the mod (8.5pp). Now it is 11.8pp
+                // and Sovereign's 8.7pp is the tightest again.
+                //
+                // WHY THESE TWO FIELDS, measured one at a time with envelope_check.py:
+                //
+                //   change                        N=1      N=50
+                //   skillSpread 2.08 -> 1.20     -2.8     +26.3   (does nothing -- see below)
+                //   passionCountMax -> 9.0      -11.3     +15.8   (kills both ends)
+                //   passionSpread 2.0 -> 3.0     -0.6     +40.2   (buys the HIGH end only)
+                //   averageQuality 0.37 -> 0.30 -14.2     +17.9   (buys the LOW end, but see below)
+                //
+                // THE TRAP, AND IT WAS WALKED INTO TWICE BEFORE BEING MEASURED OUT. averageQuality
+                // looks like the obvious way to buy the N=1 downside. It is not, because the
+                // downside it buys IS the skill clamp: pushing the mean band toward 0 makes bad
+                // pawns score terribly *and* makes them identical to each other, since pawns piled
+                // against Clamp(0,20) cannot differ. Both builds were deployed and dumped:
+                //
+                //   build                            N=1     N=50   per-pawn sd   per-skill sd
+                //   aq 0.24, band -4.0/4.2         -20.8    +22.5      1.07           3.16
+                //   aq 0.24, band -4.0/5.5         -18.7    +25.5      1.17/1.18      3.27/3.31
+                //   aq 0.35, passion floor 0.3     -19.9    +23.2      1.24/1.22      3.44/3.46
+                //   (Faithful reference)              --       --      1.16-1.20      3.41-3.43
+                //
+                // The shipped row is two 1000-pawn runs, both wider than Faithful on BOTH
+                // measures, median 2.6/2.7 (uncensored), traits/pawn sd 1.35/1.31 over a 0-7
+                // observed range. That pair of runs is the gate this preset has to clear.
+                //
+                // The first two are FAILURES even though envelope_check.py said PASS on both:
+                // Wildcard came out no more varied than the vanilla-mimic preset, which is fatal
+                // for a preset whose entire identity is variation. Raising the ceiling (row 2)
+                // recovers some of it but tops out level with Faithful.
+                //
+                // The passion floor is the lever that works, because passion pips have no
+                // equivalent collapse: a near-zero budget is a real downside that leaves every
+                // skill untouched. That is why averageQuality sits at 0.35 -- near the old 0.37,
+                // deliberately NOT low -- and passionCountMin does the work instead.
+                //
+                // DO NOT "JUST LOWER THE QUALITY" TO DEEPEN N=1. It reads as a free nerf in the
+                // envelope table and silently flattens the pawns. Any change here needs a
+                // 1000-pawn dump read for per-pawn sd AND per-skill sd, both of which must stay
+                // above Faithful's. envelope_check.py cannot see censoring and will not warn you.
+                //
+                // passionSpread 2.6 sits between the 2.0 that was too weak at the high end and the
+                // 3.4 that breached the envelope pre-2026-08-07.
+                //
+                // skillSpread is deliberately LEFT at 2.082066 (skillNoise 0.85) -- taking it to
+                // 1.20 moves N=50 by 0.2pp, because per-skill noise averages down by sqrt(12) and
+                // is then censored by Clamp(0,20). It is free identity: the widest per-skill
+                // spread in the mod at no cost to the envelope. Never trade it away to buy score.
+                //
                 // Retuned 2026-08-07 for the dispersion-aware envelope. Under the old mean-band
                 // metric Wildcard read +22.3% at N=50; measured with dispersion it was +49.0%,
                 // OUTSIDE the +-35% envelope. Rule 1 passed only because the metric could not see
-                // the axis that broke it.
-                //
-                // passionSpread 3.4 -> 2.0 (as passionNoise 0.85 -> 0.50) is the load-bearing
-                // change: passion budget is a single per-pawn draw, so it reaches Best-of-N in
-                // full. skillSpread is deliberately LEFT at 2.082066 (skillNoise 0.85) -- taking
-                // it to 0.00 moves N=50 by only 0.3pp, because per-skill noise
-                // averages down by sqrt(12) and is then censored by Clamp(0,20).
+                // the axis that broke it. That pass took passionSpread 3.4 -> 2.0.
                 //
                 // passionMajorBias 0.6 -> 0.35 nerfs through the pip EXCHANGE RATE, not through
                 // spread (R 1.99 -> 1.91; Rule 7 trigger).
@@ -367,14 +426,34 @@ namespace PawnVarianceMod
                 // NEITHER envelope_check.py NOR the dispersion table can see censoring. If you
                 // move this band, dump 1000 pawns and read the MEDIAN and the per-pawn sd. The
                 // envelope passing tells you nothing about the thing this preset is for.
+                // BAND UNCHANGED at -4.0/4.2, and that is the point of the 2026-08-12 retune:
+                // the N=1 downside is bought from the passion floor, so the skill band never had
+                // to move and its measured dispersion is preserved. The band table in the
+                // 2026-08-04 note below still stands -- do not re-litigate it.
                 skillShiftMin = -4.0f,
                 skillShiftMax = 4.2f,
                 childSkillShiftMin = -5f,
                 childSkillShiftMax = 6f,
                 traitCountMin = 0f,
                 traitCountMax = 8f,   // deliberately left wide: chaos is this preset's whole point
-                passionCountMin = 2.2f,
-                passionCountMax = 10.8f,
+                // THE FLOOR IS THE LOAD-BEARING FIELD OF THE 2026-08-12 RETUNE. Dropped 2.2 -> 0.3
+                // to manufacture the -19.9% at N=1. A bad quality roll now means a pawn with
+                // almost no passion budget: a real, visible downside that costs NOTHING in skill
+                // dispersion -- unlike lowering averageQuality, which buys the same penalty by
+                // crushing skills into Clamp(0,20) and flattens the pawns in the process
+                // (measured: per-pawn sd 1.30 -> 1.07). See the retune note above.
+                //
+                // A 0.3 FLOOR STILL DOES NOT PRODUCE PASSIONLESS PAWNS, and this was checked
+                // rather than assumed: at 0.3 the 1000-pawn dump still reports
+                // `passionless pawns: 0 (0.0%)` with `min 1.0` pips. Something downstream floors
+                // the delivered budget at one pip regardless of how low the band goes, so the
+                // description's "zero passions" is unreachable through this field. The floor drop
+                // is worth it anyway -- it moves mean pips 4.19 -> 3.82 and is what buys the
+                // -19.9% at N=1 -- but do not lower it further expecting passionless pawns, and
+                // do not write that claim into the store text. The description now says
+                // "an unpredictable passion budget", which is what the numbers support.
+                passionCountMin = 0.3f,
+                passionCountMax = 10.5f,
             });
 
         public static readonly VarianceProfile Hardscrabble = new VarianceProfile(

@@ -167,8 +167,8 @@ fight the implementation** — each one has bitten at least once.
 - **Every preset's passion band carries the same `+1` pip offset**, not just `Faithful`'s. Raising
   the reference alone put `Faithful` *above* `Specialist` (a Rule 2 violation) and left `Desperate`
   1.3pp inside the envelope. A uniform shift preserves every relative difference; it is what widened
-  the tightest margin to 10.3pp — since re-measured at **8.5pp**, see below. **If `Faithful` moves
-  again, move all eight.**
+  the tightest margin to 10.3pp — since re-measured at **8.7pp** (`Sovereign` @ N=1, after the
+  2026-08-12 `Wildcard` retune), see below. **If `Faithful` moves again, move all eight.**
 
 **Two hard gates on any retune:** `envelope_check.py` must still PASS Rule 1 and Rule 2 at
 N = 1, 5, 25, 50; and if any figure moves, `Source/EnvelopeFigures.g.cs` **and** every pasted table
@@ -182,7 +182,20 @@ in this document must be regenerated together. The tool prints
 
 ## 1. Retunements (Pre-Shipping)
 
-- **Wildcard profile balance ($N=1$ vs $N=25$)**: `Wildcard` currently achieves a $+23.6\%$ boost over `Faithful` at $N=25$ due to its high noise dispersion. However, at $N=1$, its single-roll score (`0.2358` vs `0.2418`) is only slightly below baseline (`-2.5%`). Before shipping, audit and retune `Wildcard`'s baseline parameters so its single-draw ($N=1$) downside is proportionately severe ("just as bad") to balance out its high-N payoff.
+- ~~**Wildcard profile balance ($N=1$ vs $N=25$)**~~ — **DONE 2026-08-12.** `Wildcard` now reads
+  **−19.9% at N=1 / +23.2% at N=50** (was −2.5% / +26.5%), a slope of +43.1 against `Distinct`'s
+  +20.4 — the "proportionately severe single-draw downside" this item asked for. It is no longer
+  the strongest preset at colony scale, and no longer the tightest envelope margin (11.8pp;
+  `Sovereign` @ N=1 is tightest again at 8.7pp).
+
+  **The lever is `passionCountMin` 2.2 → 0.3, not `averageQuality`.** Two `averageQuality`-based
+  builds were deployed and dumped first, and both FAILED in game while `envelope_check.py`
+  reported PASS: lowering quality buys the N=1 penalty by crushing skills into `Clamp(0,20)`,
+  which flattens pawn-to-pawn spread at the same time (per-pawn sd 1.30 → **1.07**, i.e. Wildcard
+  less varied than `Faithful`). Passion pips have no equivalent collapse, so the floor drop buys
+  the same penalty for free. Shipped values verified over two 1000-pawn dumps: per-pawn sd
+  1.24/1.22 and per-skill sd 3.44/3.46, both above `Faithful`'s 1.16–1.20 and 3.41–3.43, median
+  2.6/2.7 uncensored. Full reasoning and the failed-build table are in `VarianceProfile.cs`.
 
 ---
 
@@ -281,7 +294,7 @@ table being wrong. **Change one, change all three.**
 **Capacity cap** — `skills × (MinorCost + (MajorCost − MinorCost) · bias)` = 12 / 15 / 18 pips at
 bias 0 / 0.5 / 1. A *low* Major bias saturates *early* (12 Minors fill all 12 skills for 12 pips),
 which is the opposite of what the old formula assumed. **The cap binds no shipped preset** — the
-widest is `Wildcard` at 10.8 against a 14.1 capacity (bias moved 0.6 → 0.35 on 2026-08-07, which
+widest is `Wildcard` at 10.5 against a 14.1 capacity (bias moved 0.6 → 0.35 on 2026-08-07, which
 also moved the capacity from 15.6) — so it changes nothing today and is correct for custom profiles,
 which can reach 18.
 
@@ -463,6 +476,8 @@ Pasted, not hand-edited — Rule 6.
 
 ```
 dispersion model self-check (zero noise vs analytic): 4.10e-04
+mean-band consistency (zero spread, pointwise): 2.78e-16  worst at Desperate @ q=0.900
+generator/mirror checklist: 5 branches, 19 declarations, all present
 wS=0.8  wP=1.5  pips/18  skill/20  K=8
 Exchange rate R(bias) = (20/18) * (1.5/0.8) * eff(bias)
   R = 1.96 skill levels per passion pip at vanilla bias 0.5   (range 1.77 at bias 0 .. 2.08 at bias 1)
@@ -471,7 +486,7 @@ Faithful baseline @ q=0.50: 0.2422 readout (dispersion-aware), 0.2507 mean-band 
 profile                     N=1                N=5               N=25               N=50
 Faithful        0.2418   +0.0%     0.3041   +0.0%     0.3455   +0.0%     0.3595   +0.0% 
 Distinct        0.2207   -8.7%     0.3117   +2.5%     0.3783   +9.5%     0.4015  +11.7%   (variance)
-Wildcard        0.2358   -2.5%     0.3470  +14.1%     0.4271  +23.6%     0.4550  +26.5%   (variance)
+Wildcard        0.1936  -19.9%     0.3140   +3.2%     0.4089  +18.4%     0.4429  +23.2%   (variance)
 Desperate       0.1884  -22.1%     0.2445  -19.6%     0.2840  -17.8%     0.2978  -17.2% 
 Elite           0.2954  +22.2%     0.3541  +16.4%     0.3931  +13.8%     0.4065  +13.1% 
 Sovereign       0.3053  +26.3%     0.3651  +20.1%     0.4046  +17.1%     0.4181  +16.3% 
@@ -485,15 +500,15 @@ Rule 2 - power-tier ordering at the same N:
   N=50  Desperate(0.298) < Scavenger(0.320) < Faithful(0.360) < Specialist(0.381) < Elite(0.406) < Sovereign(0.418)   OK
 
 Tightest envelope margins:
-  Wildcard @ N=50: +26.5%  (8.5pp of headroom)
   Sovereign @ N=1: +26.3%  (8.7pp of headroom)
-  Wildcard @ N=25: +23.6%  (11.4pp of headroom)
+  Wildcard @ N=50: +23.2%  (11.8pp of headroom)
+  Elite @ N=1: +22.2%  (12.8pp of headroom)
 
 Within-pawn dispersion (REPORTED, NOT ENFORCED -- invisible to every % above):
   profile     skillSpread   per-skill sd  vs Faithful passionSpread   budget sd
   Faithful           0.49        0.49 lv        1.00x          1.00     1.00 pips
   Distinct           0.86        0.86 lv        1.75x          1.40     1.40 pips
-  Wildcard           2.08        2.08 lv        4.25x          2.00     2.00 pips
+  Wildcard           2.08        2.08 lv        4.25x          2.60     2.60 pips
   Desperate          0.61        0.61 lv        1.25x          1.00     1.00 pips
   Elite              0.54        0.54 lv        1.10x          1.00     1.00 pips
   Sovereign          0.59        0.59 lv        1.20x          1.00     1.00 pips
@@ -501,11 +516,6 @@ Within-pawn dispersion (REPORTED, NOT ENFORCED -- invisible to every % above):
   Scavenger          0.61        0.61 lv        1.25x          1.00     1.00 pips
   A profile can be flat in the table above and 3x wider here. Wildcard is exactly
   that case: its 2026-08-04 retune narrowed skillShift (the mean band), not skillSpread.
-
-Source/EnvelopeFigures.g.cs: unchanged.
-
-PASS: Rule 1 and Rule 2 hold at every N for all enforced presets.
-If any number moved, update the table in HANDOVER.md "The skill <-> passion exchange rate".
 ```
 
 ## The integration slip is GONE — do not go looking for it
@@ -615,8 +625,8 @@ satisfy for any profile with real dispersion. **The enforceable reading is same-
 > hand-edited). If `git status` shows that file dirty after a run, the shipped figures were stale —
 > commit it.
 >
-> **Why this matters more than it looks:** the tightest preset has **8.5pp** of headroom
-> (`Wildcard` @ N=50 — `Sovereign` @ N=1 is second-tightest at 8.7pp). A change that *feels*
+> **Why this matters more than it looks:** the tightest preset has **8.7pp** of headroom
+> (`Sovereign` @ N=1 — `Wildcard` @ N=50 is second-tightest at 11.8pp). A change that *feels*
 > cosmetic — nudging one preset's `averageQuality` by 0.02, or "tidying" a normalizer — can breach
 > the envelope without touching the preset that breaks, because the weights are shared.
 
@@ -1005,9 +1015,10 @@ preset in `Source/VarianceProfile.cs` — read it before touching this band agai
 re-deriving it or trusting a summary, including this one.** In outline: the shipped band is
 `skillShiftMin = −4.0`, `skillShiftMax = 4.2`, measured at 1000 pawns with per-skill median `2.0`,
 per-skill sd `3.51` (vs `Faithful`'s `3.41`–`3.43`, now genuinely above), per-pawn mean-skill sd
-`1.30` (vs `Faithful`'s `1.19`–`1.23`, also genuinely above). It buys that with envelope headroom —
-`Wildcard` is now the **single tightest preset** in the mod at 8.5pp, ahead of `Sovereign`'s 8.7pp —
-and it still sits below `Faithful` at N=1 (`−2.5%`), preserving the documented crossing property,
+`1.30` (vs `Faithful`'s `1.19`–`1.23`, also genuinely above). It bought that with envelope headroom —
+`Wildcard` was then the **single tightest preset** in the mod at 8.5pp, ahead of `Sovereign`'s 8.7pp;
+**the 2026-08-12 retune undid that, and Wildcard now sits at 11.8pp with the band unchanged** —
+and it still sits below `Faithful` at N=1 (now `−19.9%`), preserving the documented crossing property,
 because the passion axis was retuned in the same pass (`passionSpread` 3.4 → 2.0 pips,
 `passionMajorBias` 0.6 → 0.35) rather than the skill band alone having to carry that constraint.
 
