@@ -67,6 +67,11 @@ namespace PawnVarianceMod
         {
             VarianceProfiles.VerifyPresetKeys();
             OverridePriorityExtensions.VerifyPriorityKeys();
+
+            // Re-snapshot the resolved profile labels now that translation is available. They were
+            // first taken during GetSettings<>() above, which is too early -- see the comment on
+            // RefreshResolvedLabels for the raw-key symptom that caused.
+            PawnVarianceMod.Settings?.RefreshResolvedLabels();
         }
     }
 }

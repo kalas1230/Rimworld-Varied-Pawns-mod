@@ -1066,6 +1066,11 @@ namespace PawnVarianceMod
             // not zero.
             var modelPipsByLabel = new Dictionary<string, List<float>>();
             var modelValuesByLabel = new Dictionary<string, VarianceProfileValues>();
+            // How many skills ended up pressed against Shift's own Clamp(0, 20), per RESOLVED
+            // profile. Grouped for the same reason the passion figures are: a normal run resolves
+            // several profiles, and a pooled figure would average a censored band into a healthy one
+            // and report neither.
+            var censorByLabel = new Dictionary<string, CensorTally>();
             int majors = 0, minors = 0, nones = 0, passionless = 0;
             // What each pawn ACTUALLY resolved to, tallied per label. This action used to print
             // settings.activeProfileId and assert "overrides are not exercised here" -- which is
@@ -1111,6 +1116,12 @@ namespace PawnVarianceMod
                         resolved.TryGetValue(label, out int seen);
                         resolved[label] = seen + 1;
 
+                        if (!censorByLabel.TryGetValue(label, out CensorTally censor))
+                        {
+                            censor = new CensorTally();
+                            censorByLabel[label] = censor;
+                        }
+
                         float sum = 0f;
                         float capableSum = 0f;
                         int capableCount = 0;
@@ -1127,6 +1138,16 @@ namespace PawnVarianceMod
                             {
                                 capableSum += lv;
                                 capableCount++;
+
+                                // `lv` is the raw learned level, which is exactly the quantity
+                                // Shift clamps (`record.Level = Mathf.Clamp(newLevel, 0, 20)`
+                                // writes levelInt). Biotech aptitude is applied on top by
+                                // GetLevel and never participates in that clamp, so excluding
+                                // it here is what makes this a reading of THIS mod's censoring
+                                // rather than of a gene's.
+                                censor.capableLevels.Add(lv);
+                                if (lv <= 0) censor.atFloor++;
+                                else if (lv >= 20) censor.atCeiling++;
                             }
 
                             switch (r.passion)
@@ -1219,6 +1240,67 @@ namespace PawnVarianceMod
             sb.AppendLine($"  passions: {majors} Major, {minors} Minor, {nones} None"
                 + $"   passionless pawns: {passionless} "
                 + $"({100f * passionless / perPawnMeans.Count:F1}%)");
+            sb.AppendLine();
+
+            // CLAMP CENSORING -- what share of skills ended up pressed against Shift's own
+            // `Mathf.Clamp(newLevel, 0, 20)`.
+            //
+            // This is the one failure mode no model in this project can see. CalculateCompositeScore,
+            // DispersionModel and envelope_check.py all read `Lerp(skillShiftMin, skillShiftMax, q)`
+            // -- a mean band, never a rolled pawn -- so a band sitting under the floor reports as a
+            // wide preset offline while delivering a point mass at 0. Wildcard shipped exactly that
+            // once (per-skill median 0.0, per-pawn spread NARROWER than Faithful's, envelope green
+            // throughout), and the trap then recurred through the CEILING during the
+            // dispersion-aware retune. Counting real pawns is the only instrument that catches it.
+            //
+            // Which is also why this lives here and not in the profile editor: an analytic pin-rate
+            // readout would be a fifth model site, blind for the same reason the other four are, and
+            // with no Python mirror to cross-check it (the position DispersionModel.OutcomeDensity is
+            // already in). See the "What the model cannot see" limits in HANDOVER.md.
+            //
+            // CAPABLE SKILLS ONLY, and that is load-bearing rather than tidiness. GetLevel returns 0
+            // for a TotallyDisabled skill, and backstory-driven incapability costs ~1.6 of 12 skills
+            // per pawn. Counting those would put a permanent ~13% floor reading on every profile
+            // including Faithful -- a warning that fires identically on a healthy band and a broken
+            // one, which is no warning at all.
+            //
+            // NO INVENTED THRESHOLD. The shares are reported as data. The alarm fires on the
+            // criterion this project already committed to -- "a median of 0 means the band is under
+            // the floor" -- rather than on a percentage picked to make the output read tidily. If a
+            // healthy-baseline pin rate is ever measured, it belongs here as a second criterion, not
+            // as a replacement for this one.
+            sb.AppendLine("  CLAMP CENSORING against Shift's Clamp(0, 20), capable skills only:");
+            foreach (var kv in byCount)
+            {
+                if (!censorByLabel.TryGetValue(kv.Key, out CensorTally t) || t.capableLevels.Count == 0)
+                {
+                    sb.AppendLine($"    {kv.Key,-14} (no capable skills sampled)");
+                    continue;
+                }
+
+                int n = t.capableLevels.Count;
+                var sortedLevels = t.capableLevels.OrderBy(x => x).ToList();
+                float median = Quantile(sortedLevels, 0.50f);
+                sb.AppendLine($"    {kv.Key,-14} at 0: {t.atFloor,6}/{n} ({100f * t.atFloor / n,5:F1}%)"
+                    + $"   at 20: {t.atCeiling,6}/{n} ({100f * t.atCeiling / n,5:F1}%)"
+                    + $"   median {median,4:F1}");
+
+                if (median <= 0f)
+                {
+                    sb.AppendLine($"      ^^ CENSORED: {kv.Key}'s skill band sits under the floor. "
+                        + "Over half its capable skills pin at 0, so the clamp has converted this "
+                        + "profile's spread into a spike -- it will deliver LESS pawn-to-pawn "
+                        + "variation than Faithful while every offline figure says otherwise. Raise "
+                        + "skillShiftMin, and raise skillShiftMax with it: narrowing the band alone "
+                        + "measured WORSE, from both walls.");
+                }
+                else if (median >= 20f)
+                {
+                    sb.AppendLine($"      ^^ CENSORED AT THE CEILING: over half of {kv.Key}'s capable "
+                        + "skills pin at 20. The same spike against the opposite wall; lower "
+                        + "skillShiftMax, and lower skillShiftMin with it.");
+                }
+            }
             sb.AppendLine();
 
             // The skill axis stays REPORTED, not asserted. The 'per-skill level' sd in the table
@@ -1385,6 +1467,16 @@ namespace PawnVarianceMod
             }
 
             pawn.Discard(true);
+        }
+
+        // One resolved profile's tally of skills against Shift's Clamp(0, 20). `capableLevels`
+        // carries only skills the pawn can actually use, so its Count is the denominator for both
+        // counters -- see the CLAMP CENSORING block for why disabled skills must not be counted.
+        private sealed class CensorTally
+        {
+            public int atFloor;
+            public int atCeiling;
+            public readonly List<float> capableLevels = new List<float>();
         }
 
         private static string Describe(string label, List<float> xs)

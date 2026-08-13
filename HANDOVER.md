@@ -108,7 +108,7 @@ here have moved to "Tuning constraints" below — they govern every future retun
 | Item | Why it is carried |
 |---|---|
 | **Milians are unreachable by race override, and that is now a closed limitation rather than an open question.** `Milian_Race` does not appear in the Add menu: the only `PawnKindDef` naming it, `Milian_Base`, is `Abstract="True"` with zero concrete children, so nothing spawns it through a kind def and `SelectableRaces()`' traversal drops it. Measured across all 1376 installed workshop mods, not just Milira's own — no mod supplies a concrete child, in either the mod's `1.5/` or `1.6/` defs. | Milians **are** real humanlike pawns (`Race_Milian.xml`: `intelligence: Humanlike`), produced in **code** — the Milira assembly carries `Milian_Race` as a string literal alongside `CompHumanizeMilian`, `JobDriver_HumanizeMilian` and `CompMilianGestateInfo`, i.e. gestated/humanized from the mechanoid Milians rather than rolled from a kind def. So the traversal would need a second source to reach them, and that source is **all humanlike `ThingDef`s** — which would also re-admit every abstract and unreferenced race def the current filter deliberately drops. **Not worth it for one mod's edge case; the filter stays as specified.** Not verified: whether a humanized Milian routes through `GenerateNewPawnInternal` at all, i.e. whether the mod even applies variance to them. |
-| **Init-vs-`Scribe` default mismatch on skill and trait fields** — on `VarianceProfileValues`, `skillShift` initialises −4/6 against `Scribe`'s −3/3, `traitCount` 1/6 against 2/3, and `skillSpread` `0.857321f` (`Distinct`'s value) against `0.489898f` (`Faithful`'s). `averageQuality`, `passionSpread` and `passionMajorBias` do agree. | Unreachable either way — every creation path passes explicit values, and the parameterless ctor is reached only by `Scribe`, whose `ExposeData` overwrites all of it on load. The in-file comment used to claim all four defaults matched `Faithful`; **that claim is now corrected in place**, field by field, with an explicit "do not chase the numbers" note. Nothing further to do here. |
+| **Init-vs-`Scribe` default mismatch on skill and trait fields** — on `VarianceProfileValues`, `skillShift` initialises −4/6 against `Scribe`'s −3/3, `traitCount` 1/6 against 2/3, and `skillSpread` `0.857321f` (`Distinct`'s value) against `0.50f` (`Faithful`'s). `averageQuality`, `passionSpread` and `passionMajorBias` do agree. | Unreachable either way — every creation path passes explicit values, and the parameterless ctor is reached only by `Scribe`, whose `ExposeData` overwrites all of it on load. The in-file comment used to claim all four defaults matched `Faithful`; **that claim is now corrected in place**, field by field, with an explicit "do not chase the numbers" note. Nothing further to do here. |
 | **`CopyFrom` does not validate imported profile ids** (T5-M1, Minor) — **resolved in effect, cosmetic remainder only.** | The harmful half is gone. P-14 deleted the `customProfiles[0]` fallback, so a dangling id no longer generates pawns from an arbitrary unrelated profile under the requested profile's name; `Resolve` now returns pristine `Faithful` values and emits a `Log.WarningOnce` naming the id. An unvalidated id can still *arrive* through import, which is all that is left. P-14 says so explicitly: *"T5-M1 should be reclassified as resolved-in-effect."* |
 | **Single-slot cache in `CalculateBestOfNScore`** (Minor) — **no longer thrashes anywhere live.** | Both eviction paths are already handled: `FaithfulBestOfNBaseline` has its own separate cache slot, and the verify gate precomputes the whole Faithful baseline array up front (`DebugActions.cs`, above the profile loop) specifically so it does not alternate against the slot. The one remaining caller, `ProfileEditorTab`, makes a single call per frame and always hits. Kept in the table only so nobody "fixes" a problem that has already been designed around. |
 | Five further Minor findings | In `.superpowers/sdd/progress.md`, all marked `CARRIED`: T1-M1, T1-M2, T1-M3, T2-M1, T2-M2. **T2-M1 is the one worth knowing** — a real 2-vs-2 mirror split in the passion-*disabled* fallback, inert today only because `VanillaPassionBudget` (5.0) sits far below capacity (~12 pips), so the missing cap is a no-op. It agrees by luck of the current constants, not because the formulas match. |
@@ -507,14 +507,14 @@ Tightest envelope margins:
 
 Within-pawn dispersion (REPORTED, NOT ENFORCED -- invisible to every % above):
   profile     skillSpread   per-skill sd  vs Faithful passionSpread   budget sd
-  Faithful           0.49        0.49 lv        1.00x          1.00     1.00 pips
-  Distinct           0.86        0.86 lv        1.75x          1.40     1.40 pips
-  Wildcard           2.08        2.08 lv        4.25x          2.60     2.60 pips
-  Desperate          0.61        0.61 lv        1.25x          1.00     1.00 pips
-  Elite              0.54        0.54 lv        1.10x          1.00     1.00 pips
-  Sovereign          0.59        0.59 lv        1.20x          1.00     1.00 pips
-  Specialist         0.61        0.61 lv        1.25x          1.00     1.00 pips
-  Scavenger          0.61        0.61 lv        1.25x          1.00     1.00 pips
+  Faithful           0.50        0.50 lv        1.00x          1.00     1.00 pips
+  Distinct           0.86        0.86 lv        1.71x          1.40     1.40 pips
+  Wildcard           2.08        2.08 lv        4.16x          2.60     2.60 pips
+  Desperate          0.61        0.61 lv        1.22x          1.00     1.00 pips
+  Elite              0.54        0.54 lv        1.08x          1.00     1.00 pips
+  Sovereign          0.59        0.59 lv        1.18x          1.00     1.00 pips
+  Specialist         0.61        0.61 lv        1.22x          1.00     1.00 pips
+  Scavenger          0.61        0.61 lv        1.22x          1.00     1.00 pips
   A profile can be flat in the table above and 3x wider here. Wildcard is exactly
   that case: its 2026-08-04 retune narrowed skillShift (the mean band), not skillSpread.
 ```
@@ -977,6 +977,47 @@ arriving through the band instead of through a new clamp.
 > equally blind — it reports `2.08 lv` for `Wildcard`, four times `Faithful`, which is true of the
 > *intended* noise and false of the delivered population once the band censors it.
 
+### The dump action now MEASURES the censoring — read this before eyeballing the median
+
+`Roll pawns and dump distribution` prints a `CLAMP CENSORING` block, one row per **resolved**
+profile (same grouping as the `GENERATOR vs MODEL` blocks, so a mixed sample gives one reading per
+profile instead of a pooled figure that averages a censored band into a healthy one):
+
+```
+  CLAMP CENSORING against Shift's Clamp(0, 20), capable skills only:
+    Faithful       at 0:   1999/10938 ( 18.3%)   at 20:      1/10938 (  0.0%)   median  3.0
+```
+
+**Baselines, measured at 1000 pawns each. A high pin rate is NOT by itself a defect:**
+
+| profile | at 0 | at 20 | per-skill median |
+|---|---|---|---|
+| `Faithful` (the reference) | **18.3%** | 0.0% (1 skill) | 3.0 |
+| `Custom 1` | 16.7% | 0.0% | 3.0 |
+| `Wildcard` (shipped band) | **33.3%** | 0.0% (3 skills) | 2.0 |
+
+**`Faithful` itself pins 18.3%, and the shipped `Wildcard` pins a third of all capable skills.**
+Both are healthy. That is precisely why the alarm fires on **median 0**, the criterion rule 3 below
+already commits to, and not on a percentage — any threshold low enough to look alarming would fire
+on the reference preset. The percentages are reported as data for comparison, not as a gate.
+
+Two properties of the readout that are load-bearing:
+
+- **Capable skills only.** `SkillRecord.GetLevel` returns `0` for a `TotallyDisabled` skill and
+  backstory incapability costs ~1.0–1.2 of 12 skills per pawn, so counting those would put a
+  permanent ~13% floor on *every* profile — a warning that reads identically on a healthy band and a
+  broken one. The denominator is the capable count and should track the run's own
+  `skills disabled/pawn` line (`12000 − 10938 = 1062` against `mean 1.06`).
+- **Raw learned level, aptitudes excluded** — that is exactly what `Shift` clamps, since
+  `record.Level` writes `levelInt` while Biotech aptitude is added afterwards by the getter. So the
+  figure reports *this mod's* censoring, not a gene's.
+
+**Why this lives in the debug action and not in the profile editor.** An analytic pin-rate readout
+would be a fifth model site, blind for the same reason the other four are — see the CAUTION above:
+no model here reads a rolled, clamped pawn. It would also have no Python mirror, putting it in
+`DispersionModel.OutcomeDensity`'s position (nothing cross-checks it). **Counting real pawns is the
+only instrument that can see censoring at all.**
+
 **Rules that follow — apply these before moving any `skillShiftMin`:**
 
 1. **Keep `skillShiftMin` above roughly `−4`** unless censoring is the deliberate goal. Vanilla's
@@ -1296,6 +1337,13 @@ Normal-tier xenotypes.
 If someone "simplifies" this to `DefDatabase<ThingDef>.AllDefs.Where(d => d.race != null)`, the menu
 floods.
 
+**Only the race menu is filtered this way.** The faction and xenotype menus are straight
+`DefDatabase<T>.AllDefs` sweeps (`PawnVarianceSettings.cs:1167-1171`) — sorted and label-disambiguated,
+but not narrowed. They are still much shorter than a count of the defs installed on disk, because
+`DefDatabase` holds only the defs of **mods active in the current run** and never abstract ones. That
+is expected and was confirmed in game under the 1376-mod modpack (pre-publish item 6); it is not a
+filter and there is nothing to fix.
+
 **`CreepJoiner` (Anomaly) reaches the menu and stays.** The filter rule is "humanlike races something
 spawns" and it qualifies; excluding it would mean a hardcoded defName special case that every future
 DLC would need extending. It labels as "Human", which is why the duplicate-label grouping renders
@@ -1335,10 +1383,45 @@ Drawing lives in `Source/ProfileEditorTab.cs` (`partial class PawnVarianceSettin
 - **Row 2 saves and restores three pieces of global draw state** — `Text.Font`, `GUI.color`,
   `Text.WordWrap`. `WordWrap = false` is what structurally guarantees the fixed 20px row stays one
   line and cannot overlap the quality slider. Keep all three restores.
-- **Scroll heights are floors, not caps.** `PawnVarianceSettings.cs:680` is
-  `Math.Max(overridesViewHeight, 1000f)` and `:722` recomputes `listing.CurHeight + 40f` each frame,
-  so extra sections expand the view rather than clipping. The editor body carries a `580f` minimum so
-  the scrollbar is always active and lower controls stay reachable.
+- **NEVER begin a `Listing_Standard` with the rect you passed to `BeginScrollView`.** This is the
+  single most expensive UI trap in the mod and it is not obvious from reading the code, because the
+  broken form is the tidier-looking one.
+
+  `Listing_Standard` **column-wraps** when its content passes the height it was begun with: it does
+  not overflow downward, it starts a new column to the **right**. Passing `viewRect` to both
+  `BeginScrollView` and `listing.Begin` therefore fails twice over, and the second failure is what
+  makes it permanent:
+
+  1. The overflow is drawn one column width outside the viewport — *beside* the scroll range, not
+     below it — so no amount of scrolling reaches it.
+  2. After a wrap, `listing.CurHeight` returns only the **last column's** height. Feed that back into
+     `viewHeight` and the next frame is sized just as short, wraps again, and re-measures the same
+     wrong number. **It never recovers** — not by adding rows, not by restoring defaults. Only a
+     restart clears it, and then only because the field's initialiser happens to exceed the content.
+
+  Measured on the Overrides tab with the shipped default overrides (10 faction + 10 xenotype): real
+  content **1227px**, `viewRect` pinned at the old `1000f` floor, Race Overrides displaced to
+  **x=837, y=92** in a second column, and `overridesViewHeight` latched at **251** (the last
+  column's 211 + 40) across every subsequent frame.
+
+  **The shape that is correct:** size the scroll content from the measured height, and begin the
+  listing with a rect tall enough that it can never wrap
+  (`PawnVarianceSettings.UnboundedListingHeight`, `100000f`, beside the vertical-rhythm constants).
+  RimWorld itself begins a 9999-tall group in
+  `Dialog_ModSettings`, so an oversized group rect is an accepted idiom — `Widgets.BeginGroup` only
+  clips, and the enclosing scroll view is what bounds what the player sees. `DrawOverridesTab` is the
+  worked example; copy it rather than re-deriving.
+
+- **Scroll heights are floors, not caps — and the floor must be the viewport, never a constant.**
+  Each tab recomputes `listing.CurHeight + 40f` every frame, so extra sections expand the view rather
+  than clipping. **A hardcoded floor has to be guessed, and a wrong guess is what puts the listing
+  into the wrapping regime above**: the Overrides tab's `1000f` sat *below* its real 1227px content.
+  `Math.Max(measured, outRect.height)` is correct by construction — content shorter than the viewport
+  simply does not scroll.
+  > **The General and Profile Editor tabs still pass `viewRect` to `listing.Begin`.** They do not
+  > trip this today only because their content (545 and 510) stays under their floors (600 and 580).
+  > They are one added control away from the identical latch. Deliberately left alone; fix them the
+  > moment either tab grows.
 - **Best-of-25, not Best-of-50, and no `N` slider** — it is a lens, not a setting. At N=50 `Wildcard`
   displays near the envelope limit, and a UI that advertises how close a preset sits to the limit
   invites players to treat the limit as a target.
@@ -1639,6 +1722,8 @@ dotnet build Source/PawnVarianceMod.csproj
 $dep = "C:/Program Files (x86)/Steam/steamapps/common/RimWorld/Mods/PawnVarianceMod"
 Copy-Item Assemblies/PawnVarianceMod.dll, Assemblies/PawnVarianceMod.pdb "$dep/Assemblies/" -Force
 Copy-Item About/About.xml, About/LoadFolders.xml, About/Preview.png, About/ModIcon.png "$dep/About/" -Force
+New-Item -ItemType Directory -Force "$dep/Languages/English/Keyed" | Out-Null
+Copy-Item Languages/English/Keyed/VariedPawns.xml "$dep/Languages/English/Keyed/" -Force
 ```
 
 - **Guard**: check for a running RimWorld before copying, or the DLL copy fails on a file lock.
@@ -1648,6 +1733,22 @@ Copy-Item About/About.xml, About/LoadFolders.xml, About/Preview.png, About/ModIc
   no matter how often they were regenerated. `tools/build-release.ps1` always packaged `About/`
   correctly, so only the dev deploy was ever affected. **`About/` changes need a full game
   restart** — there is no reload path for mod metadata.
+- **Copy `Languages/` too, and this is the same bug a second time.** Item 9 added a fourth shipped
+  directory in `dcf71a1` and this block was not updated, so **every dev deploy between then and
+  2026-08-13 ran without any translation file at all.** The symptom is not an error: RimWorld
+  renders the raw key text, so every tab shows `VP_...` where a label should be, and the two startup
+  verifiers (`VerifyPresetKeys`/`VerifyPriorityKeys`) fire `Log.Error` for keys that are in fact
+  perfectly fine in the repo. **Anyone checking translated strings against the dev copy is testing a
+  build that has no translations** — which would read as "the extraction is broken" when nothing is.
+  `tools/build-release.ps1` was never affected: it stages from `Get-ExpectedShipMap`, which has
+  always included `Languages/`, and `-Check` is what caught the folder missing from staging in the
+  first place (item 17).
+
+  > **The pattern is now twice-confirmed and worth generalising: this block is a hand-maintained
+  > duplicate of the ship list, and it goes stale silently every time the ship list grows.** The
+  > shipped set is 7 files across 4 directories; if a fifth is ever added, it must be added here in
+  > the same commit. The durable fix is to deploy via `Get-ExpectedShipMap` rather than by hand —
+  > not done, but it is the reason this note keeps needing to be written.
 
 ---
 
@@ -1705,16 +1806,41 @@ rather than being deleted,** because commits and notes elsewhere refer to items 
 findings get the next free number wherever they belong topically — 17 sits with the blocking items,
 not at the end.
 
-Closed so far: 1, 3, 4, 11, 15, 16, 17, 18 (done), and 2, 14 (decided, moved to *Settled and not to
-be relitigated*). **Item 9's code work is done and only its in-game pass is outstanding**; **item 13
-is done bar one marked `TODO` line** that needs the Workshop URL. Still fully open, and all needing
-the game or a published item: 5, 6, 7, 8, 10, 12.
+Closed so far: 1, 3, 4, 5, 6, 7, 8, 11, 15, 16, 17, 18, 19, 20 (done), and 2, 14 (decided, moved to
+*Settled and not to be relitigated*). **Item 9 is done except for a cosmetic wrap/clip pass**;
+**item 13 is done bar one marked `TODO` line** that needs the Workshop URL. Still fully open:
+**12** (needs the modpack — 5 and 6 have now been run under it, so it is the only reason left to
+load it) and **10** (needs the item published).
+
+**One verification is outstanding and is written up under item 20**: nothing yet distinguishes a
+translated preset label from its `devName` fallback, because in English they are the same string.
+It needs a game launch with a discriminating language file.
 
 **Every item closed here that was not purely mechanical found a defect the existing gates could not
 see:** item 1's audit found staging shipping a build older than the code (→ 17), item 9 found the
-verification harness matching presets on a translatable label, and item 4 found a false claim in the
-listing. Items 17 and 18 exist because of items 1 and 9. Treat the remaining open items as likely to
-behave the same way.
+verification harness matching presets on a translatable label and then, on its in-game pass, found
+the harness crying wolf on every run (→ 19), and four `Log.Error`s in every player's log that the
+in-game harness structurally cannot see (→ 20), and item 4 found a false claim in the listing. Items
+17, 18, 19 and 20 exist because of items 1 and 9. **The rate is six defects from seven
+non-mechanical items, and item 20 was found only because the owner read `Player.log` after this
+document already called the work complete.** Treat the remaining open items as likely to behave the
+same way — and see item 20 for why "the in-game gate is green" is not the same claim as "the game
+logged nothing".
+
+> **Items 5 and 6 are the first non-mechanical closures to find nothing, and that is worth stating
+> rather than quietly folding into the rate.** Both were run under the 1376-mod modpack, the
+> environment furthest from anything this project had tested in, and both came back clean. Item 6
+> produced one *clarification* — the menu is shorter than the on-disk faction count, correctly —
+> but no defect. The pattern above is a warning about where to look, not a law that every check
+> must yield something.
+
+> **Both gates have now been run against the actual upload artifact, not a dev build.** The zip's
+> DLL is a **Release** build (129,536 bytes) and every previously recorded in-game result came from
+> the **Debug** dev copy (150,016 bytes) — a different binary that nothing had ever gated. Against
+> the zip build: `Verify Best-of-N` **32/32 PASS**, worst raw 0.01%, worst shown 0.01pp, matching
+> the recorded figures exactly; `Roll pawns and dump distribution` at 1000 pawns
+> `GENERATOR vs MODEL [Faithful]` **OK**. Re-run both against the zip, not the dev copy, before
+> uploading.
 
 ### Blocking — do before the item goes public
 
@@ -1817,36 +1943,87 @@ behave the same way.
 
 ### Compatibility — the modpack pass
 
-5. **Run the mod inside the Progression Modpack** (the large collection installed on this machine —
-   1376 workshop items) and look for load errors, def conflicts and Harmony collisions with other
-   pawn-generation mods. **The mod has only ever been run against a modest active list.** The
-   generation postfix is the collision surface: any other mod patching `PawnGenerator.GeneratePawn`
-   or `GenerateSkills` can silently win, and the symptom is pawns that look vanilla rather than an
-   error. `Roll pawns and dump distribution` is the instrument — if the shipped presets' measured
-   spread collapses toward `Faithful` under the modpack, something upstream is overwriting this
+5. ~~**Run the mod inside the Progression Modpack.**~~ **DONE — clean.** The mod was run under the
+   large collection installed on this machine (1376 workshop items), which is the first time it has
+   been exercised against anything but a modest active list. **No load errors, no def conflicts, and
+   no sign of a Harmony collision.**
+
+   The collision surface is the generation postfix: any other mod patching
+   `PawnGenerator.GeneratePawn` or `GenerateSkills` can silently win, and **the symptom is pawns
+   that look vanilla rather than an error** — which is why the instrument is
+   `Roll pawns and dump distribution` rather than the log. The shipped presets' measured spread did
+   **not** collapse toward `Faithful` under the modpack, so nothing upstream is overwriting this
    mod's work.
-6. **Click the Add Faction Override button under that modpack and watch what the menu does.** The
-   menu was sorted and de-duplicated on 2026-08-12 *without ever being opened in game* — a
-   `FloatMenu` does not survive a synthetic click, so the bridge cannot verify it and the change
-   rests on the tab drawing without exceptions. Open it by hand and check three things: that it is
-   alphabetical, that colliding labels carry their `defName`, and that it is usable at all at
-   modpack scale. Measured on this machine's library there are ~499 concrete `FactionDef`s on disk
-   (534 tags, 35 abstract). `Verse.FloatMenu` columns and scrolls past `MaxScreenHeightPercent`
-   (0.9), so it should not clip — **that is a reading of the shipped assembly's metadata, not
-   something anyone has watched happen.** If it is unusable, the fix is a searchable `Window`,
-   which would also be bridge-drivable, unlike what is there now.
+
+   **Re-run this if the postfix or its patch target ever changes**, and read the dump, not the log:
+   a mod that wins the patch produces a clean startup and vanilla-looking colonists, which is
+   exactly the shape of defect every gate in this document is blind to.
+6. ~~**Click the Add Faction Override button under that modpack and watch what the menu does.**~~
+   **DONE — opened by hand at modpack scale. It is usable and it does not clip**, which is what the
+   item existed to establish: the sort and de-duplication landed on 2026-08-12 *without the menu
+   ever being opened in game* — a `FloatMenu` does not survive a synthetic click, so the bridge
+   cannot verify it and the change rested on the tab drawing without exceptions. `Verse.FloatMenu`
+   columning and scrolling past `MaxScreenHeightPercent` (0.9) has now been watched happening
+   rather than read out of the shipped assembly's metadata. The searchable-`Window` fallback this
+   item held in reserve is **not needed**.
+
+   **The one surprise, and it is correct behaviour: far fewer factions appear in the menu than the
+   ~499 figure above implies.** That number was counted **on disk**, across all 1376 installed
+   workshop items. The menu is built from `DefDatabase<FactionDef>.AllDefs`
+   (`PawnVarianceSettings.cs:1168`), and `DefDatabase` holds only the defs of **mods active in the
+   current run**, never the abstract ones (35 of the 534 tags). An installed-but-inactive mod's
+   factions are therefore absent by construction. **Expect the on-disk count and the menu length to
+   disagree, and do not "fix" it** — an override keyed to a def that is not loaded could not
+   resolve against anything anyway, and `LabelForKey` already keeps such a row rendering and
+   removable if the mod is later disabled.
+
+   > Note the faction menu applies **no pawn-spawning filter** — it is a straight `DefDatabase`
+   > sweep. The "humanlike races something spawns" traversal is the **race** menu's, and only the
+   > race menu's; see *The Add-menu filter has two halves* above. The two menus narrow their lists
+   > for different reasons and should not be reasoned about together.
 
 ### Worth checking, lower stakes
 
-7. **Install it the way a player does, from the zip, with nothing else but Harmony.** Every run this
-   project has done used a dev deploy into an existing modded install with a settings file already
-   present. The first-run path — no config file, `hasInitializedDefaultOverrides` false, defaults
-   being written for the first time — has never been exercised from a clean state.
-8. **Verify the two removal claims, because the listing makes them in bold.** "Safe to add mid-save"
-   and "removing it mid-save is clean, the mod writes nothing into your save". The second is the
-   stronger claim and the easier one to break later: add to a save, remove, reload, and confirm no
-   orphaned-data errors. The architecture says this holds (see "the mod writes nothing to the
-   save"); nobody has done it end to end on a shipping build.
+7. ~~**Install it the way a player does, from the zip, with nothing else but Harmony.**~~ **DONE.**
+   Ran from `Release\VariedPawns-1.0.0.zip` extracted straight into `Mods\`, with the dev copy
+   removed, `ModsConfig.xml` cut to Harmony + core + the five DLCs, and
+   `Config\Mod_PawnVarianceMod_PawnVarianceMod.xml` **deleted** so the first-run path actually ran.
+   Mod loads as `Varied Pawns` from the zip folder. **`rimbridge/list_logs` reported a clean
+   startup and that reading was WRONG — see item 20.** Read `Player.log`, which showed four
+   `No active language!` errors this check should have caught. Defaults
+   seeded correctly with no config present: `activeProfileId preset_faithful`,
+   `hostileProfileId preset_distinct`, `hasInitializedDefaultOverrides true`, 10 faction and 10
+   xenotype overrides, 0 race overrides (correct — the race list ships empty on purpose), and
+   `applyVarianceToChildren false`, so **Rule 4's default holds on a clean install.**
+
+   **Deviation, stated rather than hidden:** `brrainz.rimbridgeserver` was left active, because it
+   is the only way to observe anything. It patches nothing in pawn generation. Everything else was
+   absent.
+
+   **Finding, and it is a non-issue on purpose:** the settings file is **never written** on a
+   first run — not on settings-window close, not on quit. It does not matter, and the reason is
+   worth keeping so nobody "fixes" it: `PopulateDefaultOverrides` early-returns on
+   `hasInitializedDefaultOverrides` and otherwise re-seeds the same deterministic default set every
+   launch (`PawnVarianceSettings.cs:173-181`), so an absent file produces byte-identical behaviour
+   to a written one. RimWorld writes the file the first time the player closes the settings window
+   through its own path. Not chased further: the bridge's `close_window` and `games_stop` both
+   bypass RimWorld's normal `PreClose`/quit write, so this is an artifact of how the check was
+   driven, not a mod defect — every other mod on this machine has its `Mod_*.xml`.
+8. ~~**Verify the two removal claims, because the listing makes them in bold.**~~ **DONE, both
+   directions, end to end on the shipping zip build.**
+
+   **"The mod writes nothing into your save" — verified structurally, not just behaviourally.**
+   A colony was generated with the mod active, saved, and the 5.9 MB `.rws` searched: **zero**
+   occurrences of `PawnVarianceMod`, `VariedPawns` or `pawnvariance` anywhere, and exactly one
+   `kalas` — inside vanilla's own `<meta><modIds>` load-order manifest, which every active mod
+   appears in. Nothing in the save body belongs to this mod.
+
+   **Remove mid-save:** with `kalas.pawnvariance` taken out of `ModsConfig.xml`, that save loaded to
+   a playable map with **zero errors**. RimWorld reported the missing mod in its own compatibility
+   check, which is vanilla behaviour for any removed mod, not orphaned data.
+
+   **Add mid-save:** the mod-free colony was re-saved (recording 8 mods, no `kalas.pawnvariance`),
+   the mod re-enabled, and that save loaded to a playable map with **zero errors**.
 9. **Translations — DECIDED, extraction PART DONE.** The decision is *keys, not hardcoded
    English*: 1.0 ships with UI strings in `Languages/English/Keyed/VariedPawns.xml`, so a
    translator can contribute without a refactor. Doing it before release rather than after is the
@@ -1891,8 +2068,127 @@ behave the same way.
    side. It cannot see keys built by concatenation, so the derived `VP_Preset_*` keys are asserted
    at startup by `VarianceProfiles.VerifyPresetKeys()` instead.
 
-   **Still needs an in-game pass** when the extraction is finished: open every tab and confirm no
-   raw `VP_` string renders. Neither the build nor the checker can see that.
+   **The in-game pass is DONE at the mechanism level, and it found a defect — item 19.** What was
+   established against the shipping zip build, and how, because "open every tab and look" turned out
+   to be the weaker half of this check:
+
+   - **Every player-facing key is now accounted for by something that runs.** There are exactly
+     **three** `.Translate()` call sites in the mod whose key is not a string literal —
+     `("VP_Priority_" + p)` (`PawnVarianceSettings.cs:28`) and `LabelKey`/`DescriptionKey`
+     (`VarianceProfile.cs:246-247`). Both families are asserted by `VerifyPriorityKeys()` and
+     `VerifyPresetKeys()`, which run from `PawnVarianceStartupChecks` and `Log.Error` on a miss.
+     Both passed, so `VariedPawns.xml` parsed (the double-hyphen trap would have taken every key
+     down at once) and `Languages\` shipped. **Confirm that in `Player.log`, not through the
+     bridge.** This pass originally asserted it from an empty `rimbridge/list_logs`, which is blind
+     to the startup window and was concealing four real errors — see item 20. Everything else is a
+     literal, and
+     `tools\check-translation-keys.ps1` covers those both ways: 117 used, 138 defined, none missing,
+     empty or duplicated.
+   - **What that leaves is genuinely only cosmetic:** whether any translated string *wraps badly or
+     clips* in RimWorld's narrow widgets. That needs eyes on the rendered tabs and could not be done
+     in this pass — another fullscreen game held the OS foreground, and RimWorld only renders while
+     focused, so `take_screenshot` returns a silently stale frame. **This is the last remaining
+     piece of item 9.** Note that `get_ui_layout` and `click_ui_target` *do* work unfocused; it is
+     only screenshots and hover tooltips that do not.
+
+19. **DONE — the raw-key trap recurred one layer up, in a SNAPSHOT rather than a static
+    initializer. Found by item 9's in-game pass, which is the only thing that could have found it.**
+
+    **The symptom.** `Roll pawns and dump distribution` printed
+    `ACTUALLY RESOLVED TO: VP_Preset_Faithful x1000` — the raw key — while the line directly above
+    it printed `configured active profile: Faithful` correctly, in the same log entry.
+
+    **The mechanism.** `profileLabel` is a snapshot taken by `RefreshResolved()`. Two of its callers
+    run from `GetSettings<>()` inside the `Mod` constructor — the parameterless ctor
+    (`PawnVarianceSettings.cs:161`) and `ExposeData`'s load branch (`:544`) — which is **before
+    `LanguageDatabase` is populated**, so `LabelFor` → `preset.label` → `.Translate()` returned the
+    key and baked it in permanently. Making the presets' `label`/`description` lazy properties fixed
+    the static-initializer version of this trap; it did not fix a value copied out of them too early.
+
+    **Why it mattered despite no player ever seeing it.** Every consumer of `profileLabel` is a
+    diagnostic — `DebugActions`, `TraitTrace`, the passion trace — so there is no player-facing
+    impact, and that is *not* the reason to fix it. `DumpDistribution` compares its resolved label
+    against `LabelFor(activeProfileId)`, computed live and therefore translated. Raw key vs
+    translated label can never be equal, so the action printed
+    `^^ NOT the configured active profile. An override ... outranked it` on **every run**, including
+    runs where nothing overrode anything. That warning exists because a real override once went
+    unnoticed for two consecutive 1000-pawn runs (see the comment above `resolved` in
+    `DumpDistribution`). **An always-on false alarm trains the reader to ignore precisely the
+    warning it was added to raise** — it had turned the project's only generator-vs-reality
+    instrument into one that cries wolf.
+
+    Custom profiles were never affected: `LabelFor` returns `custom.name` for them, which is not a
+    key. **That is why the runs recorded in this document look clean** — they resolved to
+    `Custom 1`. Presets were the broken case, and no preset-resolved dump had been run since the
+    translation extraction landed.
+
+    **The fix:** `RefreshResolvedLabels()` re-snapshots the two labels from
+    `PawnVarianceStartupChecks`, which is `[StaticConstructorOnStartup]` and therefore runs after
+    language data is loaded — the same correctly-timed hook the two key verifiers already use, and
+    whose comment states this exact invariant. Only the labels are re-taken; the resolved *values*
+    are untouched.
+
+    **Verified:** the dump now reads `ACTUALLY RESOLVED TO: Faithful x1000 (100.0%)` with no false
+    override warning, `GENERATOR vs MODEL [Faithful]` OK (delta +0.057 against tolerance 0.156), and
+    `Verify Best-of-N` re-run afterwards is **32/32 PASS with output bit-identical to the pre-fix
+    run**, confirming the change touches nothing in the scoring path.
+
+    **The reusable lesson:** the translation pass's own documented rule — *never call `.Translate()`
+    in a static field initializer* — is too narrow. The real rule is **never store the result of
+    `.Translate()` in a field that outlives the load sequence.** Grep for assignments of a
+    translated value, not just for static initializers. **Item 20 then showed even that is not the
+    whole rule** — the call itself is a defect at that point in the load, regardless of where the
+    result goes.
+
+20. **DONE — four `Log.Error`s in every player's log on every startup, and the in-game harness
+    could not see them. Found by the owner reading `Player.log` after item 19 was called complete.**
+
+    **The defect.** `PawnVarianceSettings`' ctor (`:161`) and `ExposeData` (`:544`) both run from
+    `GetSettings<>()` in the `Mod` constructor, and both reach `LabelFor` → `VarianceProfile.label`
+    → `LabelKey.Translate()`. At that point **no language is loaded at all**, and RimWorld's
+    `Translator.TryTranslate` does not fail quietly — it calls
+    `Log.Error("No active language! Cannot translate from key ...")`. Result: four red errors
+    (`VP_Preset_Faithful` and `VP_Preset_Distinct`, once from the ctor and once from `ExposeData`)
+    in `Player.log` on **every single launch**, for every player.
+
+    **Item 19's fix did not address this and was never going to.** Re-snapshotting the label later
+    fixes the *stale value*; it does not stop the *early call*. Both defects came from the same
+    lazy-property assumption, and fixing the visible half first is what made the other half look
+    handled. Verified the hard way: the errors were still present, all eight lines, in the
+    `Player.log` written by the item-19 build.
+
+    **The fix.** `VarianceProfile.label` and `.description` now guard on
+    `LanguageDatabase.activeLanguage == null` and return `devName` / `""` in that state, so nothing
+    calls `.Translate()` before a language exists. `devName` is the right stand-in rather than a
+    placeholder: it *is* the preset's untranslated English name. `RefreshResolvedLabels()` (item 19)
+    then re-snapshots the real translated label at `[StaticConstructorOnStartup]`. The two fixes are
+    complementary — keep both. **Verified: `Player.log` now contains zero `No active language`
+    lines and zero `PawnVariance` entries across a full 18-mod startup.**
+
+    > **A test that cannot fail is not a test, and this one cannot.** `devName` and the English
+    > label are the *same string* ("Faithful"), so **no English-language run can distinguish "the
+    > guard fell back to devName" from "the translation resolved".** Confirming that
+    > `RefreshResolvedLabels()` actually restores the translated value needs a discriminating
+    > instrument: a second `Languages\<lang>\Keyed\` file with deliberately different text, or
+    > temporarily editing an English value so it differs from its `devName`. **This is not yet
+    > done.** The failure mode it would catch is silent and benign-looking for English players and
+    > wrong for everyone else, which is exactly the audience the translation work exists for.
+
+    **The instrument failure is the more important half, because it will recur.**
+    `rimbridge/list_logs` captures only from RimBridge's own `logs.initialize`, which its
+    `STARTUP_TIMING` puts at ~14 s into launch — **after** `LoadedModManager.CreateModClasses()`.
+    Every error this mod emits during settings load is therefore **structurally invisible** to it,
+    and the tool reports an empty list rather than an unknown one. Item 7 and item 9 were both
+    signed off on that empty list.
+
+    > **Rule: for anything that happens during mod construction or settings load, read
+    > `%LOCALAPPDATA%Low\Ludeon Studios\RimWorld by Ludeon Studios\Player.log` directly. Never
+    > conclude "clean startup" from `rimbridge/list_logs`.** The bridge is fine for anything after
+    > the main menu — debug actions, pawn dumps, the verify gate — which is most of what this
+    > project uses it for, and is why the gap went unnoticed. It is the *startup* window that is
+    > unobserved. This is the same shape as every other defect in this document: an instrument that
+    > answers a narrower question than the one being asked, and an answer read as if it were the
+    > broader one.
 10. **Look at the item page as a stranger.** Preview image actually rendering (Steam caches
     aggressively), description BBCode not broken mid-tag, images in the intended order, tags set.
 11. ~~**Plan where bug reports land.**~~ **DONE via item 3.** GitHub Issues is the destination, and
@@ -2049,9 +2345,12 @@ merely self-consistent.
 
 Generates 50 / 200 / 1000 colonists through the real `PawnGenerator.GeneratePawn` path and dumps
 mean / sd / min / p10 / median / p90 / max for per-skill level, per-pawn mean skill, passion pips and
-trait count, plus a histogram and the passionless-pawn rate.
+trait count, plus a histogram, the passionless-pawn rate, and a per-resolved-profile `CLAMP
+CENSORING` block (share of capable skills pinned at 0 and at 20 — see "The dump action now MEASURES
+the censoring" for the baselines and for why the alarm keys off the median rather than the share).
 
-**This is the only place dispersion can be *observed* rather than derived.** Hold the reported
+**This is the only place dispersion can be *observed* rather than derived**, and the only place
+`Clamp(0, 20)` censoring is visible at all. Hold the reported
 per-skill sd against the `per-skill sd` column from `envelope_check.py`: **observed should sit above
 predicted**, since the tool models the noise term only while the observed figure also carries the
 spread of the quality roll itself. If observed comes in *below* predicted, the noise term is not
@@ -2133,7 +2432,33 @@ batch and restored in a `finally`, and throwaway pawns are cleaned up through
   `Trait assignment (...) for X (quality Q, profile P)`, the growth-moment deferral line, and
   `Growth moment resolved for … after N ticks`.
 - **The mod logs nothing at startup by design**, so for a load-success check (e.g. verifying the race
-  section is not Biotech-gated) a **silent log is the pass condition**.
+  section is not Biotech-gated) a silent log is the intended pass condition — **but `list_logs` is
+  not an instrument that can establish silence.** See the startup-blindness box below before
+  claiming a clean load.
+
+> [!CAUTION]
+> ## Startup is INVISIBLE to both log instruments on this machine — never call a load "clean"
+>
+> **`rimbridge/list_logs` cannot see the mod-load window at all.** RimBridge's own `logs.initialize`
+> lands ~14s into launch, *after* `LoadedModManager.CreateModClasses()`, so anything logged from the
+> `Mod` constructor, settings load or a static constructor is structurally absent. An empty result
+> means "not observed", not "nothing happened" — it once concealed four `Log.Error`s per launch
+> (`No active language! Cannot translate from key VP_Preset_Faithful`, etc.) while the run was
+> reported as error-free.
+>
+> **`Player.log` is the documented fallback, and Prepatcher silences it too.** With
+> `zetrith.prepatcher` active — it is in the active mod list — the log stops dead at
+> `Prepatcher: Restarted with the patched assembly, going silent` and never grows again, while the
+> game goes on to reach the main menu normally. Observed: the file froze at 5,979 bytes with the
+> game fully loaded. So the usual advice ("read `Player.log` instead") does **not** hold here.
+>
+> **Consequences worth internalising:**
+> - Do not infer load progress from `Player.log`'s size or mtime, and do not infer it from process
+>   RAM or CPU either — a fully-loaded RimWorld sitting at the menu looks identical to a stalled one.
+>   Ask the owner, or check for a window title / the bridge port.
+> - State which instrument you used and what window it covers, rather than "startup was clean".
+> - `Player-prev.log` holds the *previous* run and is often the larger, more complete file — do not
+>   mistake it for the current one.
 - **`FloatMenu`-based UI cannot be driven by the bridge.** A synthetic click activates the button but
   no float menu survives to the next frame to be read. This affects every Add button in the Overrides
   tab, not just the race one. Adding an override row is a by-hand check.

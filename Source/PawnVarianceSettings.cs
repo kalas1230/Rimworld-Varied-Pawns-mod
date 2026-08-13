@@ -553,6 +553,35 @@ namespace PawnVarianceMod
             Hostile.profileLabel = LabelFor(hostileProfileId);
         }
 
+        // profileLabel is a SNAPSHOT, and two of RefreshResolved's callers run too early for it:
+        // the parameterless ctor and ExposeData's load branch both fire from GetSettings<>() in the
+        // Mod constructor, before LanguageDatabase is populated. LabelFor -> preset.label ->
+        // "VP_Preset_<devName>".Translate() therefore returns the RAW KEY at that point and bakes
+        // it in permanently -- the same trap the presets' label/description properties were made
+        // lazy to avoid, recurring one layer up in the snapshot rather than in a static initializer.
+        //
+        // Measured symptom, and why it is worth code rather than a note: every consumer of
+        // profileLabel is a diagnostic (DebugActions, TraitTrace, the passion trace), so no player
+        // ever sees it -- but DumpDistribution compares its resolved label against
+        // LabelFor(activeProfileId), which is computed live and therefore translated. Raw key vs
+        // translated label never match, so the action printed "^^ NOT the configured active
+        // profile. An override outranked it" on EVERY run, including runs where nothing overrode
+        // anything. That line exists because a real override once went unnoticed (see the comment
+        // above `resolved` in DumpDistribution); an always-on false alarm trains the reader to
+        // ignore exactly the warning it was added to raise.
+        //
+        // Custom profiles were never affected -- LabelFor returns custom.name, which is not a key.
+        // That is why the runs recorded in HANDOVER, which resolved to "Custom 1", look clean.
+        //
+        // Called from PawnVarianceStartupChecks, which is [StaticConstructorOnStartup] and so runs
+        // after language data is loaded. Only the two labels are re-snapshotted; the resolved
+        // VALUES are untouched, so this cannot disturb anything the editor or a pawn roll depends on.
+        public void RefreshResolvedLabels()
+        {
+            if (Active != null) Active.profileLabel = LabelFor(activeProfileId);
+            if (Hostile != null) Hostile.profileLabel = LabelFor(hostileProfileId);
+        }
+
         // Adopts every setting from a settings object loaded elsewhere (see SettingsTransfer).
         // Only the public state is copied: the private flattened staging lists are rebuilt from the
         // dictionaries by ExposeData's Saving branch, so copying them would only risk carrying
@@ -634,6 +663,14 @@ namespace PawnVarianceMod
         private const float ControlGap = 10f;
         private const float SliderLabelGap = 2f;
 
+        // The height a Listing_Standard is BEGUN with when its real height is not yet known.
+        // Deliberately far past anything the UI can produce -- see DrawOverridesTab for why a
+        // listing must never be begun with a rect its content can outgrow. RimWorld does the same
+        // thing itself (Dialog_ModSettings begins a 9999-tall group), so an oversized group rect is
+        // an accepted idiom, not a hack: Widgets.BeginGroup only clips, and the enclosing scroll
+        // view is what actually bounds what the player sees.
+        private const float UnboundedListingHeight = 100000f;
+
         public void DoWindowContents(Rect inRect)
         {
             var tabs = new List<TabRecord>
@@ -700,12 +737,39 @@ namespace PawnVarianceMod
 
         private void DrawOverridesTab(Rect outRect)
         {
-            float viewHeight = Math.Max(overridesViewHeight, 1000f);
+            // The SCROLL CONTENT rect. Floored at the viewport rather than at a hardcoded number:
+            // a fixed floor has to be guessed, and the guess that used to sit here (1000f) was
+            // BELOW what this tab actually draws with the shipped default overrides (measured:
+            // 1227px with 10 faction + 10 xenotype rows), which is what put the listing into the
+            // wrapping regime described below. The viewport is the only floor that is correct by
+            // construction -- content shorter than it simply does not scroll.
+            float viewHeight = Math.Max(overridesViewHeight, outRect.height);
             var viewRect = new Rect(0f, 0f, outRect.width - 24f, viewHeight);
 
             Widgets.BeginScrollView(outRect, ref overridesScrollPos, viewRect);
+
+            // The listing is BEGUN WITH A DELIBERATELY OVERSIZED RECT, not with viewRect, and that
+            // difference is the whole fix. Listing_Standard column-wraps when its content passes
+            // the height it was begun with: it does not overflow downward, it starts a new column
+            // to the RIGHT. Begin it with viewRect and the tab breaks in two ways at once, both
+            // measured in game on 2026-08-13 with 20 overrides configured:
+            //
+            //   1. The overflow -- the Race Overrides section -- is drawn at x=837, one column
+            //      width outside the 820-wide viewport. It is not below the scroll range; it is
+            //      beside it, so no amount of scrolling can reach it. That is the reported bug.
+            //   2. Worse, it LATCHES. After a wrap, listing.CurHeight reports only the LAST
+            //      column's height (211) instead of the total (1187), so the line below stored
+            //      251 -- which is then floored back up to the same too-short height next frame,
+            //      wraps again, and re-measures 251 forever. Nothing recovers it: not adding
+            //      overrides, not restoring defaults, only restarting the game (the field's 1600f
+            //      initialiser happens to exceed the real content, which is the only reason a
+            //      fresh load ever looked correct).
+            //
+            // Beginning unbounded makes the wrap unreachable, which in turn makes CurHeight a
+            // truthful total, which is what the scroll rect above depends on. Do not "tidy" this
+            // back to passing viewRect to both.
             var listing = new Listing_Standard();
-            listing.Begin(viewRect);
+            listing.Begin(new Rect(0f, 0f, viewRect.width, UnboundedListingHeight));
 
             listing.CheckboxLabeled(
                 "VP_EnableOverrides".Translate(),

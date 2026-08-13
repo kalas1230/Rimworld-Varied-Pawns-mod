@@ -29,7 +29,7 @@ namespace PawnVarianceMod
         // These field initialisers do NOT all match the Scribe_Values defaults in ExposeData below.
         // This comment used to claim they did, and to claim the Scribe defaults are Faithful's:
         //   averageQuality  0.5       == Scribe 0.5       == Faithful     agrees
-        //   skillSpread     0.857321f != Scribe 0.489898f               DISAGREES (this is
+        //   skillSpread     0.857321f != Scribe 0.50f                 DISAGREES (this is
         //                                                               Distinct's value; the
         //                                                               Scribe default is Faithful's)
         //   passionSpread   1.0       == Scribe 1.0       == Faithful     agrees
@@ -166,7 +166,7 @@ namespace PawnVarianceMod
         public void ExposeData()
         {
             Scribe_Values.Look(ref averageQuality, "averageQuality", 0.5f);
-            Scribe_Values.Look(ref skillSpread, "skillSpread", 0.489898f);
+            Scribe_Values.Look(ref skillSpread, "skillSpread", 0.50f);
             Scribe_Values.Look(ref passionSpread, "passionSpread", 1.0f);
             Scribe_Values.Look(ref passionMajorBias, "passionMajorBias", 0.5f);
             Scribe_Values.Look(ref skillShiftMin, "skillShiftMin", -3f);
@@ -250,8 +250,29 @@ namespace PawnVarianceMod
         // static readonly field initializer, which runs at type-init time -- potentially
         // before LanguageDatabase has loaded. Translating there would bake the raw key
         // text into the object permanently, and no later language change would fix it.
-        public string label       => LabelKey.Translate();
-        public string description => DescriptionKey.Translate();
+        //
+        // The activeLanguage guard is NOT belt-and-braces, and removing it puts four red errors
+        // in every player's log on every startup. Lazy access alone is not enough, because a
+        // caller can still ASK for the label before there is a language: settings load runs
+        // PawnVarianceSettings' ctor and ExposeData from GetSettings<>() inside the Mod
+        // constructor, both of which reach LabelFor -> label. RimWorld's Translator does not
+        // return the key quietly in that state -- it calls Log.Error("No active language! Cannot
+        // translate from key ...") first. Observed as exactly that, four times, in Player.log.
+        //
+        // devName is the right stand-in: it is this preset's untranslated English name, so the
+        // value is correct rather than merely non-crashing, and PawnVarianceSettings'
+        // RefreshResolvedLabels() re-snapshots the real translated label from
+        // PawnVarianceStartupChecks once the language database is up.
+        //
+        // Do NOT "simplify" this to LabelKey.Translate(). The in-game harness cannot catch the
+        // regression: these errors are emitted before RimBridge installs its log hook, so
+        // rimbridge/list_logs reports a clean startup while Player.log has them. Check Player.log.
+        public string label       => LanguageDatabase.activeLanguage == null
+            ? devName
+            : LabelKey.Translate();
+        public string description => LanguageDatabase.activeLanguage == null
+            ? ""
+            : DescriptionKey.Translate();
 
         public VarianceProfile(VarianceProfileId id, string stringId, string devName, VarianceProfileValues values)
         {
@@ -286,7 +307,7 @@ namespace PawnVarianceMod
             new VarianceProfileValues
             {
                 averageQuality = 0.5f,
-                skillSpread = 0.489898f,
+                skillSpread = 0.50f,
                 passionSpread = 1.0f,
                 passionMajorBias = 0.5f,
                 skillShiftMin = -3f,
