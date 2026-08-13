@@ -82,7 +82,7 @@
   <VP_TypicalTip>The average pawn this profile generates, against the Faithful baseline (0.25).\n\nCounts starting skill levels and the passion budget only, not traits. It also says nothing about how much pawns differ from each other, so two profiles with the same figure can play very differently.</VP_TypicalTip>
 
   <!-- {0} sample count, {1} percentage vs Faithful, {2} raw figure. -->
-  <VP_BestOfNRow>Best of {0} rerolls:  {1} vs Faithful ({2})   —   what you actually get if you reroll for this profile</VP_BestOfNRow>
+  <VP_BestOfNRow>Best of {0} rerolls:  {1} vs Faithful ({2})</VP_BestOfNRow>
   <VP_BestOfNTip>Generate {0} pawns and keep the best one.\n\nCloser to how the game is actually played: you reroll starting colonists, choose which prisoners to recruit, and turn down quest pawns.\n\nTwo figures close together means a consistent profile. A steep climb between them means a gambling one, and it pays off when you get to choose.</VP_BestOfNTip>
 
   <VP_Fingerprint>Traits {0}–{1}  ·  Passions {2}–{3}  ·  Skill shift {4} to {5}  ·  Quality {6}</VP_Fingerprint>
@@ -114,7 +114,7 @@
   <VP_Section_Traits>Traits</VP_Section_Traits>
   <VP_Section_TraitsTip>When off, this profile leaves vanilla trait generation untouched.</VP_Section_TraitsTip>
 
-  <VP_CountProtectedTraits>Count xenotype/forced traits toward the trait count</VP_CountProtectedTraits>
+  <VP_CountProtectedTraits>Count xenotype and forced traits toward the total</VP_CountProtectedTraits>
   <VP_CountProtectedTraitsTip>When off, the range below counts only traits this mod rolls, and traits forced by a xenotype, gene, backstory or scenario are added on top. When on, the range counts every trait the pawn has. Forced traits are never removed either way.</VP_CountProtectedTraitsTip>
 
   <VP_TraitCount>Trait count</VP_TraitCount>
@@ -155,7 +155,7 @@
   <VP_ActiveColonyProfileCaption>Default profile for player colonists and neutral pawns:</VP_ActiveColonyProfileCaption>
   <!-- Load-bearing, do not drop. Without it the General tab names a profile that may never
        apply to a single colonist: a Human race override at Normal silently supersedes it. -->
-  <VP_OverridesBeatThis>Overrides on a pawn's faction, race or xenotype take precedence over this.</VP_OverridesBeatThis>
+  <VP_OverridesBeatThis>Overrides on faction, race or xenotype take precedence over this.</VP_OverridesBeatThis>
 
   <VP_Section_General>General</VP_Section_General>
   <VP_GeneralCaption>These apply to every profile and are not changed by switching profiles.</VP_GeneralCaption>
@@ -189,11 +189,11 @@
 
   <!-- ===================== Overrides ===================== -->
 
-  <VP_EnableOverrides>Enable Faction, Race &amp; Xenotype Overrides</VP_EnableOverrides>
+  <VP_EnableOverrides>Enable faction, race and xenotype overrides</VP_EnableOverrides>
   <VP_EnableOverridesTip>When enabled, specific faction, race and xenotype profiles take precedence over the Hostile and General profiles.</VP_EnableOverridesTip>
   <VP_EnableOverridesHint>Enable the checkbox above to configure per-faction, per-race and per-xenotype profiles.</VP_EnableOverridesHint>
 
-  <VP_FactionPrecedence>Faction Overrides Take Priority Over Race &amp; Xenotype Overrides</VP_FactionPrecedence>
+  <VP_FactionPrecedence>Faction overrides beat race and xenotype</VP_FactionPrecedence>
   <VP_FactionPrecedenceTip>When checked, a pawn matching a Faction override and also a Race or Xenotype override at the same priority (an Empire Neanderthal, say) uses the Faction override. When unchecked, Race and Xenotype win.\n\nRace always beats Xenotype at equal priority, whatever this is set to.</VP_FactionPrecedenceTip>
 
   <VP_Col_Profile>Profile</VP_Col_Profile>
@@ -224,7 +224,7 @@
   <VP_Confirm_RestoreXenotypeOverrides>Restore default xenotype overrides? Every xenotype assignment goes back to its shipped default.</VP_Confirm_RestoreXenotypeOverrides>
 
   <VP_Section_RaceOverrides>Race Overrides</VP_Section_RaceOverrides>
-  <VP_NoRaceOverrides>No race overrides configured. None ship by default, because the races available depend on which race mods you have installed.</VP_NoRaceOverrides>
+  <VP_NoRaceOverrides>No race overrides configured. None ship by default — the races available depend on your installed race mods.</VP_NoRaceOverrides>
   <VP_Add_RaceOverride>+ Add Race Override</VP_Add_RaceOverride>
   <VP_NoRemainingRaces>No remaining races available</VP_NoRemainingRaces>
   <VP_Btn_DeleteAllRaceOverrides>Delete All Race Overrides</VP_Btn_DeleteAllRaceOverrides>

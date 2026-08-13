@@ -86,8 +86,6 @@ Export your whole configuration — custom profiles, overrides, toggles — to t
 [*]Works with mod-added traits, skills, factions and races. It rides on RimWorld's own pawn generation rather than replacing it.
 [/list]
 
-[b]Known limitation:[/b] Milian pawns from Milira cannot be targeted by a race override. They are created in code rather than generated from a normal pawn kind, so they never appear in the race list.
-
 [h2]Source[/h2]
 
 MIT licensed. Source, and rather more documentation than anyone asked for, at:

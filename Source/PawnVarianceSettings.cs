@@ -1203,13 +1203,12 @@ namespace PawnVarianceMod
         }
 
         // Humanlike races that something actually spawns. Two filters, both load-bearing:
-        // Humanlike drops the ~35 mechanoid ThingDef_AlienRace entries that Wolfein and Milira
-        // ship alongside their playable races, and the PawnKindDef pass drops abstract or
-        // unreferenced race defs. Measured 2026-08-06 on a Wolfein + Milira + Anomaly install:
-        // Human, CreepJoiner, Milira_Race, Wolfein_Race. Milian_Race is NOT in the list — its only
-        // def is the abstract Milian_Base with zero concrete children, so no PawnKindDef spawns it
-        // and the traversal drops it. CreepJoiner also labels itself "Human", which is why the two
-        // call sites above disambiguate duplicate labels with the defName.
+        // Humanlike drops the ~35 mechanoid ThingDef_AlienRace entries HAR race mods ship
+        // alongside their playable races, and the PawnKindDef pass drops abstract or unreferenced
+        // race defs -- a race whose only def is an abstract base with no concrete children has
+        // nothing spawning it through a kind def, so the traversal correctly does not offer it.
+        // CreepJoiner labels itself "Human", which is why the two call sites above disambiguate
+        // duplicate labels with the defName.
         // internal, not private: the "Dump Add-menu race list" debug action calls this directly so
         // the harness checks the list the menu actually builds rather than a copy of the filter.
         internal static IEnumerable<ThingDef> SelectableRaces()

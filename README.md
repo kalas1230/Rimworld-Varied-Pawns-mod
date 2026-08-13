@@ -274,6 +274,6 @@ the code.
 - Biotech is optional. Only the *xenotype* section is gated on it —
   `DrawRaceOverridesSection` deliberately is not, because HAR race mods do not depend on Biotech and
   gating race there would silently kill the feature for its users.
-- Known limitation: Milian pawns (Milira) are unreachable by race override. They are produced in
-  code rather than from a `PawnKindDef`, so the Add-menu filter cannot see them. Closed as
-  won't-fix; the reasoning is in `HANDOVER.md`.
+- The race Add-menu lists humanlike races that at least one `PawnKindDef` spawns. A race created
+  purely in code, with no concrete kind def, is therefore not offered — by design, since the
+  alternative floods the menu with every abstract and unreferenced race def.
