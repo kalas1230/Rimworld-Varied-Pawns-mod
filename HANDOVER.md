@@ -996,6 +996,10 @@ profile instead of a pooled figure that averages a censored band into a healthy 
 | `Custom 1` | 16.7% | 0.0% | 3.0 |
 | `Wildcard` (shipped band) | **33.3%** | 0.0% (3 skills) | 2.0 |
 
+Reproduced on the **Release** build (2026-08-13, staging from `7b3f401`, 200 pawns): `Faithful`
+`at 0: 376/2200 (17.1%)`, `at 20: 1/2200 (0.0%)`, median `3.0` — the smaller sample's 17.1% against
+the 18.3% baseline is sampling noise, and the readout behaves identically in the shipping binary.
+
 **`Faithful` itself pins 18.3%, and the shipped `Wildcard` pins a third of all capable skills.**
 Both are healthy. That is precisely why the alarm fires on **median 0**, the criterion rule 3 below
 already commits to, and not on a percentage — any threshold low enough to look alarming would fire
@@ -1814,9 +1818,10 @@ wrap/clip pass**; **item 13 is done bar one marked `TODO` line** that needs the 
 **Only 10 is still fully open, and it cannot be done until the item is published.** Nothing on this
 list now requires loading the modpack again.
 
-**One verification is outstanding and is written up under item 20**: nothing yet distinguishes a
-translated preset label from its `devName` fallback, because in English they are the same string.
-It needs a game launch with a discriminating language file.
+**The verification that used to be outstanding here — distinguishing a translated preset label from
+its `devName` fallback — is DONE and passed.** See item 20 for the marked-key recipe and the
+two-line comparison that discriminates them; it is worth keeping because it is the only instrument
+that can.
 
 **Every item closed here that was not purely mechanical found a defect the existing gates could not
 see:** item 1's audit found staging shipping a build older than the code (→ 17), item 9 found the
@@ -1836,13 +1841,23 @@ logged nothing".
 > but no defect. The pattern above is a warning about where to look, not a law that every check
 > must yield something.
 
-> **Both gates have now been run against the actual upload artifact, not a dev build.** The zip's
-> DLL is a **Release** build (129,536 bytes) and every previously recorded in-game result came from
-> the **Debug** dev copy (150,016 bytes) — a different binary that nothing had ever gated. Against
-> the zip build: `Verify Best-of-N` **32/32 PASS**, worst raw 0.01%, worst shown 0.01pp, matching
-> the recorded figures exactly; `Roll pawns and dump distribution` at 1000 pawns
-> `GENERATOR vs MODEL [Faithful]` **OK**. Re-run both against the zip, not the dev copy, before
-> uploading.
+> **Both gates are run against the actual upload artifact, not a dev build.** The staged DLL is a
+> **Release** build and in-game results recorded before 2026-08-12 came from the **Debug** dev copy
+> — a different binary that nothing had ever gated. Re-run both against the staged folder, not the
+> dev copy, before uploading.
+>
+> **Last run 2026-08-13, against the staging from commit `7b3f401` (Release, 132,096 bytes),
+> deployed into `Mods\` with the dev copy moved aside so no duplicate `packageId` existed:**
+> - `Verify Best-of-N` **32/32 PASS**. Worst shown **0.01pp** (`Distinct` @ N=50), worst raw
+>   **0.01%** (`Desperate` @ N=50), grid assertion silent, constants clean, skill count 12, per-axis
+>   toggles OK, `cross-branch OK ... live = fallback = 0.250709 (delta 8.94E-008)`. **This is the
+>   run that matters for the regenerated `EnvelopeFigures.g.cs`** — `Faithful`'s reference row reads
+>   the new `0.304099 / 0.345485 / 0.359545`, confirming the gate compared against the regenerated
+>   table rather than a stale one.
+> - `Roll pawns and dump distribution` at 200 pawns: `GENERATOR vs MODEL [Faithful]` **OK**,
+>   model 4.550 pips/pawn (sd 1.234), delta **−0.063** against tolerance 0.349. Passionless pawns
+>   **0.0%**, passion pips mean 4.49 — consistent with the ~4.55 the model targets and with the
+>   `4.59` vanilla-parity figure recorded under "Tuning constraints".
 
 ### Blocking — do before the item goes public
 
@@ -2167,14 +2182,30 @@ logged nothing".
     complementary — keep both. **Verified: `Player.log` now contains zero `No active language`
     lines and zero `PawnVariance` entries across a full 18-mod startup.**
 
-    > **A test that cannot fail is not a test, and this one cannot.** `devName` and the English
-    > label are the *same string* ("Faithful"), so **no English-language run can distinguish "the
-    > guard fell back to devName" from "the translation resolved".** Confirming that
-    > `RefreshResolvedLabels()` actually restores the translated value needs a discriminating
-    > instrument: a second `Languages\<lang>\Keyed\` file with deliberately different text, or
-    > temporarily editing an English value so it differs from its `devName`. **This is not yet
-    > done.** The failure mode it would catch is silent and benign-looking for English players and
-    > wrong for everyone else, which is exactly the audience the translation work exists for.
+    > **A test that cannot fail is not a test, and this one could not.** `devName` and the English
+    > label are the *same string* ("Faithful"), so **no ordinary English run can distinguish "the
+    > guard fell back to devName" from "the translation resolved".**
+    >
+    > **NOW DONE, with a discriminating instrument, on the Release build — and it PASSES.**
+    > `VP_Preset_Faithful` and `VP_Preset_Distinct` were temporarily edited to `Faithful [XLATED]`
+    > / `Distinct [XLATED]` **in the deployed copy only** (never the repo — the same discipline as
+    > the xenotype fixture), and `Roll pawns and dump distribution` was run at 200 pawns. That
+    > action is the right instrument because it prints the two labels **by different paths**:
+    >
+    > | line | source | printed |
+    > |---|---|---|
+    > | `configured active profile:` | `LabelFor(...)`, computed **live** | `Faithful [XLATED]` |
+    > | `ACTUALLY RESOLVED TO:` | `profileLabel`, the **snapshot** | `Faithful [XLATED] x200 (100.0%)` |
+    >
+    > Both carry the marker, so translation resolves **and** `RefreshResolvedLabels()` genuinely
+    > re-takes the snapshot after the language database is up. Had the guard been stuck on
+    > `devName`, the second line would have read plain `Faithful` while the first did not — the
+    > exact split this instrument exists to expose. No false override warning was emitted, and
+    > `Player.log` contained **zero** `No active language` lines across the run.
+    >
+    > **Keep this recipe.** It is the only way to test the guard, and it re-runs in about two
+    > minutes: mark the two keys in the deployed copy, run the dump, compare the two lines, then
+    > restore the deployed folder from staging.
 
     **The instrument failure is the more important half, because it will recur.**
     `rimbridge/list_logs` captures only from RimBridge's own `logs.initialize`, which its
@@ -2456,6 +2487,26 @@ batch and restored in a `finally`, and throwaway pawns are cleaned up through
   section is not Biotech-gated) a silent log is the intended pass condition — **but `list_logs` is
   not an instrument that can establish silence.** See the startup-blindness box below before
   claiming a clean load.
+
+**Driving the debug actions through the bridge — the working recipe, because two of the obvious
+routes fail:**
+
+1. **All six actions declare `PlayingOnMap`, so a map must exist first.** From the main menu they do
+   not resolve. `rimworld/start_debug_game_ready` brings up the quick-test colony in ~5 s.
+2. **The path is `Actions\<label>`, and the category is NOT in it.** `Varied Pawns/<label>` returns
+   *"Could not find debug action"*. Category is metadata on the node; every one of these lives
+   directly under the `Actions` tab.
+3. **Do not use `rimworld/search_debug_actions`.** It walks the whole tree, and enumerating vanilla's
+   incident nodes throws `NullReferenceException` inside
+   `Verse.DebugActionsIncidents.RitualSiegeWithSpecifics` — **vanilla's code, nothing to do with this
+   mod** — which then raises a *blocking* GABS attention item that must be acknowledged with
+   `games_ack_attention` before any further call succeeds. Use
+   `rimworld/list_debug_action_children` on `Actions` and filter locally instead.
+4. **`Roll pawns and dump distribution` opens a `Dialog_DebugOptionListLister`** (50/200/1000), which
+   is a real `Window` and **does** survive `get_ui_layout` + `click_ui_target` — unlike a `FloatMenu`,
+   which does not. Grab the layout, click the `button` element at the wanted row.
+5. **Read the output from `Player.log`, not from the tool result.** The verify action returns its
+   whole report in `effects.logs`, but the dump's does not come back that way.
 
 > [!CAUTION]
 > ## Startup is INVISIBLE to both log instruments on this machine — never call a load "clean"
