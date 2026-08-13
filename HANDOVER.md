@@ -1806,11 +1806,13 @@ rather than being deleted,** because commits and notes elsewhere refer to items 
 findings get the next free number wherever they belong topically — 17 sits with the blocking items,
 not at the end.
 
-Closed so far: 1, 3, 4, 5, 6, 7, 8, 11, 15, 16, 17, 18, 19, 20 (done), and 2, 14 (decided, moved to
-*Settled and not to be relitigated*). **Item 9 is done except for a cosmetic wrap/clip pass**;
-**item 13 is done bar one marked `TODO` line** that needs the Workshop URL. Still fully open:
-**12** (needs the modpack — 5 and 6 have now been run under it, so it is the only reason left to
-load it) and **10** (needs the item published).
+Closed so far: 1, 3, 4, 5, 6, 7, 8, 11, 15, 16, 17, 18, 19, 20 (done), 2, 14 (decided, moved to
+*Settled and not to be relitigated*), and **12 (closed by decision with the risk accepted, not by
+measurement — read the item, it is not a benchmark)**. **Item 9 is done except for a cosmetic
+wrap/clip pass**; **item 13 is done bar one marked `TODO` line** that needs the Workshop URL.
+
+**Only 10 is still fully open, and it cannot be done until the item is published.** Nothing on this
+list now requires loading the modpack again.
 
 **One verification is outstanding and is written up under item 20**: nothing yet distinguishes a
 translated preset label from its `devName` fallback, because in English they are the same string.
@@ -2195,11 +2197,30 @@ logged nothing".
     it is now reachable from the in-game mod list — both as the clickable `<url>` and as a closing
     line of `<description>` that asks for RimWorld version, mod list, and expected vs actual. The
     Workshop description already carried the same ask.
-12. **Measure what the mod costs at generation time under a heavy load order.** The postfix runs on
-    every generated pawn, and nothing here has ever been timed against anything but a small active
-    list. A raid of 40 pawns and a settlement-map load are the cases that would show it. Expected to
-    be nothing — the work is arithmetic on one pawn — but "expected to be nothing" is how every
-    other defect in this document started.
+12. ~~**Measure what the mod costs at generation time under a heavy load order.**~~ **CLOSED BY
+    DECISION, not by measurement — and the distinction is the point of writing it this way.** The
+    owner's call, taken 2026-08-13 with the residual risk below stated and accepted. No timing
+    instrument was built and none exists: there is no `Stopwatch` anywhere in `Source\`.
+
+    **What the decision rests on.** Item 5's `Roll pawns and dump distribution` run drove **1000
+    real generations through the postfix under the 1376-item modpack** and completed without
+    anything the owner noticed as a cost. That is a genuine datum and it is the right order of
+    magnitude: the postfix is arithmetic on one pawn, with no allocation-heavy or def-scanning work
+    in it.
+
+    **What it does NOT establish, so nobody later mistakes this entry for a benchmark:**
+    - **It was never timed.** "Not that bad" is a wall-clock impression of a bulk loop, not a
+      per-pawn figure, and nothing recorded a number.
+    - **It cannot isolate this mod's share.** Under a 1376-mod list every other pawn-generation
+      patch runs in the same span, so a cost here would be buried in a much larger total.
+    - **Neither case item 12 actually named was run** — a 40-pawn raid and a settlement-map load.
+      Those are *bursts*, and a burst is what a player feels as a hitch; a steady 1000-pawn loop is
+      the case most likely to look fine when a burst does not.
+
+    **Reopen if a player reports a hitch on raid spawn or map load** — that is the symptom this
+    would have caught, and it is cheap to diagnose once reported. Reopen also if the postfix ever
+    stops being pure arithmetic: a def lookup, a `DefDatabase` scan or an allocation in that path
+    changes the shape of the argument above, which is the only thing holding this item shut.
 13. **Rewrite `README.md` for the person the Workshop link sends there — DONE except for one line.**
     The restructure did not actually need the Workshop item to exist; only the link does. Resolved
     the way the item suggested: a player-facing header above the developer material rather than
