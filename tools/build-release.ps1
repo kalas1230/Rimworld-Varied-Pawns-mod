@@ -86,6 +86,22 @@ $StripExt  = @('.pdb', '.mdb', '.log', '.user', '.orig', '.rej')
 # makes it impossible to ship by accident; do not "tidy" it into the mod folder.
 $StampPath = Join-Path $ReleaseDir 'staging.stamp.json'
 
+# The paste-ready Workshop description, DERIVED from docs\workshop-description.txt
+# (the source of truth per the publish sequence) rather than maintained by hand.
+#
+# WHY THE SCRIPT OWNS THIS FILE NOW. It used to be a hand-made duplicate that
+# nothing regenerated, which made it the third copy of the listing text and the
+# one most likely to be pasted at upload time -- so it went stale silently and
+# invisibly. Measured on 2026-08-13 before this was added: 22 mojibake sequences
+# (every em dash double-encoded to a-hat-euro, from a UTF-8 file written back as
+# Windows-1252) plus a BOM, against exactly 1 surviving clean em dash. Pasting it
+# would have published a listing full of garbled punctuation.
+#
+# Deliberately NOT inside Release\Varied Pawns\ -- everything in the staging
+# folder is uploaded, and this is a clipboard aid, not player content.
+$DescSource = Join-Path $RepoRoot 'docs\workshop-description.txt'
+$PastePath  = Join-Path $ReleaseDir 'upload\description-paste.txt'
+
 $problems = New-Object System.Collections.Generic.List[string]
 function Fail($msg)  { $script:problems.Add($msg) }
 function Warn($msg)  { Write-Host "  WARN  $msg" -ForegroundColor Yellow }
@@ -117,6 +133,36 @@ function Get-ExpectedShipMap {
 }
 
 function Get-Sha256($path) { return (Get-FileHash -Path $path -Algorithm SHA256).Hash }
+
+# The paste-ready listing text: everything in docs\workshop-description.txt BELOW
+# the '====' divider. Above the divider is guidance for whoever maintains the
+# file and must never reach the Workshop.
+#
+# Read and written explicitly as UTF-8 WITHOUT a BOM. Get-Content/Set-Content
+# default to the system ANSI codepage here, which is what double-encoded every
+# em dash in the hand-made version, and a BOM pastes into Steam's description box
+# as an invisible leading character.
+function Get-PasteText {
+    if (-not (Test-Path $DescSource)) { return $null }
+    $text = [System.IO.File]::ReadAllText($DescSource, [System.Text.Encoding]::UTF8)
+    $lines = $text -split "`r?`n"
+    $divider = -1
+    for ($i = 0; $i -lt $lines.Count; $i++) {
+        if ($lines[$i] -match '^={10,}\s*$') { $divider = $i; break }
+    }
+    # No divider means the file's shape changed. Fail loudly rather than quietly
+    # pasting the maintainer notes into a public listing.
+    if ($divider -lt 0) { return $null }
+    $body = $lines[($divider + 1)..($lines.Count - 1)]
+    while ($body.Count -gt 0 -and $body[0].Trim() -eq '') { $body = $body[1..($body.Count - 1)] }
+    return ($body -join "`r`n").TrimEnd() + "`r`n"
+}
+
+function Write-PasteFile($text) {
+    $dir = Split-Path -Parent $PastePath
+    if (-not (Test-Path $dir)) { New-Item -ItemType Directory -Force -Path $dir | Out-Null }
+    [System.IO.File]::WriteAllText($PastePath, $text, (New-Object System.Text.UTF8Encoding($false)))
+}
 
 function Get-NewestSourceFile {
     return Get-ChildItem -Path (Join-Path $RepoRoot 'Source') -Recurse -Filter *.cs -File |
@@ -182,6 +228,21 @@ if ($Check) {
         foreach ($r in $extra) { Write-Host "  $r" -ForegroundColor Red }
     }
 
+    # The paste-ready description is not a staged file, so the hash sweep above
+    # cannot see it -- and it is the copy most likely to be pasted at upload time.
+    # Checked here against what the source of truth would produce.
+    $pasteStale = $false
+    $expectedPaste = Get-PasteText
+    if ($null -eq $expectedPaste) {
+        Warn "cannot derive the paste description from docs\workshop-description.txt (missing, or no '====' divider)"
+    } elseif (-not (Test-Path $PastePath)) {
+        Warn "no Release\upload\description-paste.txt -- it will be generated on the next -Build"
+    } elseif ([System.IO.File]::ReadAllText($PastePath, [System.Text.Encoding]::UTF8) -ne $expectedPaste) {
+        $pasteStale = $true
+        Write-Host "`nSTALE DESCRIPTION -- Release\upload\description-paste.txt does not match" -ForegroundColor Red
+        Write-Host "  docs\workshop-description.txt. Do not paste it. Re-run -Build to regenerate." -ForegroundColor Red
+    }
+
     # Independent of the hash comparison: even a perfectly-synced staging is wrong
     # if the repo's own DLL was built before the last source edit.
     $dllPath = Join-Path $RepoRoot "Assemblies\$AssemblyName.dll"
@@ -193,7 +254,7 @@ if ($Check) {
         Write-Host "  Staging may match the repo and still ship code that matches no source." -ForegroundColor Red
     }
 
-    if ($stale.Count + $absent.Count + $extra.Count -gt 0 -or $dllStale) {
+    if ($stale.Count + $absent.Count + $extra.Count -gt 0 -or $dllStale -or $pasteStale) {
         Write-Host "`nDo NOT upload this folder. Re-run: .\tools\build-release.ps1 -Build -Zip`n" -ForegroundColor Red
         exit 1
     }
@@ -381,6 +442,15 @@ if ($Zip) {
     if (Test-Path $zipPath) { Remove-Item -Force $zipPath }
     Compress-Archive -Path $StageDir -DestinationPath $zipPath
     Write-Host "`n  zip   $zipPath" -ForegroundColor DarkGray
+}
+
+# --- Paste-ready Workshop description ------------------------------------
+$pasteText = Get-PasteText
+if ($null -eq $pasteText) {
+    Warn "could not derive Release\upload\description-paste.txt from docs\workshop-description.txt"
+} else {
+    Write-PasteFile $pasteText
+    Write-Host "`n  desc  $PastePath" -ForegroundColor DarkGray
 }
 
 # --- Report --------------------------------------------------------------

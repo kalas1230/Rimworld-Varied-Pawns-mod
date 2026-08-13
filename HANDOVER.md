@@ -1775,10 +1775,12 @@ the GitHub Release zip. What it cannot do is the Steam side. That is this sectio
 3. **Steam keeps a brand-new item hidden until the Workshop Legal Agreement is accepted on the
    item's own page. Do that first** — otherwise the item exists, looks published from the game's
    side, and nobody can see it.
-4. Replace the auto-filled description with `docs/workshop-description.txt` (Steam BBCode, paste
-   below its `====` divider). **The two descriptions are meant to differ**: `About.xml`'s is the
-   short in-game mod-list text, this one is the full listing. If what the mod does changes, change
-   both.
+4. Replace the auto-filled description by pasting **`Release\upload\description-paste.txt`**, which
+   `-Build` generates from `docs/workshop-description.txt` (everything below the `====` divider,
+   UTF-8, no BOM) and `-Check` verifies. Paste that file rather than hand-copying out of the source,
+   which is how the copy that used to live there acquired 22 double-encoded em dashes. **The two
+   descriptions are meant to differ**: `About.xml`'s is the short in-game mod-list text, this one is
+   the full listing. If what the mod does changes, change both.
 5. Add the remaining listing images in the order fixed in `docs/workshop/STATUS.md`.
 6. Set visibility to Public.
 
@@ -1917,12 +1919,26 @@ logged nothing".
    never given, and one misread a `Count > 0` guard as missing. Cite-check every verdict; that rule
    is in this document for a reason and it paid again here.
 
-   **Hazard found while fixing it: the listing text exists in THREE places** — `About.xml`
+   **Hazard found while fixing it: the listing text existed in THREE places** — `About.xml`
    (short, in-game), `docs/workshop-description.txt` (the source of truth per the publish
-   sequence), and `Release/upload/description-paste.txt` (a gitignored paste-ready duplicate that
-   `build-release.ps1` does NOT regenerate, so it goes stale silently and is the copy most likely
-   to be pasted at upload time). All three were corrected. **Change a claim in one, change it in
-   all three.**
+   sequence), and `Release/upload/description-paste.txt` (a gitignored paste-ready duplicate). All
+   three were corrected at the time. **Change a claim in one, change it in the other.**
+
+   > **The third copy is no longer hand-maintained, because leaving it that way cost exactly what
+   > this note predicted.** `build-release.ps1` now *derives* `description-paste.txt` from
+   > `docs/workshop-description.txt` on every `-Build` (everything below the `====` divider,
+   > written UTF-8 **without** a BOM), and `-Check` fails when the two disagree.
+   >
+   > What the hand-maintained copy had drifted into by 2026-08-13, found only because someone
+   > diffed it: **22 mojibake sequences against 1 surviving clean em dash** — every `—`
+   > double-encoded to `â€"` by a UTF-8 file being written back as Windows-1252 — plus a BOM that
+   > pastes into Steam's description box as an invisible leading character. Item 4's corrected
+   > trait paragraph *was* present, so the claim was right and the punctuation was wreckage.
+   > **Nothing would have caught this**: it is a gitignored file, no gate read it, and it looks
+   > fine in an editor that guesses the encoding.
+   >
+   > **Two copies remain, and they still need manual agreement** — `About.xml`'s short description
+   > and `docs/workshop-description.txt`. Only the derived third one is now safe.
 
 17. ~~**Close the stale-staging hole.**~~ **DONE — `build-release.ps1 -Check` now exists.**
 
