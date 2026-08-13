@@ -1848,8 +1848,18 @@ logged nothing".
 > — a different binary that nothing had ever gated. Re-run both against the staged folder, not the
 > dev copy, before uploading.
 >
-> **Last run 2026-08-13, against the staging from commit `7b3f401` (Release, 132,096 bytes),
-> deployed into `Mods\` with the dev copy moved aside so no duplicate `packageId` existed:**
+> **Last run 2026-08-13, against the staging from commit `b1ef807` (Release, 132,096 bytes),
+> deployed into `Mods\` with the dev copy moved aside so no duplicate `packageId` existed. The gate
+> was run twice — once on the `7b3f401` staging and again after a re-stage, on the byte-exact DLL
+> that would upload — with bit-identical output both times.**
+>
+> > **Why twice, and it is worth repeating the next time.** A re-stage rebuilds, and the rebuild
+> > produces a *different DLL hash from identical source* (build ID/timestamp), so a gate result
+> > recorded before the final `-Build` describes a binary that no longer exists. `git diff` showed
+> > no `Source/` file had changed, so the result was never in doubt — but "the artifact I gated"
+> > and "the artifact I upload" being literally the same bytes is cheap to guarantee and is the
+> > whole point of gating the artifact rather than the tree. **Run the gate after the last
+> > `-Build`, not before it.**
 > - `Verify Best-of-N` **32/32 PASS**. Worst shown **0.01pp** (`Distinct` @ N=50), worst raw
 >   **0.01%** (`Desperate` @ N=50), grid assertion silent, constants clean, skill count 12, per-axis
 >   toggles OK, `cross-branch OK ... live = fallback = 0.250709 (delta 8.94E-008)`. **This is the
