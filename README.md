@@ -27,9 +27,8 @@ data and no load errors.
 
 ## Installing
 
-**From Steam:** subscribe to the Workshop item. <!-- TODO: link the Workshop item here once it
-exists. This is the last piece of pre-publish item 13 and it cannot be filled in before the first
-upload. -->
+**From Steam:** subscribe to
+[the Workshop item](https://steamcommunity.com/sharedfiles/filedetails/?id=3782564554).
 
 **Without Steam:** download the latest `VariedPawns-<version>.zip` from
 [Releases](https://github.com/kalas1230/Rimworld-Pawn-variance-mod/releases) and extract the
@@ -215,7 +214,9 @@ Full statements and their histories are in `HANDOVER.md`; this is the index.
 ```
 
 Stages `Release/Varied Pawns/` containing only `About/`, `Languages/`,
-`Assemblies/PawnVarianceMod.dll` and `LICENSE` — 7 files. The copy list is an allowlist, so a new
+`Assemblies/PawnVarianceMod.dll` and `LICENSE` — 8 files. (It was 7 before the first Workshop
+upload; `About/PublishedFileId.txt` is the eighth, and it is what makes every later upload an
+*update* to the existing item rather than a new one.) The copy list is an allowlist, so a new
 folder stays out of the release until it is added to `$ShipDirs`. The staging folder is gitignored
 and rebuilt from scratch on every run — never hand-edit it. **Point the Steam uploader at the staged
 folder, not at the repo root**; the root would ship `docs/`, `temp/`, `Source/obj/` and

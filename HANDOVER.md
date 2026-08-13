@@ -9,8 +9,11 @@ already been argued out, and what is still open. **It is not a changelog** — g
 of what changed when. Nothing here should be phrased as "on date X we did Y"; if a fact only
 matters as history, it belongs in a commit message.
 
-The mod is **released**. There are existing users and backward-compatibility obligation —
-add migration shims.
+The mod is **released** — Steam Workshop item
+[`3782564554`](https://steamcommunity.com/sharedfiles/filedetails/?id=3782564554), version 1.0.0.
+There are existing users and a backward-compatibility obligation: a saved config that breaks is now
+a bug report rather than a "reset it", so migration shims are on the table and should be weighed on
+their merits. Bump `<modVersion>` in `About.xml` before every re-upload.
 
 ---
 
@@ -1874,10 +1877,13 @@ logged nothing".
 ### Blocking — do before the item goes public
 
 1. **Read what is actually in the release folder, file by file. Redo it against whatever is staged
-   at upload time** — the audit is of an artifact, not of the script. The ship list is **7 files**:
+   at upload time** — the audit is of an artifact, not of the script. The ship list is **8 files**:
    `LICENSE`, `About\{About,LoadFolders}.xml`, `About\{ModIcon,Preview}.png`,
-   `Languages\English\Keyed\VariedPawns.xml`, and one DLL. **`Assemblies\` must contain exactly one
-   DLL — Harmony is referenced, never bundled**, because bundling it breaks other mods.
+   `About\PublishedFileId.txt`, `Languages\English\Keyed\VariedPawns.xml`, and one DLL. **It was 7
+   until the first Workshop upload** — `PublishedFileId.txt` arrived with it and is now the mod's
+   Steam identity, so an audit that still expects 7 is reading a stale number, not finding a
+   defect. **`Assemblies\` must contain exactly one DLL — Harmony is referenced, never bundled**,
+   because bundling it breaks other mods.
 
    It found that **staged content goes stale silently**, which became item 17.
 2. ~~**Decide whether the debug tools ship.**~~ **SETTLED — they ship.** Moved to "Settled and not
