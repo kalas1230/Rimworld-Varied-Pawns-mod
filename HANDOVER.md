@@ -9,8 +9,8 @@ already been argued out, and what is still open. **It is not a changelog** — g
 of what changed when. Nothing here should be phrased as "on date X we did Y"; if a fact only
 matters as history, it belongs in a commit message.
 
-The mod is **unreleased**. There are no existing users and no backward-compatibility obligation —
-do not add migration shims. If a saved config breaks, the fix is to reset it.
+The mod is **released**. There are existing users and backward-compatibility obligation —
+add migration shims.
 
 ---
 
@@ -1873,23 +1873,13 @@ logged nothing".
 
 ### Blocking — do before the item goes public
 
-1. **Read what is actually in the release folder, file by file.** Done once, and it must be redone
-   against whatever is staged at upload time — the audit is of an artifact, not of the script.
-   Every file was accounted for and all are legitimate: `LICENSE` (MIT, identical to repo),
-   `About\LoadFolders.xml` (1.6 only, agreeing with `supportedVersions`), `About\ModIcon.png`
-   (256×256), `About\Preview.png` (1024×576, 105 KB — Steam's cap is 1 MB), `About\About.xml`, and
-   one DLL. **`Assemblies\` contains exactly one DLL — Harmony is referenced but not bundled**,
-   which is the check that matters there, because bundling it breaks other mods. The count is now
-   **7**, not the 6 recorded when this was first audited: `Languages\English\Keyed\VariedPawns.xml`
-   joined the ship list with item 9.
+1. **Read what is actually in the release folder, file by file. Redo it against whatever is staged
+   at upload time** — the audit is of an artifact, not of the script. The ship list is **7 files**:
+   `LICENSE`, `About\{About,LoadFolders}.xml`, `About\{ModIcon,Preview}.png`,
+   `Languages\English\Keyed\VariedPawns.xml`, and one DLL. **`Assemblies\` must contain exactly one
+   DLL — Harmony is referenced, never bundled**, because bundling it breaks other mods.
 
-   **What the audit actually caught, and the reason to keep doing it: staged content goes stale
-   silently.** The staged DLL was 142,848 bytes built at 09:29 while the repo's was 150,016 built
-   at 10:01, after the last `Source\` edit — so the staging, and `Release\VariedPawns-1.0.0.zip`
-   beside it, were a build older than the code. `build-release.ps1`'s stale-build check compares
-   the *repo* DLL against `Source\` and only runs when you re-stage; **nothing invalidates staging
-   that already exists.** Treat the staging folder as a build output with no freshness guarantee:
-   re-run the script immediately before uploading, never upload what happens to be sitting there.
+   It found that **staged content goes stale silently**, which became item 17.
 2. ~~**Decide whether the debug tools ship.**~~ **SETTLED — they ship.** Moved to "Settled and not
    to be relitigated"; the reasoning is under *Why the debug tools ship*. Do not reopen this as an
    open question.
@@ -1901,157 +1891,98 @@ logged nothing".
 4. ~~**Have an AI read the published artifact, not the repo.**~~ **DONE, and it found a false claim
    in the listing — the exact category this item existed to catch.**
 
-   **The finding.** Both `About.xml` and `docs/workshop-description.txt` claimed, in bold, *"It
-   changes how many traits a pawn gets — never which ones. Trait selection stays entirely
-   vanilla's."* **The second half is false.** `TraitVarianceApplier.cs:106` removes traits with
-   `removable.RandomElement()` whenever the rolled target is below the pawn's current count, which
-   is the mod choosing which trait a pawn loses. The code's own comment at line 93 says so:
-   *"Uniform random choice: vanilla's picker has no concept of a 'better' trait."* Only the
-   ADDITION path delegates to vanilla (`GenerateTraitsFor`, line 76).
+   **The finding.** The listing claimed in bold that *"Trait selection stays entirely vanilla's."*
+   **False:** `TraitVarianceApplier.cs:106` drops a trait with `removable.RandomElement()` when the
+   pawn is over target, which is the mod choosing. Only the ADDITION path delegates to vanilla. The
+   claim's *intent* — nothing is scored or favoured by quality — was true, so it was reworded
+   rather than dropped: new traits come from vanilla's picker, over-target pawns drop one at
+   random, forced traits are never removed.
 
-   The claim's *intent* — that nothing is scored or favoured by quality — is true and worth
-   keeping; the absolute was the defect. Reworded in all three copies to say new traits come from
-   vanilla's picker, over-target pawns drop one at random, and forced traits are never removed.
+   **Why it survived everything else, and the reason to re-run this before any listing change:** it
+   is a claim about code made in a text file, and **nothing compares prose to behaviour** — not the
+   build, the envelope gate, an in-game action, or a diff review. This is the only review here that
+   reads the artifact instead of the diff, and it found something on the first pass.
 
-   **Why it survived everything else:** it is a claim about the code made in a text file. No build,
-   no envelope gate, no in-game action and no diff review can see it, because nothing compares
-   prose to behaviour. **This is the only review this project has run that reads the artifact
-   instead of the diff, and it found something on the first pass — re-run it before any future
-   listing change.**
+   **Three of the five findings did not survive cite-checking**, two naming a file the reviewer was
+   never given. Cite-check every verdict.
 
-   Load-bearing claims that were checked and DO hold: add mid-save, remove mid-save (no
-   `GameComponent`/`WorldComponent`/`MapComponent`/`ThingComp`/`HediffDef` anywhere; the settings
-   are a config file, not save data), children off by default, eight presets all reachable, Biotech
-   optional, the `18` pip figure, 1.6-only consistency across `About.xml`/`LoadFolders.xml`/listing,
-   and every `{0}` placeholder count against its `.Translate(...)` call site.
-
-   **Three of the five findings did not survive cite-checking** — two named a file the reviewer was
-   never given, and one misread a `Count > 0` guard as missing. Cite-check every verdict; that rule
-   is in this document for a reason and it paid again here.
-
-   **Hazard found while fixing it: the listing text existed in THREE places** — `About.xml`
-   (short, in-game), `docs/workshop-description.txt` (the source of truth per the publish
-   sequence), and `Release/upload/description-paste.txt` (a gitignored paste-ready duplicate). All
-   three were corrected at the time. **Change a claim in one, change it in the other.**
-
-   > **The third copy is no longer hand-maintained, because leaving it that way cost exactly what
-   > this note predicted.** `build-release.ps1` now *derives* `description-paste.txt` from
-   > `docs/workshop-description.txt` on every `-Build` (everything below the `====` divider,
-   > written UTF-8 **without** a BOM), and `-Check` fails when the two disagree.
-   >
-   > What the hand-maintained copy had drifted into by 2026-08-13, found only because someone
-   > diffed it: **22 mojibake sequences against 1 surviving clean em dash** — every `—`
-   > double-encoded to `â€"` by a UTF-8 file being written back as Windows-1252 — plus a BOM that
-   > pastes into Steam's description box as an invisible leading character. Item 4's corrected
-   > trait paragraph *was* present, so the claim was right and the punctuation was wreckage.
-   > **Nothing would have caught this**: it is a gitignored file, no gate read it, and it looks
-   > fine in an editor that guesses the encoding.
-   >
-   > **Two copies remain, and they still need manual agreement** — `About.xml`'s short description
-   > and `docs/workshop-description.txt`. Only the derived third one is now safe.
+   > **The listing text lived in three places; the third is now derived.** `build-release.ps1`
+   > generates `Release/upload/description-paste.txt` from `docs/workshop-description.txt` on every
+   > `-Build`, and `-Check` fails when they disagree. It was added after the hand-maintained copy
+   > was found carrying **22 mojibake sequences and a BOM** — a gitignored file no gate read, which
+   > looks fine in any editor that guesses the encoding. **Two copies still need manual agreement:**
+   > `About.xml`'s short description and the workshop source.
 
 17. ~~**Close the stale-staging hole.**~~ **DONE — `build-release.ps1 -Check` now exists.**
 
-    **The hole.** `Release\Varied Pawns\` could ship code older than the repo with nothing to
-    catch it. Found by item 1's audit: the staged DLL was 142,848 bytes built at 09:29 while the
-    repo's was 150,016 built at 10:01, after the last `Source\` edit — so the staging folder, and
-    `Release\VariedPawns-1.0.0.zip` beside it, were a build older than the code. `Release\` is
-    gitignored, so nothing in git tracked it either. The old stale-build check compared the
-    **repo** DLL against `Source\*.cs` and ran **only when you re-staged**: it made staging correct
-    at the moment of creation and said nothing afterwards, while staging sat indefinitely in the
-    exact folder the Steam uploader is pointed at.
+    **The hole.** `Release\` is gitignored and staging has an indefinite shelf life, so the folder
+    the Steam uploader points at could ship code older than the repo with nothing to catch it. The
+    old check compared the *repo* DLL against `Source\` and ran **only when you re-staged** — it
+    made staging correct at the moment of creation and said nothing afterwards.
 
-    **The fix.** `-Check` validates the existing staging against the current repo without
-    rebuilding or restaging anything, and reports STALE / MISSING / UNEXPECTED per file plus the
-    repo's own DLL-vs-source staleness. It compares **every shipped input by SHA-256**, not just
-    the DLL — and that breadth is the load-bearing part, because the old check could only ever see
-    `Source\`. On its first run against the then-current staging it correctly caught three things:
-    a stale `About.xml`, a stale DLL, and a **completely missing `Languages\` folder** — a shipped
-    input that did not exist when the DLL-only check was written, and which no amount of
-    DLL-watching would ever have found.
+    **The fix.** `-Check` validates existing staging against the repo without rebuilding anything,
+    reporting STALE / MISSING / UNEXPECTED per file plus the repo's own DLL-vs-source staleness. It
+    compares **every shipped input by SHA-256**, not just the DLL, and that breadth is the
+    load-bearing part: on its first run it caught a stale `About.xml`, a stale DLL, and a
+    **completely missing `Languages\` folder** — a shipped input no amount of DLL-watching would
+    ever have found. Both the stager and `-Check` read one `Get-ExpectedShipMap`, so the file set
+    cannot drift between what is copied and what is verified.
 
-    Both the stager and `-Check` read one `Get-ExpectedShipMap`, so the file set cannot drift
-    between what is copied and what is verified.
+    **`Release\staging.stamp.json`** records commit, dirty flag, version, file count and DLL hash.
+    It lives outside `Release\Varied Pawns\` because everything inside that folder gets uploaded
+    and a build stamp is not player content — **do not tidy it into the mod folder.** A missing
+    stamp is a warning, not a blocker; `-Check` re-derives everything from the repo.
 
-    **`Release\staging.stamp.json`** records commit, dirty flag, mod version, file count and DLL
-    hash. It lives in `Release\`, deliberately **outside** `Release\Varied Pawns\`, because
-    everything inside the staging folder gets uploaded and a build stamp is not player content.
-    **Do not tidy it into the mod folder.** The hash comparison does not depend on it — `-Check`
-    re-derives everything from the repo — so a missing stamp is a warning, not a blocker.
-
-    **The process rule still stands, and is now enforceable: run `-Check` immediately before every
-    upload, or just re-stage.** Never upload what happens to be sitting there. The failure is
-    silent and expensive — a Workshop item running code that matches no commit and no gate result
-    is unfalsifiable from a bug report.
+    **The process rule, now enforceable: run `-Check` immediately before every upload, or just
+    re-stage.** A Workshop item running code that matches no commit and no gate result is
+    unfalsifiable from a bug report.
 
 ### Compatibility — the modpack pass
 
-5. ~~**Run the mod inside the Progression Modpack.**~~ **DONE — clean.** The mod was run under the
-   large collection installed on this machine (1376 workshop items), which is the first time it has
-   been exercised against anything but a modest active list. **No load errors, no def conflicts, and
-   no sign of a Harmony collision.**
+5. ~~**Run the mod inside the Progression Modpack.**~~ **DONE — clean** under the 1376-item
+   collection, the first time it has been exercised against anything but a modest active list. No
+   load errors, no def conflicts, no sign of a Harmony collision.
 
-   The collision surface is the generation postfix: any other mod patching
-   `PawnGenerator.GeneratePawn` or `GenerateSkills` can silently win, and **the symptom is pawns
-   that look vanilla rather than an error** — which is why the instrument is
-   `Roll pawns and dump distribution` rather than the log. The shipped presets' measured spread did
-   **not** collapse toward `Faithful` under the modpack, so nothing upstream is overwriting this
-   mod's work.
+   **Re-run this if the postfix or its patch target changes, and read the dump, not the log.** The
+   collision surface is the generation postfix: another mod patching `PawnGenerator.GeneratePawn`
+   or `GenerateSkills` can silently win, and **the symptom is pawns that look vanilla rather than
+   an error** — a clean startup with vanilla-ish colonists, which every other gate here is blind
+   to. The presets' measured spread did not collapse toward `Faithful`, so nothing upstream is
+   overwriting this mod's work.
+6. ~~**Click the Add Faction Override button under that modpack.**~~ **DONE — usable at modpack
+   scale, and it does not clip.** `Verse.FloatMenu` columning and scrolling past
+   `MaxScreenHeightPercent` has now been watched rather than read out of assembly metadata, which
+   is what the item existed for: the sort and de-duplication had landed without the menu ever being
+   opened, because a `FloatMenu` does not survive a synthetic click. The searchable-`Window`
+   fallback is **not needed**.
 
-   **Re-run this if the postfix or its patch target ever changes**, and read the dump, not the log:
-   a mod that wins the patch produces a clean startup and vanilla-looking colonists, which is
-   exactly the shape of defect every gate in this document is blind to.
-6. ~~**Click the Add Faction Override button under that modpack and watch what the menu does.**~~
-   **DONE — opened by hand at modpack scale. It is usable and it does not clip**, which is what the
-   item existed to establish: the sort and de-duplication landed on 2026-08-12 *without the menu
-   ever being opened in game* — a `FloatMenu` does not survive a synthetic click, so the bridge
-   cannot verify it and the change rested on the tab drawing without exceptions. `Verse.FloatMenu`
-   columning and scrolling past `MaxScreenHeightPercent` (0.9) has now been watched happening
-   rather than read out of the shipped assembly's metadata. The searchable-`Window` fallback this
-   item held in reserve is **not needed**.
+   **Expect far fewer factions than the ~499 on-disk figure, and do not "fix" it.** The menu is
+   `DefDatabase<FactionDef>.AllDefs` (`PawnVarianceSettings.cs:1168`), which holds only the defs of
+   **mods active in the current run**, never abstract ones. An override keyed to an unloaded def
+   could not resolve anyway, and `LabelForKey` keeps such a row rendering and removable.
 
-   **The one surprise, and it is correct behaviour: far fewer factions appear in the menu than the
-   ~499 figure above implies.** That number was counted **on disk**, across all 1376 installed
-   workshop items. The menu is built from `DefDatabase<FactionDef>.AllDefs`
-   (`PawnVarianceSettings.cs:1168`), and `DefDatabase` holds only the defs of **mods active in the
-   current run**, never the abstract ones (35 of the 534 tags). An installed-but-inactive mod's
-   factions are therefore absent by construction. **Expect the on-disk count and the menu length to
-   disagree, and do not "fix" it** — an override keyed to a def that is not loaded could not
-   resolve against anything anyway, and `LabelForKey` already keeps such a row rendering and
-   removable if the mod is later disabled.
-
-   > Note the faction menu applies **no pawn-spawning filter** — it is a straight `DefDatabase`
-   > sweep. The "humanlike races something spawns" traversal is the **race** menu's, and only the
-   > race menu's; see *The Add-menu filter has two halves* above. The two menus narrow their lists
-   > for different reasons and should not be reasoned about together.
+   > The faction menu applies **no pawn-spawning filter** — that traversal is the **race** menu's
+   > alone (see *The Add-menu filter has two halves*). The two narrow their lists for different
+   > reasons and should not be reasoned about together.
 
 ### Worth checking, lower stakes
 
 7. ~~**Install it the way a player does, from the zip, with nothing else but Harmony.**~~ **DONE.**
-   Ran from `Release\VariedPawns-1.0.0.zip` extracted straight into `Mods\`, with the dev copy
-   removed, `ModsConfig.xml` cut to Harmony + core + the five DLCs, and
-   `Config\Mod_PawnVarianceMod_PawnVarianceMod.xml` **deleted** so the first-run path actually ran.
-   Mod loads as `Varied Pawns` from the zip folder. **`rimbridge/list_logs` reported a clean
-   startup and that reading was WRONG — see item 20.** Read `Player.log`, which showed four
-   `No active language!` errors this check should have caught. Defaults
-   seeded correctly with no config present: `activeProfileId preset_faithful`,
-   `hostileProfileId preset_distinct`, `hasInitializedDefaultOverrides true`, 10 faction and 10
-   xenotype overrides, 0 race overrides (correct — the race list ships empty on purpose), and
+   Ran from the zip extracted into `Mods\`, dev copy removed, `ModsConfig.xml` cut to Harmony +
+   core + DLCs, and the config file **deleted** so the first-run path actually ran. Defaults seeded
+   correctly with no config present — `preset_faithful` / `preset_distinct`, 10 faction and 10
+   xenotype overrides, 0 race overrides (correct, the race list ships empty), and
    `applyVarianceToChildren false`, so **Rule 4's default holds on a clean install.**
+   `brrainz.rimbridgeserver` was left active as the only way to observe anything; it patches
+   nothing in pawn generation.
 
-   **Deviation, stated rather than hidden:** `brrainz.rimbridgeserver` was left active, because it
-   is the only way to observe anything. It patches nothing in pawn generation. Everything else was
-   absent.
+   **This check signed off on an empty `rimbridge/list_logs` and that reading was WRONG** — see
+   item 20. `Player.log` had four `No active language!` errors it should have caught.
 
-   **Finding, and it is a non-issue on purpose:** the settings file is **never written** on a
-   first run — not on settings-window close, not on quit. It does not matter, and the reason is
-   worth keeping so nobody "fixes" it: `PopulateDefaultOverrides` early-returns on
-   `hasInitializedDefaultOverrides` and otherwise re-seeds the same deterministic default set every
-   launch (`PawnVarianceSettings.cs:173-181`), so an absent file produces byte-identical behaviour
-   to a written one. RimWorld writes the file the first time the player closes the settings window
-   through its own path. Not chased further: the bridge's `close_window` and `games_stop` both
-   bypass RimWorld's normal `PreClose`/quit write, so this is an artifact of how the check was
-   driven, not a mod defect — every other mod on this machine has its `Mod_*.xml`.
+   **Non-issue worth recording so nobody "fixes" it:** the settings file is never written on a
+   first run. `PopulateDefaultOverrides` re-seeds the same deterministic set every launch
+   (`PawnVarianceSettings.cs:173-181`), so an absent file behaves identically to a written one, and
+   RimWorld writes it the first time the player closes the settings window through its own path.
 8. ~~**Verify the two removal claims, because the listing makes them in bold.**~~ **DONE, both
    directions, end to end on the shipping zip build.**
 
@@ -2072,18 +2003,14 @@ logged nothing".
    translator can contribute without a refactor. Doing it before release rather than after is the
    whole point — adding keys rewrites every UI string at once.
 
-   **The code work is DONE.** 138 keys across `VarianceProfile.cs`, `ProfileEditorTab.cs` and
-   `PawnVarianceSettings.cs`; builds clean with zero warnings and the checker green.
-   `GrowUpVariance.cs` and `GrowthUpPatch.cs` were checked and contain no player-facing text at
-   all, only `TraitTrace` diagnostics; `Dialog_RenameProfile.cs` has no literals.
-   **What remains is the in-game pass, and only that.**
+   **The code work is DONE** — 138 keys, clean build, checker green.
 
-   **Scope rules, so the second half matches the first:** `DebugActions.cs` is excluded (DevMode
-   only, and it is the harness, not player content). `Scribe` node names and defNames are never
-   touched — renaming those orphans saved configs. `SettingsCategory()` stays untranslated because
-   it is the mod's name and must agree with `About.xml`'s `<name>`.
+   **Scope rules:** `DebugActions.cs` is excluded (DevMode harness, not player content). `Scribe`
+   node names and defNames are never touched — renaming those orphans saved configs.
+   `SettingsCategory()` stays untranslated because it is the mod's name and must agree with
+   `About.xml`'s `<name>`.
 
-   **Three traps this work has already hit, all of which recur in the second half:**
+   **Four traps this work hit, all of which recur in any future string work:**
    - **Never call `.Translate()` in a static field initializer.** Every preset is a
      `static readonly` field, which initialises at type-init, potentially before
      `LanguageDatabase` loads — that bakes the raw key text in permanently. Presets now expose
@@ -2111,70 +2038,42 @@ logged nothing".
    side. It cannot see keys built by concatenation, so the derived `VP_Preset_*` keys are asserted
    at startup by `VarianceProfiles.VerifyPresetKeys()` instead.
 
-   **The in-game pass is DONE at the mechanism level, and it found a defect — item 19.** What was
-   established against the shipping zip build, and how, because "open every tab and look" turned out
-   to be the weaker half of this check:
+   **The in-game pass is DONE at the mechanism level, and it found item 19.** Every player-facing
+   key is accounted for by something that runs: exactly **three** `.Translate()` call sites use a
+   non-literal key — `("VP_Priority_" + p)` and `LabelKey`/`DescriptionKey` — and both families are
+   asserted at startup by `VerifyPriorityKeys()` / `VerifyPresetKeys()`, which `Log.Error` on a
+   miss. Both passed, so the XML parsed and `Languages\` shipped. **Confirm that in `Player.log`,
+   not through the bridge** — this pass originally asserted it from an empty `rimbridge/list_logs`,
+   which is blind to the startup window and was concealing four real errors (item 20).
 
-   - **Every player-facing key is now accounted for by something that runs.** There are exactly
-     **three** `.Translate()` call sites in the mod whose key is not a string literal —
-     `("VP_Priority_" + p)` (`PawnVarianceSettings.cs:28`) and `LabelKey`/`DescriptionKey`
-     (`VarianceProfile.cs:246-247`). Both families are asserted by `VerifyPriorityKeys()` and
-     `VerifyPresetKeys()`, which run from `PawnVarianceStartupChecks` and `Log.Error` on a miss.
-     Both passed, so `VariedPawns.xml` parsed (the double-hyphen trap would have taken every key
-     down at once) and `Languages\` shipped. **Confirm that in `Player.log`, not through the
-     bridge.** This pass originally asserted it from an empty `rimbridge/list_logs`, which is blind
-     to the startup window and was concealing four real errors — see item 20. Everything else is a
-     literal, and
-     `tools\check-translation-keys.ps1` covers those both ways: 117 used, 138 defined, none missing,
-     empty or duplicated.
-   - **What that leaves is genuinely only cosmetic:** whether any translated string *wraps badly or
-     clips* in RimWorld's narrow widgets. That needs eyes on the rendered tabs and could not be done
-     in this pass — another fullscreen game held the OS foreground, and RimWorld only renders while
-     focused, so `take_screenshot` returns a silently stale frame. **This is the last remaining
-     piece of item 9.** Note that `get_ui_layout` and `click_ui_target` *do* work unfocused; it is
-     only screenshots and hover tooltips that do not.
+   **What remains is only cosmetic:** whether any string *wraps badly or clips* in RimWorld's narrow
+   widgets. That needs eyes on the rendered tabs while RimWorld holds the OS foreground — it only
+   renders while focused, so `take_screenshot` otherwise returns a silently stale frame.
+   `get_ui_layout` and `click_ui_target` *do* work unfocused; screenshots and hover tooltips do not.
+   **This is the last remaining piece of item 9.**
 
 19. **DONE — the raw-key trap recurred one layer up, in a SNAPSHOT rather than a static
     initializer. Found by item 9's in-game pass, which is the only thing that could have found it.**
 
-    **The symptom.** `Roll pawns and dump distribution` printed
-    `ACTUALLY RESOLVED TO: VP_Preset_Faithful x1000` — the raw key — while the line directly above
-    it printed `configured active profile: Faithful` correctly, in the same log entry.
+    **The mechanism.** `profileLabel` is a snapshot taken by `RefreshResolved()`, and two of its
+    callers run from `GetSettings<>()` inside the `Mod` constructor — **before `LanguageDatabase` is
+    populated** — so `LabelFor` → `preset.label` → `.Translate()` returned the raw key and baked it
+    in. Making the presets' `label`/`description` lazy properties fixed the static-initializer form
+    of this trap; it did not fix a value copied out of them too early.
 
-    **The mechanism.** `profileLabel` is a snapshot taken by `RefreshResolved()`. Two of its callers
-    run from `GetSettings<>()` inside the `Mod` constructor — the parameterless ctor
-    (`PawnVarianceSettings.cs:161`) and `ExposeData`'s load branch (`:544`) — which is **before
-    `LanguageDatabase` is populated**, so `LabelFor` → `preset.label` → `.Translate()` returned the
-    key and baked it in permanently. Making the presets' `label`/`description` lazy properties fixed
-    the static-initializer version of this trap; it did not fix a value copied out of them too early.
-
-    **Why it mattered despite no player ever seeing it.** Every consumer of `profileLabel` is a
-    diagnostic — `DebugActions`, `TraitTrace`, the passion trace — so there is no player-facing
-    impact, and that is *not* the reason to fix it. `DumpDistribution` compares its resolved label
-    against `LabelFor(activeProfileId)`, computed live and therefore translated. Raw key vs
-    translated label can never be equal, so the action printed
-    `^^ NOT the configured active profile. An override ... outranked it` on **every run**, including
-    runs where nothing overrode anything. That warning exists because a real override once went
-    unnoticed for two consecutive 1000-pawn runs (see the comment above `resolved` in
-    `DumpDistribution`). **An always-on false alarm trains the reader to ignore precisely the
-    warning it was added to raise** — it had turned the project's only generator-vs-reality
-    instrument into one that cries wolf.
-
-    Custom profiles were never affected: `LabelFor` returns `custom.name` for them, which is not a
-    key. **That is why the runs recorded in this document look clean** — they resolved to
-    `Custom 1`. Presets were the broken case, and no preset-resolved dump had been run since the
-    translation extraction landed.
+    **Why it mattered though no player saw it.** Every consumer of `profileLabel` is a diagnostic,
+    but `DumpDistribution` compares it against `LabelFor(activeProfileId)`, computed live and
+    therefore translated. Raw key and translated label can never be equal, so the action printed
+    `^^ NOT the configured active profile` on **every run** — a warning that exists because a real
+    override once went unnoticed for two consecutive 1000-pawn runs. **An always-on false alarm
+    trains the reader to ignore precisely the warning it was added to raise**, which had turned the
+    only generator-vs-reality instrument here into one that cries wolf. Custom profiles were never
+    affected (`LabelFor` returns `custom.name`), which is why earlier recorded runs look clean.
 
     **The fix:** `RefreshResolvedLabels()` re-snapshots the two labels from
-    `PawnVarianceStartupChecks`, which is `[StaticConstructorOnStartup]` and therefore runs after
-    language data is loaded — the same correctly-timed hook the two key verifiers already use, and
-    whose comment states this exact invariant. Only the labels are re-taken; the resolved *values*
-    are untouched.
-
-    **Verified:** the dump now reads `ACTUALLY RESOLVED TO: Faithful x1000 (100.0%)` with no false
-    override warning, `GENERATOR vs MODEL [Faithful]` OK (delta +0.057 against tolerance 0.156), and
-    `Verify Best-of-N` re-run afterwards is **32/32 PASS with output bit-identical to the pre-fix
-    run**, confirming the change touches nothing in the scoring path.
+    `PawnVarianceStartupChecks`, which is `[StaticConstructorOnStartup]` and so runs after language
+    data loads. Only the labels are re-taken; resolved *values* are untouched. Verified by a clean
+    dump with no false warning, and `Verify Best-of-N` bit-identical to the pre-fix run.
 
     **The reusable lesson:** the translation pass's own documented rule — *never call `.Translate()`
     in a static field initializer* — is too narrow. The real rule is **never store the result of
@@ -2186,27 +2085,23 @@ logged nothing".
 20. **DONE — four `Log.Error`s in every player's log on every startup, and the in-game harness
     could not see them. Found by the owner reading `Player.log` after item 19 was called complete.**
 
-    **The defect.** `PawnVarianceSettings`' ctor (`:161`) and `ExposeData` (`:544`) both run from
-    `GetSettings<>()` in the `Mod` constructor, and both reach `LabelFor` → `VarianceProfile.label`
-    → `LabelKey.Translate()`. At that point **no language is loaded at all**, and RimWorld's
-    `Translator.TryTranslate` does not fail quietly — it calls
-    `Log.Error("No active language! Cannot translate from key ...")`. Result: four red errors
-    (`VP_Preset_Faithful` and `VP_Preset_Distinct`, once from the ctor and once from `ExposeData`)
-    in `Player.log` on **every single launch**, for every player.
+    **The defect.** The settings ctor and `ExposeData` both run from `GetSettings<>()` in the `Mod`
+    constructor and both reach `LabelKey.Translate()`. At that point **no language is loaded at
+    all**, and RimWorld's `Translator.TryTranslate` does not fail quietly — it calls
+    `Log.Error("No active language! Cannot translate from key ...")`. Four red errors in
+    `Player.log` on **every launch, for every player**.
 
     **Item 19's fix did not address this and was never going to.** Re-snapshotting the label later
-    fixes the *stale value*; it does not stop the *early call*. Both defects came from the same
+    fixes the *stale value*; it does not stop the *early call*. Both came from the same
     lazy-property assumption, and fixing the visible half first is what made the other half look
-    handled. Verified the hard way: the errors were still present, all eight lines, in the
-    `Player.log` written by the item-19 build.
+    handled — the errors were still all there in the `Player.log` written by the item-19 build.
 
-    **The fix.** `VarianceProfile.label` and `.description` now guard on
-    `LanguageDatabase.activeLanguage == null` and return `devName` / `""` in that state, so nothing
-    calls `.Translate()` before a language exists. `devName` is the right stand-in rather than a
-    placeholder: it *is* the preset's untranslated English name. `RefreshResolvedLabels()` (item 19)
-    then re-snapshots the real translated label at `[StaticConstructorOnStartup]`. The two fixes are
-    complementary — keep both. **Verified: `Player.log` now contains zero `No active language`
-    lines and zero `PawnVariance` entries across a full 18-mod startup.**
+    **The fix.** `VarianceProfile.label`/`.description` guard on
+    `LanguageDatabase.activeLanguage == null` and return `devName` / `""`, so nothing calls
+    `.Translate()` before a language exists; `RefreshResolvedLabels()` (item 19) then re-snapshots
+    the real label at `[StaticConstructorOnStartup]`. **The two fixes are complementary — keep
+    both.** Verified: zero `No active language` lines and zero `PawnVariance` entries on a full
+    startup.
 
     > **A test that cannot fail is not a test, and this one could not.** `devName` and the English
     > label are the *same string* ("Faithful"), so **no ordinary English run can distinguish "the
@@ -2255,45 +2150,31 @@ logged nothing".
     line of `<description>` that asks for RimWorld version, mod list, and expected vs actual. The
     Workshop description already carried the same ask.
 12. ~~**Measure what the mod costs at generation time under a heavy load order.**~~ **CLOSED BY
-    DECISION, not by measurement — and the distinction is the point of writing it this way.** The
-    owner's call, taken 2026-08-13 with the residual risk below stated and accepted. No timing
-    instrument was built and none exists: there is no `Stopwatch` anywhere in `Source\`.
+    DECISION, not by measurement.** The owner's call, with the residual risk accepted. **No timing
+    instrument was built and none exists** — there is no `Stopwatch` anywhere in `Source\`, so do
+    not read this entry as a benchmark.
 
-    **What the decision rests on.** Item 5's `Roll pawns and dump distribution` run drove **1000
-    real generations through the postfix under the 1376-item modpack** and completed without
-    anything the owner noticed as a cost. That is a genuine datum and it is the right order of
-    magnitude: the postfix is arithmetic on one pawn, with no allocation-heavy or def-scanning work
-    in it.
+    It rests on item 5's dump driving 1000 real generations through the postfix under the 1376-item
+    modpack with no noticed cost, plus the postfix being arithmetic on one pawn. What that does
+    *not* establish: nothing was timed, a 1376-mod list cannot isolate this mod's share from every
+    other generation patch, and **neither case the item named was run** — a 40-pawn raid and a
+    settlement-map load, both *bursts*, which is what a player feels as a hitch and exactly what a
+    steady loop is least likely to expose.
 
-    **What it does NOT establish, so nobody later mistakes this entry for a benchmark:**
-    - **It was never timed.** "Not that bad" is a wall-clock impression of a bulk loop, not a
-      per-pawn figure, and nothing recorded a number.
-    - **It cannot isolate this mod's share.** Under a 1376-mod list every other pawn-generation
-      patch runs in the same span, so a cost here would be buried in a much larger total.
-    - **Neither case item 12 actually named was run** — a 40-pawn raid and a settlement-map load.
-      Those are *bursts*, and a burst is what a player feels as a hitch; a steady 1000-pawn loop is
-      the case most likely to look fine when a burst does not.
-
-    **Reopen if a player reports a hitch on raid spawn or map load** — that is the symptom this
-    would have caught, and it is cheap to diagnose once reported. Reopen also if the postfix ever
-    stops being pure arithmetic: a def lookup, a `DefDatabase` scan or an allocation in that path
-    changes the shape of the argument above, which is the only thing holding this item shut.
+    **Reopen on a reported hitch at raid spawn or map load, or if the postfix stops being pure
+    arithmetic** — a def lookup, `DefDatabase` scan or allocation there removes the only argument
+    holding this shut.
 13. **Rewrite `README.md` for the person the Workshop link sends there — DONE except for one line.**
-    The restructure did not actually need the Workshop item to exist; only the link does. Resolved
-    the way the item suggested: a player-facing header above the developer material rather than
-    moving the developer material into `docs/`. The first screen now carries what the mod does,
-    `About/Preview.png`, how to install without Steam, requirements, where bugs go, and the licence.
-    Everything below `# Developer documentation` is unchanged in purpose.
+    A player-facing header sits above the developer material: what the mod does, the preview image,
+    how to install without Steam, requirements, where bugs go, the licence.
 
-    **The one outstanding line is a marked `TODO` in the *Installing* section: paste the Workshop
-    URL there after the first upload.** That is all that is left of this item.
+    **The one outstanding line is a marked `TODO` in *Installing*: paste the Workshop URL after the
+    first upload.**
 
-    Three things in the developer half were **wrong** by the time this was done, all invalidated by
-    the work above it, and all now corrected: the scratch-file convention still described
-    `.git/info/exclude` (item 16 moved it), the shipped file list still said `About/`, one DLL and
-    `LICENSE` (item 9 added `Languages/`, making it 7 files), and the release section predated
-    `-Check` (item 17). **Worth noting as a pattern: `README.md` describes the repo's mechanics, so
-    changing the mechanics silently ages it, and nothing checks that.**
+    Three things in the developer half were **wrong** by the time this was done, each invalidated by
+    other work here (the scratch-file convention, the shipped file list, the release section).
+    **`README.md` describes the repo's mechanics, so changing the mechanics silently ages it, and
+    nothing checks that.**
 14. ~~**Decide how much of this repo should be public.**~~ **SETTLED — all of it, as it stands.**
     `HANDOVER.md`, `TRAIT-DESIRABILITY-RESEARCH.md` and all 52 files under `docs/` stay tracked and
     public. The thing being chosen deliberately rather than drifted into: **the internal record is
@@ -2313,39 +2194,34 @@ logged nothing".
     `git check-ignore -v`, which now reports `.gitignore` as the source.
 
 18. **DONE, as part of item 9 — the strings were edited on the way into `Languages\`, not copied.**
-    The rules below were applied to all 138 keys; what follows stands as the standard for any new
-    string. Three changes worth knowing about, because they are content and not length:
-    - **The tooltips referred to controls that do not exist.** They said "Skill noise" and
-      "Passion noise" throughout, while the sliders on screen are labelled "Skill spread" and
-      "Passion spread". Unified on *spread*, matching what the player actually sees.
-    - **The confirmation dialogs were roughly halved.** "Are you sure you want to delete all
-      faction overrides? This will clear all custom faction profile assignments." became "Delete
-      all faction overrides? Every custom faction assignment will be cleared."
-    - **"Reset this profile to Faithful?" now substitutes the preset name** from
-      `VarianceProfiles.VanillaLike` rather than hardcoding it, so the sentence cannot drift from
-      the profile the code actually resets to, and a translator gets the localised name free.
+    Three content changes worth knowing: tooltips said "Skill noise"/"Passion noise" while the
+    sliders read "spread" (unified on *spread*); the confirmation dialogs were roughly halved; and
+    "Reset this profile to Faithful?" now substitutes the preset name from
+    `VarianceProfiles.VanillaLike` rather than hardcoding it, so the sentence cannot drift and a
+    translator gets the localised name free.
 
-    The original item, kept because the rules are the reusable part:
+    **The rules, which stand as the standard for any new string:**
 
-    **Edit the UI strings for length while they move into `Languages\`.** The extraction in item 9
-    rewrites every player-visible string in the mod exactly once, and that is the moment to fix
-    the text itself rather than transcribing it. **Do not copy strings across verbatim.** Much of
-    the current text was written as explanation-in-place — it argues the scoring model at the
-    player inside a checkbox tooltip — and RimWorld's settings widgets are narrow, so long labels
-    wrap badly or clip. Rules being applied:
-
-    - A label names the thing. The tooltip explains it. Anything in a label past about five words
+    - A label names the thing; the tooltip explains it. Anything in a label past about five words
       is usually a sentence that belongs in the tooltip.
-    - Cut text that describes the mod's internals rather than the player's choice. "Best-of-N",
-      "envelope", "composite" and similar are this document's vocabulary, not a player's.
+    - Cut text describing the mod's internals rather than the player's choice. "Best-of-N",
+      "envelope" and "composite" are this document's vocabulary, not a player's.
     - Say what the setting does to pawns, not what the code does.
-    - Keep every warning that is load-bearing — the precedence rules and the "overrides beat this"
-      caption exist because their absence caused real confusion (see item 9's own notes and the
-      General-tab caption added 2026-08-06). **Shorten those; do not drop them.**
+    - **Keep every load-bearing warning** — the precedence rules and the "overrides beat this"
+      caption exist because their absence caused real confusion. **Shorten those; do not drop them.**
+    - Every word kept is a word every future translator pays for, forever. Where a rewrite changes
+      meaning rather than length, it is a content decision — note it rather than slipping it in.
 
-    Translation cost is a real reason to do this now: every word kept here is a word every future
-    translator pays for, forever. Where a rewrite changes meaning rather than length, it is a
-    content decision — note it rather than slipping it in with the mechanical edit.
+    > **Re-audited 2026-08-13, and the strings held up.** 84 labels at a median of **14 characters**,
+    > only nine over 40, and the long tooltips carry information rather than padding. Six wins, none
+    > cutting information: `VP_BestOfNRow` lost a trailing sentence that `VP_BestOfNTip` already
+    > said (102 → 43 chars); `VP_FactionPrecedence` lost Title Case and two of its three
+    > "Overrides"; four others tightened.
+    >
+    > **Deliberately not cut:** the "A TARGET, NOT A LIMIT" paragraph is near-duplicated between the
+    > skill-shift and passion-budget tooltips. **A player reads one tooltip at a time, so each has
+    > to stand alone** — the duplication is only visible in a diff, and removing either copy would
+    > cut information from that control.
 
 ### `About\PublishedFileId.txt` — the trap that splits a mod in two
 

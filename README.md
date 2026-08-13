@@ -8,7 +8,9 @@ Varied Pawns widens that band and hands you the dial.
 Every pawn rolls a single hidden quality value at generation, and that one roll drives its skill
 levels, how many traits it gets and its passion budget **together** — so a lucky pawn is good at
 things *and* driven about them, rather than three unrelated numbers. It changes how many traits a
-pawn gets, never which ones; trait selection stays entirely vanilla's.
+pawn gets, not which ones are worth having: new traits come from vanilla's own picker, and a pawn
+over its target drops one at random. Nothing scores traits or plays favourites, and traits forced by
+a xenotype, gene, backstory or scenario are never removed.
 
 - **Eight presets**, from `Faithful` (close to unmodded) through `Desperate`, `Scavenger`,
   `Specialist`, `Elite` and `Sovereign`, plus `Distinct` and `Wildcard` for spread rather than
@@ -58,10 +60,6 @@ harness and the invariants that are easy to break. The player-facing text lives 
 someone deciding whether to subscribe, not for someone editing `DispersionModel.cs`. Do not merge
 the two.
 
-**Status: unreleased.** Nothing is published. There are no existing users and no
-backward-compatibility obligation — do not add migration shims. If a saved config breaks, the fix is
-to reset it. That stops being true the day this ships.
-
 ---
 
 ## Start here
@@ -87,8 +85,12 @@ Languages/English/     Keyed/VariedPawns.xml — every player-visible string. Sh
 Source/                C# (net472, LangVersion 9). Builds to ..\Assemblies\.
 docs/                  Specs, plans, audit registers.
 docs/tools/            envelope_check.py (the gate) and dispersion_mc.py (Monte Carlo).
+docs/workshop/         The Steam listing image set, and STATUS.md, which records the
+                       upload order and the constraint on each image.
 tools/                 build-release.ps1 (stages the uploadable folder, and -Check
-                       re-validates an existing staging) and check-translation-keys.ps1.
+                       re-validates an existing staging), check-translation-keys.ps1,
+                       and five make-*.ps1 art generators. Edit the scripts, not the
+                       PNGs — every shipped image is generated and reproducible.
 temp/                  Scratch logs. Gitignored.
 zzz-Do-Not-Commit/     Local-only scratch, gitignored. Never committed.
 HANDOVER.md            The durable reference.
@@ -131,8 +133,10 @@ without a warning. See *Verification*.
 
 There is **no unit-test project, and that is a decision rather than a gap** — the interesting code is
 `Pawn`-coupled, so an out-of-game double would test a copy of the logic instead of the logic. The
-harness is one offline tool plus two dev-mode debug actions, all under the `Varied Pawns` category
-(RimWorld gates the debug menu behind `Prefs.DevMode`, so players never see them).
+harness is one offline tool plus six dev-mode debug actions, all under the `Varied Pawns` category
+(RimWorld gates the debug menu behind `Prefs.DevMode`, so players never see them). Two of the six
+are the gates below; the other four dump state — the Add-menu race list, growth-moment state, the
+override resolution matrix, and the dispersion-aware Best-of-N table.
 
 **Offline — run on every scoring change:**
 
@@ -271,9 +275,5 @@ the code.
 
 - **RimWorld 1.6 only.** 1.5 is not built or tested against and is **not claimed** — `About.xml`'s
   `supportedVersions` and `LoadFolders.xml` must keep agreeing about that.
-- Biotech is optional. Only the *xenotype* section is gated on it —
-  `DrawRaceOverridesSection` deliberately is not, because HAR race mods do not depend on Biotech and
-  gating race there would silently kill the feature for its users.
-- The race Add-menu lists humanlike races that at least one `PawnKindDef` spawns. A race created
-  purely in code, with no concrete kind def, is therefore not offered — by design, since the
-  alternative floods the menu with every abstract and unreferenced race def.
+- **Biotech is optional**, and only the *xenotype* section is gated on it. See the
+  `DrawRaceOverridesSection` invariant above for why race deliberately is not.
