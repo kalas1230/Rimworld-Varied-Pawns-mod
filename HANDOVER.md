@@ -1815,13 +1815,11 @@ rather than being deleted,** because commits and notes elsewhere refer to items 
 findings get the next free number wherever they belong topically — 17 sits with the blocking items,
 not at the end.
 
-Closed so far: 1, 3, 4, 5, 6, 7, 8, 11, 15, 16, 17, 18, 19, 20 (done), 2, 14 (decided, moved to
-*Settled and not to be relitigated*), and **12 (closed by decision with the risk accepted, not by
-measurement — read the item, it is not a benchmark)**. **Item 9 is done except for a cosmetic
-wrap/clip pass**; **item 13 is done bar one marked `TODO` line** that needs the Workshop URL.
+Closed so far: 1, 3, 4, 5, 6, 7, 8, 10, 11, 13, 15, 16, 17, 18, 19, 20 (done), 2, 14 (decided,
+moved to *Settled and not to be relitigated*), and **9, 12 (both closed by decision with the risk
+accepted, not by measurement — read the items, neither is a benchmark)**.
 
-**Only 10 is still fully open, and it cannot be done until the item is published.** Nothing on this
-list now requires loading the modpack again.
+**Every item on this list is now closed.** Nothing here requires loading the modpack again.
 
 **The verification that used to be outstanding here — distinguishing a translated preset label from
 its `devName` fallback — is DONE and passed.** See item 20 for the marked-key recipe and the
@@ -2052,11 +2050,23 @@ logged nothing".
    not through the bridge** — this pass originally asserted it from an empty `rimbridge/list_logs`,
    which is blind to the startup window and was concealing four real errors (item 20).
 
-   **What remains is only cosmetic:** whether any string *wraps badly or clips* in RimWorld's narrow
-   widgets. That needs eyes on the rendered tabs while RimWorld holds the OS foreground — it only
-   renders while focused, so `take_screenshot` otherwise returns a silently stale frame.
-   `get_ui_layout` and `click_ui_target` *do* work unfocused; screenshots and hover tooltips do not.
-   **This is the last remaining piece of item 9.**
+   **The cosmetic remainder — whether any string wraps badly or clips in RimWorld's narrow widgets
+   — is CLOSED BY DECISION, not by measurement. No rendered-UI pass was ever run.** The owner's
+   call, with the residual risk accepted: the worst case is one truncated line, and the fix is a
+   one-line XML edit with no code change, no rebuild and no gate to re-run.
+
+   **If it ever needs doing, the scope is four strings on ONE tab, not a tour of all three.** The
+   106 label-ish keys have a median of 21 characters, and the 29 over 40 are almost all
+   `VP_Confirm_*` (drawn in `Dialog_MessageBox`, which wraps freely) or `VP_*Caption*` (caption
+   blocks, also wrap). The genuine clip candidates are the ones drawn through `Widgets.Label` into
+   fixed rows, and all four are in `ProfileEditorTab.cs`: `VP_Fingerprint` (78 chars, one line with
+   `·` separators — the standout), `VP_SkillSpreadDerived` (54), `VP_CountProtectedTraits` (49, a
+   checkbox label) and `VP_BestOfNRow` (43).
+
+   **The instrument constraint that kept this open:** it needs eyes on the rendered tab while
+   RimWorld holds the OS foreground — it only renders while focused, so `take_screenshot` otherwise
+   returns a silently stale frame. `get_ui_layout` and `click_ui_target` *do* work unfocused;
+   screenshots and hover tooltips do not.
 
 19. **DONE — the raw-key trap recurred one layer up, in a SNAPSHOT rather than a static
     initializer. Found by item 9's in-game pass, which is the only thing that could have found it.**
@@ -2149,8 +2159,9 @@ logged nothing".
     > unobserved. This is the same shape as every other defect in this document: an instrument that
     > answers a narrower question than the one being asked, and an answer read as if it were the
     > broader one.
-10. **Look at the item page as a stranger.** Preview image actually rendering (Steam caches
-    aggressively), description BBCode not broken mid-tag, images in the intended order, tags set.
+10. ~~**Look at the item page as a stranger.**~~ **DONE — checked by the owner on the live page**
+    after the first upload: preview image rendering (Steam caches aggressively), description BBCode
+    not broken mid-tag, images in the intended order, tags set.
 11. ~~**Plan where bug reports land.**~~ **DONE via item 3.** GitHub Issues is the destination, and
     it is now reachable from the in-game mod list — both as the clickable `<url>` and as a closing
     line of `<description>` that asks for RimWorld version, mod list, and expected vs actual. The
