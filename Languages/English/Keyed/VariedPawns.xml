@@ -113,6 +113,9 @@
 
   <VP_Section_Traits>Traits</VP_Section_Traits>
   <VP_Section_TraitsTip>When off, this profile leaves vanilla trait generation untouched.</VP_Section_TraitsTip>
+  <VP_ModWide>Mod-wide</VP_ModWide>
+  <VP_ModWideOffHint>Turned off mod-wide under General. This profile's setting is ignored.</VP_ModWideOffHint>
+  <VP_ProfileOffHint>Turned off for this profile.</VP_ProfileOffHint>
 
   <VP_CountProtectedTraits>Count xenotype and forced traits toward the total</VP_CountProtectedTraits>
   <VP_CountProtectedTraitsTip>When off, the range below counts only traits this mod rolls, and traits forced by a xenotype, gene, backstory or scenario are added on top. When on, the range counts every trait the pawn has. Forced traits are never removed either way.</VP_CountProtectedTraitsTip>

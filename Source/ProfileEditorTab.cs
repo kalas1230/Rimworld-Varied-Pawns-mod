@@ -48,28 +48,69 @@ namespace PawnVarianceMod
             listing.Gap(ControlGap);
         }
 
+        // Draws a section title, the two enable checkboxes, the reason-for-greying caption, and
+        // then SETS GUI.enabled FOR EVERYTHING BELOW IT until the next header. That last part is
+        // the point of this method: before it existed, no GUI.enabled write in this file consulted
+        // the section enable flags at all, so unticking Traits on a custom profile left the trait
+        // sliders fully draggable while doing nothing.
+        //
+        // outerEnabled is the caller's true GUI.enabled, captured BEFORE any narrowing.
         private static void SectionHeader(
-            Listing_Standard listing, string title, ref bool enabled, string tooltip = null)
+            Listing_Standard listing, string title, bool outerEnabled,
+            ref bool enabled, ref bool modWide, string tooltip = null)
         {
+            GUI.enabled = outerEnabled;
+
             listing.Gap(SectionGap);
             listing.GapLine(0f);
 
             Rect row = listing.GetRect(30f);
-            Rect titleRect = row.LeftPart(0.70f);
-            Rect boxRect = row.RightPart(0.28f);
+            Rect titleRect = row.LeftPart(0.44f);
+            Rect modWideRect = new Rect(row.x + row.width * 0.46f, row.y, row.width * 0.26f, row.height);
+            Rect boxRect = row.RightPart(0.26f);
 
             Text.Font = GameFont.Medium;
             Widgets.Label(titleRect, title);
             Text.Font = GameFont.Small;
 
+            // BOTH checkboxes sit outside the grey they control, for two different reasons.
+            // The mod-wide box: it is a mod-wide setting, so it must stay clickable while the body
+            // is greyed for a preset -- otherwise it is dead on exactly the eight profiles this
+            // feature exists to rescue. It is therefore NOT gated on EditingCustom.
+            bool modWideVal = modWide;
+            Widgets.CheckboxLabeled(modWideRect, "VP_ModWide".Translate(), ref modWideVal);
+            modWide = modWideVal;
+
+            // The per-profile box: if it lived inside the grey it controls, unticking it would lock
+            // the player out of re-ticking it. Still gated on EditingCustom, since it edits profile
+            // data. GUI.enabled AND the write guard, matching every other editable control here.
+            bool editingCustom = PawnVarianceMod.Settings.EditingCustom;
+            GUI.enabled = outerEnabled && editingCustom;
             bool val = enabled;
             Widgets.CheckboxLabeled(boxRect, "VP_Enable".Translate(), ref val);
-            if (PawnVarianceMod.Settings.EditingCustom) enabled = val;
+            if (editingCustom) enabled = val;
 
+            GUI.enabled = outerEnabled;
             if (!tooltip.NullOrEmpty())
                 TooltipHandler.TipRegion(row, tooltip);
 
             listing.Gap(4f);
+
+            // Why the body below is greyed, in precedence order. Mod-wide wins the message because
+            // it wins the behaviour: when it is off, the profile flag genuinely is ignored. Drawn
+            // greyed itself, matching the VP_EnableOverridesHint pattern on the Overrides tab.
+            if (!modWide || !enabled)
+            {
+                GUI.enabled = false;
+                Caption(listing, !modWide
+                    ? "VP_ModWideOffHint".Translate()
+                    : "VP_ProfileOffHint".Translate());
+            }
+
+            // THE GREYING RULE. EditingCustom is re-applied here because Step 2 removed it from the
+            // caller -- drop it and every slider becomes editable on a preset, silently mutating
+            // the resolved values a preset hands out.
+            GUI.enabled = outerEnabled && editingCustom && modWide && enabled;
         }
 
         // Rows: 28 (picker) + 4 + 20 (description) + 2 + 28 (quality) + 2 + 20 (best-of-N) + 4
@@ -97,8 +138,13 @@ namespace PawnVarianceMod
             var listing = new Listing_Standard();
             listing.Begin(viewRect);
 
+            // GUI.enabled is deliberately NOT narrowed by EditingCustom here any more.
+            // DrawGenerationSettings and SectionHeader own it now: SectionHeader has to draw its
+            // mod-wide checkbox at the true outer state, since that box is a MOD-WIDE setting and
+            // must stay clickable while a preset is being viewed -- which is exactly what a blanket
+            // narrow here forbade. Every control below a header is still greyed on a preset;
+            // SectionHeader re-applies EditingCustom itself as part of the greying rule.
             bool wasEnabled = GUI.enabled;
-            GUI.enabled = wasEnabled && EditingCustom;
             DrawGenerationSettings(listing);
             GUI.enabled = wasEnabled;
 
@@ -337,8 +383,11 @@ namespace PawnVarianceMod
         private void DrawGenerationSettings(Listing_Standard listing)
         {
             var v = Editing;
+            // Captured before any header narrows it, and restored at the end of this method.
+            bool outerEnabled = GUI.enabled;
 
-            SectionHeader(listing, "VP_Section_Skills".Translate(), ref v.enableSkillVariance,
+            SectionHeader(listing, "VP_Section_Skills".Translate(), outerEnabled,
+                ref v.enableSkillVariance, ref enableSkillVarianceModWide,
                 "VP_Section_SkillsTip".Translate());
             Rect noiseRow = listing.GetRect(28f);
             Rect noiseLabelRect = noiseRow.LeftPart(0.42f);
@@ -378,7 +427,8 @@ namespace PawnVarianceMod
             if (ModsConfig.BiotechActive)
                 DrawChildSkillShift(listing, v);
 
-            SectionHeader(listing, "VP_Section_Traits".Translate(), ref v.enableTraitVariance,
+            SectionHeader(listing, "VP_Section_Traits".Translate(), outerEnabled,
+                ref v.enableTraitVariance, ref enableTraitVarianceModWide,
                 "VP_Section_TraitsTip".Translate());
             bool countVal = v.countProtectedTraits;
             listing.CheckboxLabeled(
@@ -398,7 +448,8 @@ namespace PawnVarianceMod
                     : "VP_TraitCountTipRolled".Translate())
                 + "\n\n" + "VP_TraitCountTipBody".Translate());
 
-            SectionHeader(listing, "VP_Section_Passions".Translate(), ref v.enablePassionVariance,
+            SectionHeader(listing, "VP_Section_Passions".Translate(), outerEnabled,
+                ref v.enablePassionVariance, ref enablePassionVarianceModWide,
                 "VP_Section_PassionsTip".Translate());
             Rect passionRow = listing.GetRect(28f);
             Rect leftHalf = passionRow.LeftPart(0.48f);
@@ -447,6 +498,10 @@ namespace PawnVarianceMod
             Caption(listing, v.passionCountMin > 0f
                 ? "VP_PassionCaptionTargets".Translate()
                 : "VP_PassionCaptionZero".Translate());
+
+            // The Passions header left GUI.enabled narrowed; nothing else restores it, and leaving
+            // it narrowed leaks into whatever the caller draws next.
+            GUI.enabled = outerEnabled;
         }
 
         private void DrawChildSkillShift(Listing_Standard listing, VarianceProfileValues v)
