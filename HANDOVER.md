@@ -43,12 +43,24 @@ changes nothing gets identical pawn generation. Nothing is written into colony s
 The six commits `4d0d98b..0568646` are landed, reviewed clean (whole-branch Gemini review: 0
 Critical / 0 Important / 0 Minor) and build `0 Warning(s), 0 Error(s)`.
 
-**Status as of 2026-08-19.** Checks 1, 3, 4 and 5 were run against a real 1.1.0 install and all
-PASSED. Check 2 was deliberately skipped with a reason recorded below. The catastrophic outcome —
-an inverted default silently stripping a variance dimension from every existing player on update —
-is ruled out by check 1, and check 5 confirms the feature delivers the More Trait Slots handover it
-exists for. **What remains before a Workshop re-upload is check 2 and the two decisions below**,
-not correctness of the toggles themselves.
+**Status as of 2026-08-19. ALL FIVE CHECKS PASSED, and both gates were re-run against the exact
+upload artifact.** The catastrophic outcome — an inverted default silently stripping a variance
+dimension from every existing player on update — is ruled out by check 1, and check 5 confirms the
+feature delivers the More Trait Slots handover it exists for. Check 2 was skipped earlier in the day
+and then **run in full**; see its entry. **No verification work is outstanding for 1.1.0.** What
+remains is the manual Workshop sequence itself.
+
+> **Both gates, re-run 2026-08-19 against the staged Release DLL `sha256 2b92eac4…`, 134,656 bytes,
+> staged from commit `2f16a8d`.** The staging, the zip and the copy in `Mods\PawnVarianceMod\` all
+> carry that same hash, so "the artifact I gated" and "the artifact that uploads" are the same
+> bytes — the property Rule 6 exists to guarantee. The zip was produced with `-Zip` **alone**: a
+> `-Build` would have recompiled and changed the hash, retroactively invalidating both runs.
+> - `Verify Best-of-N` **32/32 PASS**, worst shown **0.01pp**, skill count 12, per-axis toggles OK,
+>   `cross-branch OK ... live = fallback = 0.250709 (delta 8.94E-008)`.
+> - `Roll pawns and dump distribution` at **1000** pawns: `GENERATOR vs MODEL [Faithful]` **OK**,
+>   model 4.550 pips/pawn (sd 1.234) against 4.533 delivered, delta **−0.017** vs tolerance 0.156.
+>   Run under 16 active mods including `Arkymn.MoreTraitSlots`, i.e. not a clean-room number; trait
+>   count is not in the composite, and `traits/pawn 2.47` shows MTS was live without disturbing it.
 
 Full per-task detail, including every finding and how it was adjudicated, is in the SDD ledger:
 `.superpowers/sdd/progress.md`. The plan is
@@ -76,9 +88,20 @@ reasoning).
    pointed at the local copy.** Backups of ModsConfig, the settings file and the whole 1.0.0 install
    are in `zzz-Do-Not-Commit/verify-2026-08-19/`; restore them to put the Workshop copy back in play.
 
-2. **The 1000-pawn distribution dump — DELIBERATELY SKIPPED (2026-08-19), owner's decision, with
-   a standing reason.** The risk it covers is closed by construction for the default state, not by
-   hand-waving. Pre-branch (`0556aee`) the gate at each apply site was `if (v.enableTraitVariance)`;
+2. **The 1000-pawn distribution dump — RUN AND PASSED (2026-08-19).** It was skipped earlier the
+   same day on the owner's decision, then run in full once the scroll fix forced a redeploy. The
+   result: `ACTUALLY RESOLVED TO: Faithful x1000 (100.0%)`, model **4.550** pips/pawn (sd 1.234)
+   against **4.533** delivered, delta **−0.017** against tolerance **0.156** (4 × SE 0.039, floored
+   at 0.150) — `OK -- the model describes the pawns being rolled`. Passionless pawns **0.0%**.
+   Clamp censoring **18.6%** at 0 (2036/10975), median **3.0**, against the 18.3% / 3.0 reference
+   below — sampling noise, and the dump is unseeded. No `Tried to discard` spam, so the cleanup
+   really ran. `Player.log` read directly (the bridge is blind to the startup window): **zero
+   `Log:Error`**, and none of the `No active language! ... VP_Preset_*` errors from item 20.
+   **This is a strictly stronger run than the 200-pawn one recorded further down** — more pawns
+   shrink the tolerance from 0.349 to 0.156 while the delta itself fell from −0.063 to −0.017.
+
+   The reasoning that justified skipping it is kept below, because it remains the argument for why
+   the default state was never at risk — not because the check is still outstanding. Pre-branch (`0556aee`) the gate at each apply site was `if (v.enableTraitVariance)`;
    post-branch it is `enableTraitVarianceModWide && v != null && v.enableTraitVariance`. With the
    masters at their `true` defaults — which check 1 proved is what a pre-change config loads — that
    reduces to `v != null && v.enableTraitVariance`. The ONLY behavioural delta is a null `v`:
@@ -112,7 +135,7 @@ reasoning).
    ITS min/max sliders rather than the profile's trait-count range. This is the case the whole
    feature exists for, so it is the one that decides whether the feature delivers its purpose.
 
-### Two decisions — both TAKEN 2026-08-19, both UNVERIFIED IN GAME
+### Two decisions — both TAKEN 2026-08-19, both CONFIRMED IN GAME by the owner
 
 - **`T2-OPEN-1` — `DispersionModel` cannot see a mod-wide master. Resolved as option (b): suppress
   the readout.** `DispersionModel.Moments` branches on `v.enableSkillVariance`
@@ -142,12 +165,42 @@ reasoning).
   value, and both the field initialiser (`:85`) and the Scribe default (`:486`) say `true`, so
   resetting it to `false` would have replaced one bug with another.
 
-**Neither has been seen in a running game.** Both build clean and
-`tools/check-translation-keys.ps1` passes with no orphans, which in this repo means very little on
-its own. To verify: switch skill or passion variance off under General and confirm the Profile
-Editor shows the suppression line instead of a percentage (and that trait-only-off still shows
-numbers); then hit "Reset all settings" and confirm `factionOverridesTakePrecedence` returns to
-ticked.
+**Both were checked at the screen by the owner and reported fine (2026-08-19).** That is the only
+instrument for either: the suppression is a rendering decision, and no automated probe reads it
+usefully. They were exercised on the build carrying `1c18e22`, which is the commit that introduced
+them, so the confirmation covers the code that shipped.
+
+**The per-profile case is deliberately NOT suppressed, and that is settled — do not "unify" the two
+branches.** The rule the code follows is: *the readout hides when the model is blind, and shows when
+the model is honest.* `DispersionModel.Moments` branches on the per-profile `v.enableSkillVariance`
+(`:103`) and `v.enablePassionVariance` (`:130`), so with a profile's own box unticked the model
+already substitutes vanilla at full weight with zero variance and the figures are **correct**;
+suppressing them would blank a true answer. The mod-wide master lives on `PawnVarianceSettings`,
+which `Moments` never receives, so there the figures are a lie. Hiding the honest case would also
+remove the only on-screen surface where the vanilla-substitution invariant above is visible — the
+place a regression in it would show.
+
+### The listing wrap reached the other two tabs — found in the field, fixed, confirmed
+
+Predicted and then observed within the same day. `HANDOVER` already warned that the General and
+Profile Editor tabs still passed `viewRect` to `listing.Begin` and were "one added control away from
+the identical latch". Adding the reset / delete-all-profiles buttons was that control: the General
+pane's content passed its `800f` field initialiser, the listing column-wrapped to the right, and the
+new buttons became unreachable — beside the scroll range, not below it. The owner then hit the same
+latch on the **Profile Editor** by ticking "Also shift skills when a child grows up", which
+conditionally draws a range slider plus a wrapped caption (`ProfileEditorTab.cs:582-591`).
+
+Both tabs were converted to the `DrawOverridesTab` shape — viewport floor plus
+`UnboundedListingHeight` — in `2f16a8d`. The owner confirmed both panes afterwards. Full reasoning
+sits with the layout invariants; the operational lesson is repeated here because it cost a
+misdiagnosis:
+
+> **A UI report during an active branch is not evidence about that branch until the DLL is
+> deployed.** `dotnet build` writes to `<repo>\Assemblies\`; RimWorld loads from
+> `Mods\PawnVarianceMod\Assemblies\`. The Profile Editor bug was initially suspected to be *caused*
+> by the very change that fixes it, because the running binary was 21 minutes older than the fix
+> commit. Settle it by reading the deployed binary, not the timestamps alone — counting the
+> `ldc.r4 100000` occurrences (2 before the fix, 4 after) discriminated the two builds in seconds.
 
 ### The lesson this branch re-taught
 
