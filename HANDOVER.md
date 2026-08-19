@@ -128,9 +128,15 @@ reasoning).
   **What this did NOT fix, and it matters.** The display is honest now; the *model* is still blind.
   `DispersionModel`, the Best-of-N gate, `envelope_check.py` and `dispersion_mc.py` all still
   integrate a dimension the generator is skipping. The mirrors still agree with each other and
-  disagree with the generator — this repo's signature bug class — and the distribution curve below
-  the readout is drawn from that same blind model and is **not** suppressed. Option (c), making all
-  four mirrors settings-aware, remains available and would reopen the mirror-declaration checklist.
+  disagree with the generator — this repo's signature bug class. Option (c), making all four
+  mirrors settings-aware, remains available and would reopen the mirror-declaration checklist.
+
+  **The distribution curve is suppressed too** (owner's call, same session). `OutcomeDensity`
+  builds itself from `Moments` (`DispersionModel.cs:456`), so it was blind in exactly the same way,
+  and it is the more persuasive readout of the two — a wrong curve sitting under "the figures do
+  not apply" would have been worse than never suppressing the numbers. The panel keeps its frame,
+  tier bands and dividers and withholds only the density line, so the row cannot collapse and
+  nothing below it reflows.
 - **`T1-M1` — fixed.** `ResetToDefaults()` now resets `factionOverridesTakePrecedence`. Note the
   value is **`true`**, not `false`: this is one of the few settings whose default is not the zero
   value, and both the field initialiser (`:85`) and the Scribe default (`:486`) say `true`, so

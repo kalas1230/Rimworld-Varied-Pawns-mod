@@ -416,8 +416,17 @@ namespace PawnVarianceMod
             }
 
             // Row 4: the distribution curve, full width, never greyed.
+            //
+            // Suppressed by the same condition as the two figures above, and for the same reason:
+            // OutcomeDensity builds itself from Moments (DispersionModel.cs:456), so the curve is
+            // blind to the mod-wide masters exactly as the numbers were. Leaving it drawn would be
+            // worse than never having suppressed them -- the curve is the more persuasive readout,
+            // and it would sit directly under a line saying the figures do not apply.
+            //
+            // The panel keeps its frame, tier bands and dividers so the row cannot collapse and the
+            // layout below cannot reflow; only the density line is withheld.
             Rect curveRect = new Rect(rect.x, bestRow.yMax + 4f, rect.width, CurveHeight);
-            DrawQualityDistributionCurve(curveRect, v);
+            DrawQualityDistributionCurve(curveRect, v, suppressed: skillOffModWide || passionOffModWide);
         }
 
         // One-line summary of a custom profile's values. Never returns empty.
@@ -594,7 +603,7 @@ namespace PawnVarianceMod
         // Mono, which is why drag frames ask for the cheap grid instead.
         private static bool dragActive;
 
-        private static void DrawQualityDistributionCurve(Rect rect, VarianceProfileValues v)
+        private static void DrawQualityDistributionCurve(Rect rect, VarianceProfileValues v, bool suppressed)
         {
             // Dark container background
             Widgets.DrawBoxSolid(rect, new Color(0.08f, 0.09f, 0.11f, 0.85f));
@@ -610,6 +619,19 @@ namespace PawnVarianceMod
             DrawVerticalTierMarker(rect, 0.25f);
             DrawVerticalTierMarker(rect, 0.50f); // Center line (Faithful)
             DrawVerticalTierMarker(rect, 0.75f);
+
+            // Frame and bands above, no density line below. Returned before OutcomeDensity is
+            // called rather than after, so a suppressed panel also skips an integration whose
+            // result would only be thrown away.
+            if (suppressed)
+            {
+                Text.Anchor = TextAnchor.MiddleCenter;
+                GUI.color = new Color(1f, 1f, 1f, 0.55f);
+                Widgets.Label(rect, "VP_CurveOffModWide".Translate());
+                GUI.color = Color.white;
+                Text.Anchor = TextAnchor.UpperLeft;
+                return;
+            }
 
             // The realised-outcome density (not the raw Beta density mapped through the mean-band
             // composite): this is what actually responds to the two spread sliders, and shows

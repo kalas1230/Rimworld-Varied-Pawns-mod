@@ -83,6 +83,7 @@
 
   <!-- {0} sample count, {1} percentage vs Faithful, {2} raw figure. -->
   <VP_BestOfNRow>Best of {0} rerolls:  {1} vs Faithful ({2})</VP_BestOfNRow>
+  <VP_CurveOffModWide>Distribution hidden — it would not match generated pawns.</VP_CurveOffModWide>
   <VP_ReadoutOffSkill>→  Skill variance is off mod-wide — power figures do not apply.</VP_ReadoutOffSkill>
   <VP_ReadoutOffPassion>→  Passion variance is off mod-wide — power figures do not apply.</VP_ReadoutOffPassion>
   <VP_ReadoutOffBoth>→  Skill and passion variance are off mod-wide — power figures do not apply.</VP_ReadoutOffBoth>
