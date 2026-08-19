@@ -112,24 +112,36 @@ reasoning).
    ITS min/max sliders rather than the profile's trait-count range. This is the case the whole
    feature exists for, so it is the one that decides whether the feature delivers its purpose.
 
-### Two decisions waiting on the owner
+### Two decisions — both TAKEN 2026-08-19, both UNVERIFIED IN GAME
 
-- **`T2-OPEN-1` — `DispersionModel` cannot see a mod-wide master.** `DispersionModel.Moments`
-  branches on `v.enableSkillVariance` (`DispersionModel.cs:103`) and `v.enablePassionVariance`
-  (`:130`, `:279`, `:369`, `:411`). It takes a `VarianceProfileValues`, not a settings object. So
-  with a master off, the generator applies nothing while the Profile Editor power readout, the
-  Best-of-N gate, `envelope_check.py` and `dispersion_mc.py` all still model the dimension — every
-  mirror agreeing with every other mirror and all of them disagreeing with the generator. **This is
-  a new instance of this repo's signature bug class**, and the comment above `DispersionModel.cs:100`
-  documents the previous one. **Generated pawns are unaffected; this is a readout/gate defect only.**
-  Options put to the owner: (a) ship and file it — the readout is only wrong in a state where the
-  player has deliberately handed the axis to another mod; (b) suppress the readout when a master is
-  off, showing "skill variance is off mod-wide" instead of a number — no mirror changes, the
-  previous session's recommendation; (c) make all four mirrors settings-aware, which reopens the
-  mirror-declaration checklist. **Unresolved.**
-- **`T1-M1` — pre-existing, one line.** `ResetToDefaults()` (`PawnVarianceSettings.cs`) never resets
-  `factionOverridesTakePrecedence`, so "Reset all settings" under-delivers. Predates this work and
-  was deliberately left alone. Same failure shape as the bug fixed in `7e094cd`.
+- **`T2-OPEN-1` — `DispersionModel` cannot see a mod-wide master. Resolved as option (b): suppress
+  the readout.** `DispersionModel.Moments` branches on `v.enableSkillVariance`
+  (`DispersionModel.cs:103`) and `v.enablePassionVariance` (`:130`, `:279`, `:369`, `:411`), and
+  takes a `VarianceProfileValues`, not a settings object — so with a master off the generator
+  applies nothing while every mirror keeps modelling the dimension. **Generated pawns were never
+  affected; this is a readout/gate defect.** The Profile Editor now hides BOTH power figures
+  (Typical and Best-of-N) when the skill or passion master is off, showing "… is off mod-wide —
+  power figures do not apply" instead (`VP_ReadoutOffSkill` / `…Passion` / `…Both`). Trait is
+  deliberately excluded: trait count is not a quality axis (invariant 3), so those figures stay
+  correct when only trait variance is off.
+
+  **What this did NOT fix, and it matters.** The display is honest now; the *model* is still blind.
+  `DispersionModel`, the Best-of-N gate, `envelope_check.py` and `dispersion_mc.py` all still
+  integrate a dimension the generator is skipping. The mirrors still agree with each other and
+  disagree with the generator — this repo's signature bug class — and the distribution curve below
+  the readout is drawn from that same blind model and is **not** suppressed. Option (c), making all
+  four mirrors settings-aware, remains available and would reopen the mirror-declaration checklist.
+- **`T1-M1` — fixed.** `ResetToDefaults()` now resets `factionOverridesTakePrecedence`. Note the
+  value is **`true`**, not `false`: this is one of the few settings whose default is not the zero
+  value, and both the field initialiser (`:85`) and the Scribe default (`:486`) say `true`, so
+  resetting it to `false` would have replaced one bug with another.
+
+**Neither has been seen in a running game.** Both build clean and
+`tools/check-translation-keys.ps1` passes with no orphans, which in this repo means very little on
+its own. To verify: switch skill or passion variance off under General and confirm the Profile
+Editor shows the suppression line instead of a percentage (and that trait-only-off still shows
+numbers); then hit "Reset all settings" and confirm `factionOverridesTakePrecedence` returns to
+ticked.
 
 ### The lesson this branch re-taught
 
