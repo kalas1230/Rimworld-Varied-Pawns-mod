@@ -199,3 +199,82 @@ Plus the two cases that distinguish this from the status quo:
 
 Settings round-trip: export a config with a dimension disabled, import it, confirm the flag
 survives.
+
+---
+
+## 7. Backward Compatibility
+
+The mod is published. Nothing here may change behaviour for a player who updates and touches no
+settings.
+
+### 7.1 The guarantee
+
+With all three masters at their default `true`, each accessor is an identity function over the
+per-profile flag — `TraitVarianceActive(v)` is exactly `v.enableTraitVariance`. Pawn generation is
+bit-identical to the current build. The greying fix in §4.2 is visual only and alters no applied
+variance.
+
+### 7.2 Save files — not a surface
+
+The mod owns no `GameComponent`, `WorldComponent` or `MapComponent`. The growth-moment deferral
+was deliberately reworked to be implicit so that nothing is written into colony saves
+(`GrowUpVariance.cs:17-38`, `GrowthUpPatch.cs:149`). This change adds none, so existing saves
+cannot be affected and `About.xml`'s "safe to remove, writes nothing into your save" claim stays
+true.
+
+### 7.3 Existing settings files
+
+Both load paths converge on `true`:
+
+- **No settings file** (first run) — `LoadedModManager.ReadModSettings` returns a fresh instance
+  without calling `ExposeData`, so the *field initialiser* applies.
+- **An existing file predating this change** — `ExposeData` runs, the node is absent, and
+  `Scribe_Values.Look` applies the *Scribe default*.
+
+**The field initialiser and the Scribe default must therefore both be `true`.** This is not
+pedantry: `VarianceProfile.cs:30-45` documents a live case where the two drifted apart
+(`traitCountMin` initialises `1` against Scribe's `2`), harmless there only because that
+parameterless ctor is reachable by Scribe alone. `PawnVarianceSettings`'s ctor is reached by both
+paths above, so a mismatch there would be observable. `applyToHostilePawns` (`:431`) is an existing
+`true`-defaulted bool proving the pattern in service.
+
+No field is added to `VarianceProfileValues`, so `CustomProfile` serialisation is unchanged and
+existing custom profiles load untouched.
+
+### 7.4 Settings import / export
+
+| Direction | Result |
+|---|---|
+| Old payload → new build | `Scribe_Deep` builds a fresh settings object; absent nodes take the `true` default. Behaviour unchanged. |
+| New payload → older build | Scribe ignores unknown nodes silently. No crash; recipient keeps old behaviour. |
+
+Scribe omits values equal to their default, so a config with all three masters on serialises to a
+payload identical in shape to today's. Only a config that actually disables a dimension grows
+nodes.
+
+**`SettingsTransfer.ConfigVersion` is NOT bumped.** Its comment (`:20-22`) reserves it for
+incompatible shape changes and notes that "Scribe_Values already defaults any field a payload
+omits." This change is purely additive with safe defaults; bumping would misrepresent the payload.
+
+### 7.5 Localisation fallback
+
+Only `Languages/English` exists in the repo. Players on other languages already fall back to the
+English keyed strings, and the nine new keys inherit that same path. No existing key is renamed or
+removed, so no current translation breaks.
+
+### 7.6 The one visible change, and the release note
+
+A player who has a section unticked on a custom profile will see its sliders greyed after
+updating, where they were draggable before. No generated pawn differs — the flag was already being
+honoured at generation time; only the UI was lying about it. This belongs in the changelog rather
+than being shipped silently.
+
+`About.xml`'s `<modVersion>` must be bumped (currently `1.0.0`); `tools/build-release.ps1` reads it
+to name the release zip.
+
+### 7.7 Regression check
+
+Before and after, on a copy of a real pre-change settings file: generate a batch of pawns from the
+same seed and confirm the trait / skill / passion distributions are unchanged with the masters left
+at their defaults. This is the check that would actually catch an accidental inversion of a default,
+which is the single most damaging way this change could go wrong for existing players.
