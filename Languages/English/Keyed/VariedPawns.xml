@@ -188,7 +188,9 @@
   <VP_ModWideTip>Applies to every pawn, whichever profile or override matches them.\n\nTurning this off here overrides the matching setting inside every profile, and no profile can turn it back on. Turning it on hands the decision back to each profile.\n\nUse this to let another mod own a dimension. With trait variance off, a mod such as More Trait Slots decides trait counts and Varied Pawns leaves them alone.</VP_ModWideTip>
 
   <VP_ResetAllSettings>Reset All Settings</VP_ResetAllSettings>
-  <VP_Confirm_ResetAll>Reset all settings to defaults? Every custom profile, override and option will be restored.</VP_Confirm_ResetAll>
+  <VP_Confirm_ResetAll>Reset all settings to defaults? Every option and override goes back to how it shipped. Your custom profiles are kept.</VP_Confirm_ResetAll>
+  <VP_Btn_DeleteAllCustomProfiles>Delete All Custom Profiles</VP_Btn_DeleteAllCustomProfiles>
+  <VP_Confirm_DeleteAllCustomProfiles>Delete every custom profile? Anything using one falls back to a preset. This cannot be undone.</VP_Confirm_DeleteAllCustomProfiles>
 
 
   <!-- ===================== Share settings ===================== -->

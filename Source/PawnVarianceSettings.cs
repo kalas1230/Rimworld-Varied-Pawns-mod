@@ -1450,6 +1450,17 @@ namespace PawnVarianceMod
                     destructive: false));
             }
             GUI.color = Color.white;
+
+            listing.Gap(4f);
+            GUI.color = new Color(1f, 0.4f, 0.4f);
+            if (listing.ButtonText("VP_Btn_DeleteAllCustomProfiles".Translate()))
+            {
+                Find.WindowStack.Add(Dialog_MessageBox.CreateConfirmation(
+                    "VP_Confirm_DeleteAllCustomProfiles".Translate(),
+                    () => DeleteAllCustomProfiles(),
+                    destructive: true));
+            }
+            GUI.color = Color.white;
         }
 
         private void DrawShareSettingsSection(Listing_Standard listing)
@@ -1504,9 +1515,13 @@ namespace PawnVarianceMod
             }
         }
 
+        // Deliberately leaves customProfiles alone. Resetting the OPTIONS is a cheap,
+        // recoverable action; a player's hand-authored profiles are not, and losing them to a
+        // button labelled "reset settings" is not a trade anyone opts into. Deleting them is its
+        // own button, right below this one. Everything a reset touches is either a preset id or a
+        // value with a known default, so nothing here can leave a custom profile dangling.
         private void ResetToDefaults()
         {
-            customProfiles = new List<CustomProfile>();
             activeProfileId = VarianceProfiles.FaithfulId;
             hostileProfileId = VarianceProfiles.DistinctId;
             applyToHostilePawns = true;
@@ -1530,11 +1545,40 @@ namespace PawnVarianceMod
             PopulateDefaultOverrides(force: true);
             RefreshResolved();
 
-            // customProfiles was just replaced wholesale; drop the editor's cached cursor and
-            // values so the next access re-resolves against the new state instead of pointing
-            // at a profile that no longer exists.
+            // The custom profiles survive, but activeProfileId did not: send the editor back to
+            // its opening behaviour (follow the colony profile) and drop the cached values so the
+            // next access re-resolves against the reset state.
             editorProfileId = null;
             editingValues = null;
+        }
+
+        // The destructive half that ResetToDefaults no longer does. Every id that could point at
+        // a custom profile has to be walked back by hand, exactly as the single-profile Delete
+        // button does -- the colony profile, the hostile profile, the editor cursor, and all three
+        // override axes -- or the settings keep ids that resolve to nothing.
+        private void DeleteAllCustomProfiles()
+        {
+            if (customProfiles == null || customProfiles.Count == 0) return;
+
+            var deletedIds = customProfiles.Select(p => p.id).ToList();
+            customProfiles = new List<CustomProfile>();
+
+            if (VarianceProfiles.GetPresetById(activeProfileId) == null)
+                activeProfileId = VarianceProfiles.FaithfulId;
+            if (VarianceProfiles.GetPresetById(hostileProfileId) == null)
+                hostileProfileId = VarianceProfiles.DistinctId;
+
+            foreach (string deletedId in deletedIds)
+            {
+                ScrubStaleOverrides(factionOverrides, factionPriorities, deletedId);
+                ScrubStaleOverrides(xenotypeOverrides, xenotypePriorities, deletedId);
+                ScrubStaleOverrides(raceOverrides, racePriorities, deletedId);
+            }
+
+            editorProfileId = null;
+            editingValues = null;
+
+            RefreshResolved();
         }
 
         public static string FormatPowerReadout(float meanComposite)
