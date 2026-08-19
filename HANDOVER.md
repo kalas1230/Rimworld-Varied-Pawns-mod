@@ -38,13 +38,17 @@ changes nothing gets identical pawn generation. Nothing is written into colony s
 
 # 🔴 OPEN WORK
 
-## ⚠️ OPEN — the 1.1.0 mod-wide toggles are CODE-COMPLETE but UNVERIFIED IN GAME
+## 1.1.0 mod-wide toggles — VERIFIED IN GAME
 
 The six commits `4d0d98b..0568646` are landed, reviewed clean (whole-branch Gemini review: 0
-Critical / 0 Important / 0 Minor) and build `0 Warning(s), 0 Error(s)`. **Do not treat the feature
-as finished.** Five checks require a running game and have NEVER been run. Nothing offline
-substitutes for them — this project's whole history is clean builds and passing offline tools
-agreeing with each other while disagreeing with the generator.
+Critical / 0 Important / 0 Minor) and build `0 Warning(s), 0 Error(s)`.
+
+**Status as of 2026-08-19.** Checks 1, 3, 4 and 5 were run against a real 1.1.0 install and all
+PASSED. Check 2 was deliberately skipped with a reason recorded below. The catastrophic outcome —
+an inverted default silently stripping a variance dimension from every existing player on update —
+is ruled out by check 1, and check 5 confirms the feature delivers the More Trait Slots handover it
+exists for. **What remains before a Workshop re-upload is check 2 and the two decisions below**,
+not correctness of the toggles themselves.
 
 Full per-task detail, including every finding and how it was adjudicated, is in the SDD ledger:
 `.superpowers/sdd/progress.md`. The plan is
@@ -52,30 +56,61 @@ Full per-task detail, including every finding and how it was adjudicated, is in 
 `docs/superpowers/specs/2026-08-19-mod-wide-variance-toggles-design.md` (§7 is the back-compat
 reasoning).
 
-### The five unrun checks, in priority order
+### The five in-game checks, in priority order
 
-1. **The inverted-default check — do this one first.** Restore a genuine pre-change settings file
-   and confirm all three "Variance types" boxes on the General tab read **ticked**. Verified inputs:
-   `%LOCALAPPDATA%Low\Ludeon Studios\RimWorld by Ludeon Studios\Config\Mod_3782564554_PawnVarianceMod.xml`
-   is the Workshop install (matches `About/PublishedFileId.txt` = 3782564554); two stale local-install
-   configs sit beside it. **All three contain zero `ModWide` nodes**, so any of them is a valid
-   pre-change file. A backup was taken to `zzz-Do-Not-Commit/settings-pre-modwide.xml`.
-   If a box reads unticked, a default is inverted and **every existing player loses that dimension
-   on update** — that is the one catastrophic outcome this feature can produce.
-2. **`Varied Pawns > Roll pawns and dump distribution`, 1000 pawns**, with the masters left at
-   their defaults. Delivered pips/pawn must be unchanged from before the branch. This is the
-   generator-vs-model regression check.
-3. **The Profile Editor greying matrix** (plan Task 4 Step 8). **No automated probe can see this** —
-   `ProfileEditorTab.cs:245-246` records that GABS's `get_ui_layout` cannot observe ambient
-   `GUI.enabled`. A human must look. The row that matters most is the pre-existing bug fix: on a
-   CUSTOM profile with a section unticked, its sliders must now be greyed. Also confirm both
-   checkboxes stay clickable in every state, or a player can untick a section and be unable to
-   re-tick it.
-4. **Settings export/import round-trip.** Untick a dimension, Share settings > Copy, re-tick it,
-   Paste. It must come back unticked. Exercises the `CopyFrom` registration.
-5. **More Trait Slots compatibility** — the case the feature exists for. With
-   `Arkymn.MoreTraitSlots` active and trait variance off mod-wide, generated trait counts must
-   follow ITS min/max sliders, not the profile's trait-count range.
+1. **The inverted-default check — PASSED (2026-08-19).** All three "Variance types" boxes on the
+   General tab read **ticked** against a genuine pre-change settings file, so no default is
+   inverted and no existing player loses a dimension on update. Evidence, from
+   `rimworld/get_ui_layout` against the rendered dialog rather than from source: `Skill variance`,
+   `Trait variance` and `Passion variance` each `isChecked: true`. The chain that makes that
+   meaningful: the loaded mod was **1.1.0 from `Steam/common/RimWorld/Mods/PawnVarianceMod`**
+   (`loadedInSession: true`, no version or ordering warning, Workshop 1.0.0 copy disabled); the file
+   it read, `Mod_PawnVarianceMod_PawnVarianceMod.xml`, contains **zero `ModWide` nodes**; and the
+   live settings object carried that file's two custom profiles ("Custom 1", "Showcase") — a
+   fingerprint unique to it among the three candidate configs — proving the Scribe load path ran
+   rather than untouched in-memory defaults. Player.log showed no exceptions during load.
+   **How it was set up, and what must be undone.** Neither installed copy had 1.1.0 in it — both
+   were the 1.0.0 build. The build was staged with `tools/build-release.ps1 -Build`
+   (`0 Warning(s), 0 Error(s)`) and copied into the local Mods folder, and `ModsConfig.xml` was
+   switched from `kalas.pawnvariance_steam` to `kalas.pawnvariance`. **`ModsConfig.xml` is still
+   pointed at the local copy.** Backups of ModsConfig, the settings file and the whole 1.0.0 install
+   are in `zzz-Do-Not-Commit/verify-2026-08-19/`; restore them to put the Workshop copy back in play.
+
+2. **The 1000-pawn distribution dump — DELIBERATELY SKIPPED (2026-08-19), owner's decision, with
+   a standing reason.** The risk it covers is closed by construction for the default state, not by
+   hand-waving. Pre-branch (`0556aee`) the gate at each apply site was `if (v.enableTraitVariance)`;
+   post-branch it is `enableTraitVarianceModWide && v != null && v.enableTraitVariance`. With the
+   masters at their `true` defaults — which check 1 proved is what a pre-change config loads — that
+   reduces to `v != null && v.enableTraitVariance`. The ONLY behavioural delta is a null `v`:
+   pre-branch that threw an NPE and applied nothing, post-branch it returns cleanly and applies
+   nothing. Delivered pips are identical either way, and all eight apply sites route through
+   `SkillVarianceActive` / `TraitVarianceActive` / `PassionVarianceActive`, so no site is ungated.
+   **Still worth running before a Workshop re-upload**, since it is the only end-to-end
+   generator-vs-model check this repo has and its whole history is offline tools agreeing with each
+   other while disagreeing with the generator.
+
+3. **The Profile Editor greying matrix — PASSED (2026-08-19), confirmed by the owner at the
+   screen.** No automated probe can see this: `ProfileEditorTab.cs:245-246` records that GABS's
+   `get_ui_layout` cannot observe ambient `GUI.enabled`, so a human looking at the dialog is the
+   only instrument. The owner checked it and reported the greying works, which covers the
+   pre-existing bug fix this branch carried — on a CUSTOM profile with a section unticked, its
+   sliders are greyed.
+
+4. **Settings export/import round-trip — PASSED (2026-08-19).** Driven through the real UI, not
+   through reflection: unticked `Trait variance`, clicked `Export to Clipboard`, re-ticked it
+   (confirmed back to `true` first, so a silently-failed re-tick could not fake a pass), clicked
+   `Import from Clipboard` and confirmed the destructive-import dialog. `enableTraitVarianceModWide`
+   came back **`false`** while skill and passion stayed `true`. The `CopyFrom` registration is real.
+   Two incidental confirmations: the clipboard payload carried
+   `<enableTraitVarianceModWide>False</enableTraitVarianceModWide>`, and the two masters still at
+   their defaults were correctly ABSENT from it — Scribe omits default-valued nodes, and an absent
+   node loads as the default, which is the same mechanism check 1 depends on. Import also resets
+   `editingValues` / `editorProfileId` to null.
+
+5. **More Trait Slots compatibility — PASSED (2026-08-19), confirmed by the owner in game.** With
+   `Arkymn.MoreTraitSlots` active and trait variance off mod-wide, generated trait counts follow
+   ITS min/max sliders rather than the profile's trait-count range. This is the case the whole
+   feature exists for, so it is the one that decides whether the feature delivers its purpose.
 
 ### Two decisions waiting on the owner
 
