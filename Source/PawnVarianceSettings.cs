@@ -47,6 +47,29 @@ namespace PawnVarianceMod
         public bool applyVarianceToChildren = false;
         public bool verboseLogging = false;
 
+        // Mod-wide masters for the three variance dimensions. Strict AND with the per-profile flags
+        // of the same name on VarianceProfileValues, authoritative in one direction only: off here
+        // is a hard stop for every pawn and every profile; on here defers entirely to the profile.
+        // A per-profile flag can never re-enable what these switch off.
+        //
+        // These exist because the per-profile flags are UNREACHABLE on the eight presets. The
+        // Profile Editor body is drawn inside GUI.enabled = ... && EditingCustom, and no preset
+        // sets the flags, so every preset inherits `= true` from the field initialiser. Without a
+        // mod-wide switch, disabling one dimension means abandoning presets entirely and rebuilding
+        // every faction/race/xenotype assignment as a custom profile.
+        //
+        // THE INITIALISER AND THE SCRIBE DEFAULT MUST BOTH BE `true`, and that is not pedantry.
+        // Both load paths are live for this class: a first run never calls ExposeData at all
+        // (LoadedModManager.ReadModSettings returns a fresh instance), so the initialiser applies;
+        // an existing settings file predating this feature hits Scribe_Values.Look with an absent
+        // node, so the Scribe default applies. Set either to false and every existing player
+        // silently loses a whole dimension on update. The mod is published -- VarianceProfile.cs
+        // :30-45 documents a live case where these two drifted apart, harmless there only because
+        // that ctor is reachable by Scribe alone.
+        public bool enableSkillVarianceModWide = true;
+        public bool enableTraitVarianceModWide = true;
+        public bool enablePassionVarianceModWide = true;
+
         public List<CustomProfile> customProfiles = new List<CustomProfile>();
         public string activeProfileId = VarianceProfiles.FaithfulId;
         public string hostileProfileId = VarianceProfiles.DistinctId;
@@ -316,6 +339,28 @@ namespace PawnVarianceMod
         public bool IsExcludedAsHostile(Pawn pawn, PawnGenerationRequest? request)
             => !applyToHostilePawns && IsHostileToPlayer(EffectiveFactionOf(pawn, request));
 
+        // The ONLY correct way to ask whether a dimension applies to a pawn: the strict AND of the
+        // mod-wide master and the resolved profile's own flag. Reading either half alone is a bug.
+        //
+        // Deliberately NOT implemented by writing the ANDed value into the resolved
+        // VarianceProfileValues. ValuesFor does not hand back a throwaway object: Resolve clones
+        // presets (preset.MakeValues(), :246) but returns CUSTOM profiles as a LIVE REFERENCE
+        // (:254, which carries its own comment forbidding the "fix"), and Active/Hostile are
+        // session-cached clones (:550-553). An ANDed write would therefore persist a mod-wide
+        // toggle into the player's saved custom profile on disk, and corrupt the cached
+        // Active/Hostile values for the rest of the session. These read; they never write.
+        //
+        // Null-safe on v because a caller that failed to resolve a profile must not silently get
+        // variance applied from a half-built state.
+        public bool SkillVarianceActive(VarianceProfileValues v)
+            => enableSkillVarianceModWide && v != null && v.enableSkillVariance;
+
+        public bool TraitVarianceActive(VarianceProfileValues v)
+            => enableTraitVarianceModWide && v != null && v.enableTraitVariance;
+
+        public bool PassionVarianceActive(VarianceProfileValues v)
+            => enablePassionVarianceModWide && v != null && v.enablePassionVariance;
+
         public VarianceProfileValues ValuesFor(Pawn pawn) => ValuesFor(pawn, null);
 
         public VarianceProfileValues ValuesFor(Pawn pawn, PawnGenerationRequest? request)
@@ -431,6 +476,11 @@ namespace PawnVarianceMod
             Scribe_Values.Look(ref applyToHostilePawns, "applyToHostilePawns", true);
             Scribe_Values.Look(ref applyVarianceToChildren, "applyVarianceToChildren", false);
             Scribe_Values.Look(ref verboseLogging, "verboseLogging", false);
+            // Defaults MUST be true -- see the comment on the fields. An existing settings file
+            // written before this feature has no node here, and this default is what it gets.
+            Scribe_Values.Look(ref enableSkillVarianceModWide, "enableSkillVarianceModWide", true);
+            Scribe_Values.Look(ref enableTraitVarianceModWide, "enableTraitVarianceModWide", true);
+            Scribe_Values.Look(ref enablePassionVarianceModWide, "enablePassionVarianceModWide", true);
 
             Scribe_Values.Look(ref enableOverrides, "enableOverrides", true);
             Scribe_Values.Look(ref factionOverridesTakePrecedence, "factionOverridesTakePrecedence", true);
@@ -593,6 +643,11 @@ namespace PawnVarianceMod
             applyToHostilePawns = other.applyToHostilePawns;
             applyVarianceToChildren = other.applyVarianceToChildren;
             verboseLogging = other.verboseLogging;
+            // A config exported with a dimension disabled must import that way. Omitting these
+            // would silently re-enable it on import.
+            enableSkillVarianceModWide = other.enableSkillVarianceModWide;
+            enableTraitVarianceModWide = other.enableTraitVarianceModWide;
+            enablePassionVarianceModWide = other.enablePassionVarianceModWide;
 
             customProfiles = other.customProfiles ?? new List<CustomProfile>();
             activeProfileId = other.activeProfileId;

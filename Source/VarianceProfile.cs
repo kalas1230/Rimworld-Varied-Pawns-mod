@@ -85,6 +85,10 @@ namespace PawnVarianceMod
         public float traitCountMax = 6f;
         public float passionCountMin = 2f;
         public float passionCountMax = 6f;
+        // DO NOT READ THESE DIRECTLY to decide whether a dimension applies -- they are only half
+        // the answer. The effective value is the strict AND with the mod-wide master on
+        // PawnVarianceSettings; go through SkillVarianceActive / TraitVarianceActive /
+        // PassionVarianceActive there. Reading the field alone ignores the mod-wide switch.
         public bool enableSkillVariance = true;
         public bool enableTraitVariance = true;
         public bool enablePassionVariance = true;
