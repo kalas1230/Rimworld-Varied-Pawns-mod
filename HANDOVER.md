@@ -38,6 +38,72 @@ changes nothing gets identical pawn generation. Nothing is written into colony s
 
 # 🔴 OPEN WORK
 
+## ⚠️ OPEN — the 1.1.0 mod-wide toggles are CODE-COMPLETE but UNVERIFIED IN GAME
+
+The six commits `4d0d98b..0568646` are landed, reviewed clean (whole-branch Gemini review: 0
+Critical / 0 Important / 0 Minor) and build `0 Warning(s), 0 Error(s)`. **Do not treat the feature
+as finished.** Five checks require a running game and have NEVER been run. Nothing offline
+substitutes for them — this project's whole history is clean builds and passing offline tools
+agreeing with each other while disagreeing with the generator.
+
+Full per-task detail, including every finding and how it was adjudicated, is in the SDD ledger:
+`.superpowers/sdd/progress.md`. The plan is
+`docs/superpowers/plans/2026-08-19-mod-wide-variance-toggles.md`; the spec is
+`docs/superpowers/specs/2026-08-19-mod-wide-variance-toggles-design.md` (§7 is the back-compat
+reasoning).
+
+### The five unrun checks, in priority order
+
+1. **The inverted-default check — do this one first.** Restore a genuine pre-change settings file
+   and confirm all three "Variance types" boxes on the General tab read **ticked**. Verified inputs:
+   `%LOCALAPPDATA%Low\Ludeon Studios\RimWorld by Ludeon Studios\Config\Mod_3782564554_PawnVarianceMod.xml`
+   is the Workshop install (matches `About/PublishedFileId.txt` = 3782564554); two stale local-install
+   configs sit beside it. **All three contain zero `ModWide` nodes**, so any of them is a valid
+   pre-change file. A backup was taken to `zzz-Do-Not-Commit/settings-pre-modwide.xml`.
+   If a box reads unticked, a default is inverted and **every existing player loses that dimension
+   on update** — that is the one catastrophic outcome this feature can produce.
+2. **`Varied Pawns > Roll pawns and dump distribution`, 1000 pawns**, with the masters left at
+   their defaults. Delivered pips/pawn must be unchanged from before the branch. This is the
+   generator-vs-model regression check.
+3. **The Profile Editor greying matrix** (plan Task 4 Step 8). **No automated probe can see this** —
+   `ProfileEditorTab.cs:245-246` records that GABS's `get_ui_layout` cannot observe ambient
+   `GUI.enabled`. A human must look. The row that matters most is the pre-existing bug fix: on a
+   CUSTOM profile with a section unticked, its sliders must now be greyed. Also confirm both
+   checkboxes stay clickable in every state, or a player can untick a section and be unable to
+   re-tick it.
+4. **Settings export/import round-trip.** Untick a dimension, Share settings > Copy, re-tick it,
+   Paste. It must come back unticked. Exercises the `CopyFrom` registration.
+5. **More Trait Slots compatibility** — the case the feature exists for. With
+   `Arkymn.MoreTraitSlots` active and trait variance off mod-wide, generated trait counts must
+   follow ITS min/max sliders, not the profile's trait-count range.
+
+### Two decisions waiting on the owner
+
+- **`T2-OPEN-1` — `DispersionModel` cannot see a mod-wide master.** `DispersionModel.Moments`
+  branches on `v.enableSkillVariance` (`DispersionModel.cs:103`) and `v.enablePassionVariance`
+  (`:130`, `:279`, `:369`, `:411`). It takes a `VarianceProfileValues`, not a settings object. So
+  with a master off, the generator applies nothing while the Profile Editor power readout, the
+  Best-of-N gate, `envelope_check.py` and `dispersion_mc.py` all still model the dimension — every
+  mirror agreeing with every other mirror and all of them disagreeing with the generator. **This is
+  a new instance of this repo's signature bug class**, and the comment above `DispersionModel.cs:100`
+  documents the previous one. **Generated pawns are unaffected; this is a readout/gate defect only.**
+  Options put to the owner: (a) ship and file it — the readout is only wrong in a state where the
+  player has deliberately handed the axis to another mod; (b) suppress the readout when a master is
+  off, showing "skill variance is off mod-wide" instead of a number — no mirror changes, the
+  previous session's recommendation; (c) make all four mirrors settings-aware, which reopens the
+  mirror-declaration checklist. **Unresolved.**
+- **`T1-M1` — pre-existing, one line.** `ResetToDefaults()` (`PawnVarianceSettings.cs`) never resets
+  `factionOverridesTakePrecedence`, so "Reset all settings" under-delivers. Predates this work and
+  was deliberately left alone. Same failure shape as the bug fixed in `7e094cd`.
+
+### The lesson this branch re-taught
+
+A new settings field in this codebase must be registered in **four** places — the field
+initialiser, `ExposeData`, `CopyFrom` **and `ResetToDefaults`**. The 1.1.0 plan named only three,
+and the review caught `ResetToDefaults` missing (fixed in `7e094cd`). The initialiser and the Scribe
+default must also carry the same value: both load paths are live on `PawnVarianceSettings`, unlike
+`VarianceProfileValues` where the ctor is Scribe-only.
+
 ## 0. Dispersion-aware scoring — DONE
 
 **Plan:** [`docs/superpowers/plans/2026-08-07-dispersion-aware-scoring.md`](docs/superpowers/plans/2026-08-07-dispersion-aware-scoring.md)
