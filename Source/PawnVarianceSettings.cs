@@ -1516,6 +1516,10 @@ namespace PawnVarianceMod
             enableTraitVarianceModWide = true;
             enablePassionVarianceModWide = true;
             enableOverrides = true;
+            // true, matching BOTH the field initialiser and the Scribe default -- this setting is
+            // one of the few that does not default to the zero value, so resetting it to false
+            // would be a different bug than the one this line fixes.
+            factionOverridesTakePrecedence = true;
             hasInitializedDefaultOverrides = false;
             factionOverrides.Clear();
             xenotypeOverrides.Clear();
