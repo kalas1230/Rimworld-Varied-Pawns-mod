@@ -48,16 +48,19 @@ namespace PawnVarianceMod
             // Resolved before the enable checks below because those toggles are themselves per-profile,
             // so a hostile pawn can legitimately have variance switched off while the colony's is on.
             VarianceProfileValues v = settings.ValuesFor(pawn, request);
-            if (!v.enableSkillVariance && !v.enableTraitVariance && !v.enablePassionVariance) return;
+            // Accessors, not the raw flags. Left reading the raw flags, a pawn with every dimension
+            // disabled mod-wide would still pay for QualityRoller.RollQuality and the full profile
+            // resolution walk below, on every single generation.
+            if (!settings.SkillVarianceActive(v) && !settings.TraitVarianceActive(v) && !settings.PassionVarianceActive(v)) return;
 
             try
             {
                 float quality = QualityRoller.RollQuality(v);
 
                 // Ordering per Per-pawn flow step 4: trait, then skill, then passion.
-                if (v.enableTraitVariance) TraitVarianceApplier.Apply(pawn, quality, request, v);
-                if (v.enableSkillVariance) SkillVarianceApplier.Apply(pawn, quality, v);
-                if (v.enablePassionVariance) PassionVarianceApplier.Apply(pawn, quality, v);
+                if (settings.TraitVarianceActive(v)) TraitVarianceApplier.Apply(pawn, quality, request, v);
+                if (settings.SkillVarianceActive(v)) SkillVarianceApplier.Apply(pawn, quality, v);
+                if (settings.PassionVarianceActive(v)) PassionVarianceApplier.Apply(pawn, quality, v);
             }
             catch (Exception ex)
             {

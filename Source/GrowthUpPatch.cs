@@ -137,7 +137,8 @@ namespace PawnVarianceMod
             // along, because the pawn can sit pending for days and its faction can turn hostile in
             // the meantime.
             VarianceProfileValues v = settings.ValuesFor(___pawn);
-            if (!v.enableSkillVariance && !v.enableTraitVariance && !v.enablePassionVariance) return;
+            // Accessors, not the raw flags -- same reason as HarmonyPatches.cs.
+            if (!settings.SkillVarianceActive(v) && !settings.TraitVarianceActive(v) && !settings.PassionVarianceActive(v)) return;
 
             // The age-13 growth moment grants a trait and one or more passions, and it resolves
             // AFTER this point: BirthdayBiological sends its letter on the tick before

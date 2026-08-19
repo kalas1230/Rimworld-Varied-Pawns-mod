@@ -136,9 +136,9 @@ namespace PawnVarianceMod
                 // Ordering matches the main postfix (HarmonyPatches.cs): trait, then skill, then
                 // passion — trait variance can disable work tags, which passion placement's
                 // TotallyDisabled exclusion depends on.
-                if (v.enableTraitVariance) ApplyTraitGrowthUp(pawn, quality, triggerPath, v);
-                if (v.enableSkillVariance) ApplySkillGrowthUp(pawn, quality, v);
-                if (v.enablePassionVariance) ApplyPassionGrowthUp(pawn, quality, v);
+                if (settings.TraitVarianceActive(v)) ApplyTraitGrowthUp(pawn, quality, triggerPath, v);
+                if (settings.SkillVarianceActive(v)) ApplySkillGrowthUp(pawn, quality, v);
+                if (settings.PassionVarianceActive(v)) ApplyPassionGrowthUp(pawn, quality, v);
             }
             catch (Exception ex)
             {
