@@ -11,7 +11,7 @@
   <!-- RimWorld itself ignores this; mod managers (RimPy and friends) display it, and
        tools\build-release.ps1 reads it to name the release zip. Without it the zip lands
        as VariedPawns-dev.zip. Bump it on every Workshop update. -->
-  <modVersion>1.0.0</modVersion>
+  <modVersion>1.1.0</modVersion>
   <!-- 1.6 only. 1.5 was advertised here but nothing in this repo builds or tests against it:
        the csproj references a single RimWorld install and there is no 1.5 CI or manual pass.
        Claiming a version the mod has never been run on is worse than not claiming it. -->

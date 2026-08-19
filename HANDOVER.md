@@ -17,6 +17,25 @@ their merits. Bump `<modVersion>` in `About.xml` before every re-upload.
 
 ---
 
+## Changes in 1.1.0
+
+**Mod-wide variance toggles.** Options > Mod settings > Varied Pawns > General now carries
+master switches for skill, trait and passion variance. Off is a hard stop for every pawn and
+every profile; on defers to each profile's own setting, which can never re-enable what the
+master switched off. The same three switches are mirrored into each Profile Editor section
+header. Use them to hand a dimension to another mod — with trait variance off, More Trait Slots
+decides trait counts and this mod leaves them alone.
+
+**Fixed: Profile Editor sections did not grey out.** Unticking a section on a custom profile
+left its sliders draggable even though the setting was already being honoured at generation.
+No generated pawn changes; the UI was lying about it. Players with a section unticked will see
+those sliders greyed after updating.
+
+**Upgrading is safe.** All three master switches default to on, so a player who updates and
+changes nothing gets identical pawn generation. Nothing is written into colony saves.
+
+---
+
 # 🔴 OPEN WORK
 
 ## 0. Dispersion-aware scoring — DONE
