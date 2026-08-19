@@ -1486,6 +1486,9 @@ namespace PawnVarianceMod
             applyToHostilePawns = true;
             applyVarianceToChildren = false;
             verboseLogging = false;
+            enableSkillVarianceModWide = true;
+            enableTraitVarianceModWide = true;
+            enablePassionVarianceModWide = true;
             enableOverrides = true;
             hasInitializedDefaultOverrides = false;
             factionOverrides.Clear();
