@@ -316,54 +316,104 @@ namespace PawnVarianceMod
             // it is, in its own tooltip.
             TooltipHandler.TipRegion(qLabelAndSlider, "VP_QualityTip".Translate().ToString());
 
-            // The readout is output, not input -- always full opacity, even on a
-            // read-only preset, so presets stay comparable by cycling the picker.
-            // Labelled "Typical" so it reads as one half of a pair with the row below.
-            float meanComposite = DispersionModel.TypicalAt(v, v.averageQuality);
-            bool prevReadoutWordWrap = Text.WordWrap;
-            Text.WordWrap = false;
-            Widgets.Label(qReadout, "VP_TypicalReadout".Translate(
-                PawnVarianceSettings.FormatPowerReadout(meanComposite)));
-            Text.WordWrap = prevReadoutWordWrap;
-            // The second paragraph is the load-bearing half. Without it a player reads Distinct's
-            // -10% as "weaker than Faithful" and picks against the profile for the exact reason it
-            // exists: its spread is 1.52x Faithful's. This figure is now dispersion-aware (it DOES
-            // see skillSpread and passionSpread, via DispersionModel), but it is still a single
-            // number describing an average pawn -- it does not show how much pawns differ from each
-            // other, so two profiles with the same figure can still play very differently.
-            TooltipHandler.TipRegion(qReadout, "VP_TypicalTip".Translate().ToString());
-
-            // Row 3b: the Best-of-N anchor.
-            //
-            // Row 3 alone actively misleads. Players reroll starts, pick from captures and refuse
-            // quest pawns, so the pawn they keep is the best of many -- and on the two variance
-            // presets the two figures disagree in SIGN. Wildcard reads -18% typical but +17% at
-            // best-of-25: a player picking it for a harder run gets an easier one.
+            // Row 3b's rect is needed by both branches below, so it is built before them.
             Rect bestRow = new Rect(rect.x, qualityRow.yMax + 2f, rect.width, 20f);
-            // dragActive keys into the single-slot Best-of-N cache (PawnVarianceSettings): while
-            // the mouse is held every frame's profile values are potentially different, so the
-            // cache would miss every frame anyway -- take the cheap grid rather than pay full
-            // resolution for a value that is about to be replaced next frame regardless.
-            dragActive = Input.GetMouseButton(0);
-            float bestComposite = PawnVarianceSettings.CalculateBestOfNScore(
-                v, Constants.BestOfNSampleCount, lowRes: dragActive);
-            float bestBaseline = PawnVarianceSettings.FaithfulBestOfNBaseline(
-                Constants.BestOfNSampleCount, lowRes: dragActive);
 
-            Text.Font = GameFont.Tiny;
-            GUI.color = new Color(1f, 1f, 1f, 0.75f);
-            bool prevBestWordWrap = Text.WordWrap;
-            Text.WordWrap = false;
-            Widgets.Label(bestRow, "VP_BestOfNRow".Translate(
-                Constants.BestOfNSampleCount,
-                PawnVarianceSettings.FormatPowerPercent(bestComposite, bestBaseline),
-                bestComposite.ToString("F2")));
-            Text.WordWrap = prevBestWordWrap;
-            GUI.color = Color.white;
-            Text.Font = GameFont.Small;
+            // BOTH power figures are suppressed when a mod-wide master is off, because both are
+            // built from a model that cannot see the masters. DispersionModel.Moments branches on
+            // v.enableSkillVariance / v.enablePassionVariance and takes a VarianceProfileValues,
+            // not a settings object, so with a master off the generator applies nothing while the
+            // model keeps integrating the dimension -- the readout would state a number no pawn
+            // will ever be. Saying "off mod-wide" is the honest output; a wrong number is not.
+            //
+            // Skill and passion only. Trait variance is deliberately absent: trait count is not a
+            // quality axis and contributes nothing to the composite (invariant 3), so switching it
+            // off mod-wide leaves these figures correct.
+            //
+            // This suppresses the DISPLAY, it does not fix the model. The Best-of-N gate,
+            // envelope_check.py and dispersion_mc.py all still model a dimension the generator is
+            // skipping; that is recorded as T2-OPEN-1 and is a defect in the mirrors, not here.
+            // The distribution curve below is drawn from the same blind model and is NOT
+            // suppressed -- see T2-OPEN-1.
+            bool skillOffModWide = !enableSkillVarianceModWide;
+            bool passionOffModWide = !enablePassionVarianceModWide;
 
-            TooltipHandler.TipRegion(bestRow,
-                "VP_BestOfNTip".Translate(Constants.BestOfNSampleCount).ToString());
+            if (skillOffModWide || passionOffModWide)
+            {
+                // Three keys rather than one assembled from fragments: a translator needs the whole
+                // sentence to get agreement and word order right in their own language.
+                //
+                // Each key is written as a LITERAL at its .Translate() call rather than selected
+                // into a string variable first. tools/check-translation-keys.ps1 scans for literals,
+                // so a key reached through a variable is invisible to it and reports as an orphan --
+                // which is exactly the state a later rename would silently break.
+                TaggedString offText =
+                    skillOffModWide && passionOffModWide ? "VP_ReadoutOffBoth".Translate()
+                    : skillOffModWide ? "VP_ReadoutOffSkill".Translate()
+                    : "VP_ReadoutOffPassion".Translate();
+
+                Text.Font = GameFont.Tiny;
+                GUI.color = new Color(1f, 1f, 1f, 0.75f);
+                bool prevOffWordWrap = Text.WordWrap;
+                Text.WordWrap = false;
+                Widgets.Label(bestRow, offText);
+                Text.WordWrap = prevOffWordWrap;
+                GUI.color = Color.white;
+                Text.Font = GameFont.Small;
+
+                TooltipHandler.TipRegion(bestRow, "VP_ReadoutOffTip".Translate().ToString());
+            }
+            else
+            {
+                // The readout is output, not input -- always full opacity, even on a
+                // read-only preset, so presets stay comparable by cycling the picker.
+                // Labelled "Typical" so it reads as one half of a pair with the row below.
+                float meanComposite = DispersionModel.TypicalAt(v, v.averageQuality);
+                bool prevReadoutWordWrap = Text.WordWrap;
+                Text.WordWrap = false;
+                Widgets.Label(qReadout, "VP_TypicalReadout".Translate(
+                    PawnVarianceSettings.FormatPowerReadout(meanComposite)));
+                Text.WordWrap = prevReadoutWordWrap;
+                // The second paragraph is the load-bearing half. Without it a player reads Distinct's
+                // -10% as "weaker than Faithful" and picks against the profile for the exact reason it
+                // exists: its spread is 1.52x Faithful's. This figure is now dispersion-aware (it DOES
+                // see skillSpread and passionSpread, via DispersionModel), but it is still a single
+                // number describing an average pawn -- it does not show how much pawns differ from each
+                // other, so two profiles with the same figure can still play very differently.
+                TooltipHandler.TipRegion(qReadout, "VP_TypicalTip".Translate().ToString());
+
+                // Row 3b: the Best-of-N anchor.
+                //
+                // Row 3 alone actively misleads. Players reroll starts, pick from captures and refuse
+                // quest pawns, so the pawn they keep is the best of many -- and on the two variance
+                // presets the two figures disagree in SIGN. Wildcard reads -18% typical but +17% at
+                // best-of-25: a player picking it for a harder run gets an easier one.
+                //
+                // dragActive keys into the single-slot Best-of-N cache (PawnVarianceSettings): while
+                // the mouse is held every frame's profile values are potentially different, so the
+                // cache would miss every frame anyway -- take the cheap grid rather than pay full
+                // resolution for a value that is about to be replaced next frame regardless.
+                dragActive = Input.GetMouseButton(0);
+                float bestComposite = PawnVarianceSettings.CalculateBestOfNScore(
+                    v, Constants.BestOfNSampleCount, lowRes: dragActive);
+                float bestBaseline = PawnVarianceSettings.FaithfulBestOfNBaseline(
+                    Constants.BestOfNSampleCount, lowRes: dragActive);
+
+                Text.Font = GameFont.Tiny;
+                GUI.color = new Color(1f, 1f, 1f, 0.75f);
+                bool prevBestWordWrap = Text.WordWrap;
+                Text.WordWrap = false;
+                Widgets.Label(bestRow, "VP_BestOfNRow".Translate(
+                    Constants.BestOfNSampleCount,
+                    PawnVarianceSettings.FormatPowerPercent(bestComposite, bestBaseline),
+                    bestComposite.ToString("F2")));
+                Text.WordWrap = prevBestWordWrap;
+                GUI.color = Color.white;
+                Text.Font = GameFont.Small;
+
+                TooltipHandler.TipRegion(bestRow,
+                    "VP_BestOfNTip".Translate(Constants.BestOfNSampleCount).ToString());
+            }
 
             // Row 4: the distribution curve, full width, never greyed.
             Rect curveRect = new Rect(rect.x, bestRow.yMax + 4f, rect.width, CurveHeight);

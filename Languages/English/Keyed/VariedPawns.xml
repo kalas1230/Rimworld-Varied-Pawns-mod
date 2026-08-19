@@ -83,6 +83,10 @@
 
   <!-- {0} sample count, {1} percentage vs Faithful, {2} raw figure. -->
   <VP_BestOfNRow>Best of {0} rerolls:  {1} vs Faithful ({2})</VP_BestOfNRow>
+  <VP_ReadoutOffSkill>→  Skill variance is off mod-wide — power figures do not apply.</VP_ReadoutOffSkill>
+  <VP_ReadoutOffPassion>→  Passion variance is off mod-wide — power figures do not apply.</VP_ReadoutOffPassion>
+  <VP_ReadoutOffBoth>→  Skill and passion variance are off mod-wide — power figures do not apply.</VP_ReadoutOffBoth>
+  <VP_ReadoutOffTip>The Typical and Best-of-N figures are built from skill levels and the passion budget. With one of those switched off under General, the figures would describe a pawn this mod is no longer generating, so they are hidden rather than shown wrong.\n\nSwitch it back on under General to get them back.</VP_ReadoutOffTip>
   <VP_BestOfNTip>Generate {0} pawns and keep the best one.\n\nCloser to how the game is actually played: you reroll starting colonists, choose which prisoners to recruit, and turn down quest pawns.\n\nTwo figures close together means a consistent profile. A steep climb between them means a gambling one, and it pays off when you get to choose.</VP_BestOfNTip>
 
   <VP_Fingerprint>Traits {0}–{1}  ·  Passions {2}–{3}  ·  Skill shift {4} to {5}  ·  Quality {6}</VP_Fingerprint>
