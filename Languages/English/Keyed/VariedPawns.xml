@@ -171,6 +171,14 @@
   <VP_VerboseLogging>Verbose logging (dev mode)</VP_VerboseLogging>
   <VP_VerboseLoggingTip>Rethrows exceptions instead of swallowing them, and logs a per-pawn breakdown of how traits and passions were assigned. Leave off for normal play.</VP_VerboseLoggingTip>
 
+  <VP_Section_VarianceTypes>Variance types</VP_Section_VarianceTypes>
+  <VP_VarianceTypesCaption>Master switches for the three kinds of variance this mod applies.</VP_VarianceTypesCaption>
+
+  <VP_ModWideSkill>Skill variance</VP_ModWideSkill>
+  <VP_ModWideTrait>Trait variance</VP_ModWideTrait>
+  <VP_ModWidePassion>Passion variance</VP_ModWidePassion>
+  <VP_ModWideTip>Applies to every pawn, whichever profile or override matches them.\n\nTurning this off here overrides the matching setting inside every profile, and no profile can turn it back on. Turning it on hands the decision back to each profile.\n\nUse this to let another mod own a dimension. With trait variance off, a mod such as More Trait Slots decides trait counts and Varied Pawns leaves them alone.</VP_ModWideTip>
+
   <VP_ResetAllSettings>Reset All Settings</VP_ResetAllSettings>
   <VP_Confirm_ResetAll>Reset all settings to defaults? Every custom profile, override and option will be restored.</VP_Confirm_ResetAll>
 

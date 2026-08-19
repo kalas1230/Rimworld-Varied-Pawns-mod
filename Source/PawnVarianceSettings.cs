@@ -1412,6 +1412,25 @@ namespace PawnVarianceMod
                     ref verboseLogging,
                     "VP_VerboseLoggingTip".Translate());
 
+            // Mirrored in the Profile Editor's section headers -- same three fields, drawn twice on
+            // purpose. Discoverable here alongside the other every-profile toggles; adjustable
+            // there, where the greying makes the consequence visible.
+            Section(listing, "VP_Section_VarianceTypes".Translate());
+            Caption(listing, "VP_VarianceTypesCaption".Translate());
+
+            listing.CheckboxLabeled(
+                "VP_ModWideSkill".Translate(),
+                ref enableSkillVarianceModWide,
+                "VP_ModWideTip".Translate());
+            listing.CheckboxLabeled(
+                "VP_ModWideTrait".Translate(),
+                ref enableTraitVarianceModWide,
+                "VP_ModWideTip".Translate());
+            listing.CheckboxLabeled(
+                "VP_ModWidePassion".Translate(),
+                ref enablePassionVarianceModWide,
+                "VP_ModWideTip".Translate());
+
             DrawShareSettingsSection(listing);
 
             listing.Gap(SectionGap);
