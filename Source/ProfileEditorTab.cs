@@ -131,12 +131,18 @@ namespace PawnVarianceMod
                 outRect.width,
                 outRect.height - HeaderHeight - HeaderGutter);
 
-            float viewHeight = Math.Max(profileEditorViewHeight, 580f);
+            // Same two-part guard as the General and Overrides tabs -- floor at the viewport,
+            // begin the listing unbounded. This tab has never been SEEN to wrap, but only because
+            // its 2000f field initialiser happens to exceed what it draws; that is luck, not a
+            // guarantee, and it is exactly the condition that made the Overrides bug look fine on
+            // a fresh load. See DrawOverridesTab for why a wrap here would be unreachable and
+            // self-perpetuating.
+            float viewHeight = Math.Max(profileEditorViewHeight, bodyRect.height);
             var viewRect = new Rect(0f, 0f, bodyRect.width - 24f, viewHeight);
 
             Widgets.BeginScrollView(bodyRect, ref profileEditorScrollPos, viewRect);
             var listing = new Listing_Standard();
-            listing.Begin(viewRect);
+            listing.Begin(new Rect(0f, 0f, viewRect.width, UnboundedListingHeight));
 
             // GUI.enabled is deliberately NOT narrowed by EditingCustom here any more.
             // DrawGenerationSettings and SectionHeader own it now: SectionHeader has to draw its

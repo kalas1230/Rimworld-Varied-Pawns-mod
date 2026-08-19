@@ -1563,10 +1563,14 @@ Drawing lives in `Source/ProfileEditorTab.cs` (`partial class PawnVarianceSettin
   into the wrapping regime above**: the Overrides tab's `1000f` sat *below* its real 1227px content.
   `Math.Max(measured, outRect.height)` is correct by construction — content shorter than the viewport
   simply does not scroll.
-  > **The General and Profile Editor tabs still pass `viewRect` to `listing.Begin`.** They do not
-  > trip this today only because their content (545 and 510) stays under their floors (600 and 580).
-  > They are one added control away from the identical latch. Deliberately left alone; fix them the
-  > moment either tab grows.
+  > **All three tabs now use the correct shape.** General and Profile Editor used to pass `viewRect`
+  > to `listing.Begin`, surviving only because their content stayed under their hardcoded floors —
+  > noted here as "one added control away from the identical latch". That is precisely how it went:
+  > adding the reset/delete buttons pushed the General tab past its `800f` field initialiser and the
+  > buttons became unreachable, the same wrap, in the same way, for the same reason. Both tabs were
+  > converted to the `DrawOverridesTab` shape (viewport floor + `UnboundedListingHeight`). **Do not
+  > reintroduce a hardcoded floor or a bounded `Begin` in any of the three** — the trap is not that
+  > some number was too small, it is that a guessed number can ever be too small.
 - **Best-of-25, not Best-of-50, and no `N` slider** — it is a lens, not a setting. At N=50 `Wildcard`
   displays near the envelope limit, and a UI that advertises how close a preset sits to the limit
   invites players to treat the limit as a target.

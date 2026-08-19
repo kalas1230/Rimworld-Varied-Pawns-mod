@@ -756,12 +756,19 @@ namespace PawnVarianceMod
 
         private void DrawGeneralTab(Rect outRect)
         {
-            float viewHeight = Math.Max(generalViewHeight, 600f);
+            // Floored at the viewport, and the listing BEGUN UNBOUNDED -- both halves of the
+            // Overrides tab fix, applied here for the same reason. See DrawOverridesTab for the
+            // full account: a Listing_Standard that outgrows the height it was begun with
+            // column-wraps to the RIGHT, outside the scroll range where no amount of scrolling
+            // reaches it, and then LATCHES, because CurHeight then reports only the last column.
+            // This tab hit it the moment the reset/delete buttons pushed its content past the
+            // 800f field initialiser.
+            float viewHeight = Math.Max(generalViewHeight, outRect.height);
             var viewRect = new Rect(0f, 0f, outRect.width - 24f, viewHeight);
 
             Widgets.BeginScrollView(outRect, ref generalScrollPos, viewRect);
             var listing = new Listing_Standard();
-            listing.Begin(viewRect);
+            listing.Begin(new Rect(0f, 0f, viewRect.width, UnboundedListingHeight));
 
             Text.Font = GameFont.Medium;
             listing.Label("VP_ActiveColonyProfile".Translate());
