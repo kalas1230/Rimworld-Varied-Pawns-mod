@@ -936,7 +936,14 @@ namespace PawnVarianceMod
                     string k = key;
                     PriorityMenu(pr => priorities[k] = pr);
                 }
-                if (Widgets.ButtonText(removeRect, "VP_Btn_Remove".Translate()))
+                // Red because this is the only destructive control in the row, and it sits one
+                // rect away from two harmless dropdowns. Same saturation family as the green and
+                // amber used elsewhere in these tabs rather than Color.red, which reads as an
+                // error state. Drawn once here, so all three override sections get it.
+                GUI.color = new Color(0.9f, 0.4f, 0.4f);
+                bool removeClicked = Widgets.ButtonText(removeRect, "VP_Btn_Remove".Translate());
+                GUI.color = Color.white;
+                if (removeClicked)
                 {
                     toRemove = key;
                 }
