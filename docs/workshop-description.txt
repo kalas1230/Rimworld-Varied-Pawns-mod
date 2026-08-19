@@ -27,6 +27,10 @@ Because it is [i]one[/i] roll and not three, a pawn holds together: a lucky roll
 
 [b]It changes how many traits a pawn gets, not which ones are worth having.[/b] New traits come from vanilla's own picker, including every mod-added trait. When a pawn is over its target the mod drops one at random from the traits it is allowed to touch — traits forced by a xenotype, gene, backstory or scenario are never removed. Nothing here scores traits or plays favourites.
 
+[h2]New in 1.1.0[/h2]
+
+Master switches for skill, trait and passion variance, so you can hand any one of the three to another mod and keep the other two. Also fixes Profile Editor sliders staying draggable after a section was switched off.
+
 [h2]Out of the box[/h2]
 
 Install it and your colonists roll close to unmodded RimWorld, while the rest of the world stops being uniform. Raiders, tribes, imperial nobles and xenotypes come pre-assigned to profiles that suit them — a Sanguophage lord reads as a Sanguophage lord, and a tribal raid reads as scraped-together survivors.
@@ -83,6 +87,7 @@ Export your whole configuration — custom profiles, overrides, toggles — to t
 [*][b]Safe to add to an existing save.[/b] It affects newly generated pawns, so colonists you already have will not change — new arrivals, raiders and quest pawns will.
 [*][b]Removing it mid-save is clean.[/b] The mod writes [i]nothing[/i] into your colony save — not one byte — so pulling it out leaves no orphaned data and no load errors. Your pawns keep everything they were given, because it lives on the pawn in RimWorld's own format.
 [*][b]Biotech is optional.[/b] Without it the xenotype overrides are simply skipped; faction and race overrides work regardless.
+[*][b]Tested at modpack scale.[/b] Runs clean inside a collection of over 1,300 mods — no load errors, no def conflicts, no Harmony collisions.
 [*]Works with mod-added traits, skills, factions and races. It rides on RimWorld's own pawn generation rather than replacing it.
 [/list]
 
