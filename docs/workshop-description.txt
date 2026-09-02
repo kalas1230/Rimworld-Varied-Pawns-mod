@@ -70,10 +70,6 @@ Assign different profiles to different pawns:
 
 Each override carries a priority from Lowest to Highest, so when a pawn matches more than one, the winner is the one you decided on rather than whichever rule happened to be checked first.
 
-[h2]Children are left alone by default[/h2]
-
-Growth moments are untouched unless you turn them on. If you do, the mod adds to a growing child at 13 and never takes anything away.
-
 [h2]Sharing your setup[/h2]
 
 Export your whole configuration — custom profiles, overrides, toggles — to the clipboard, and paste it back on another save or send it to a friend.
@@ -94,6 +90,8 @@ Export your whole configuration — custom profiles, overrides, toggles — to t
 [h2]Source[/h2]
 
 MIT licensed. Source, and rather more documentation than anyone asked for, at:
-https://github.com/kalas1230/Rimworld-Pawn-variance-mod
+[url=https://github.com/kalas1230/Rimworld-Pawn-variance-mod]Github Link[/url]
 
 Bug reports are welcome. Please include your RimWorld version, your mod list, and what you expected the pawn to look like versus what arrived.
+
+Check out my other mod:[url=https://steamcommunity.com/sharedfiles/filedetails/?id=3794706756]Wealth Tooltips[/url]
